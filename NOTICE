@@ -1,0 +1,78 @@
+# NOTICE — DAMDesk
+
+DAMDesk — local-first digital asset management with installable processing plugins.
+Copyright (C) 2026 DAMDesk contributors.
+
+This program is licensed under **AGPL-3.0** (`License = "AGPL-3.0"`, workspace
+`Cargo.toml`). The `crates/*` workspace members (23 crates: `core-*`, `engine-*`,
+`svc-*`, `app-web`, `app-tauri`, `pack-host`, `dev-e2e`) are all AGPL-3.0.
+
+Third-party Rust dependencies are aggregated from `cargo metadata` (Cargo.lock,
+audited 2026-10-31; method: license-field aggregation script — `cargo-deny`
+binary unavailable in the build container at audit time; re-run
+`cargo deny check licenses` periodically if it becomes available).
+644 packages total; license distribution is dominated by
+MIT / Apache-2.0 (dual or single) + BSD / ISC / Zlib / Unicode-3.0 / CDLA-Permissive.
+
+## 受限依赖（restricted / weak-copyleft dependencies）
+
+No third-party dependency is GPL/AGPL-licensed. The only third-party licenses
+beyond MIT/BSD/Apache/ISC/Zlib are:
+
+| Crate | Version | License | Notes |
+|---|---|---|---|
+| `cssparser` | 0.37 | MPL-2.0 | file-level (weak) copyleft; HTML parsing via `dom_query`/`selectors` |
+| `cssparser-macros` | 0.7 | MPL-2.0 | same tree |
+| `selectors` | 0.38 | MPL-2.0 | same tree |
+| `dtoa-short` | 0.3 | MPL-2.0 | same tree |
+| `option-ext` | 0.2 | MPL-2.0 | via `dirs-sys` (config/data dir lookup) |
+| `r-efi` | 5.3 / 6.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later | tri-licensed; pulled by `getrandom` (UEFI target branch) — permissive MIT/Apache branch applies |
+| `webpki-roots` / `webpki-root-certs` | 1.0 | CDLA-Permissive-2.0 | permissive; root-CA data for `rustls`/`ureq` (TLS) |
+
+MPL-2.0 is file-level copyleft: those files may be used unmodified inside this
+AGPL work without licensing the rest of the work under MPL. No dependency
+requires changing DAMDesk's license.
+
+## 关键捆绑组件（key bundled components）
+
+| Component | License | Notes |
+|---|---|---|
+| libvips | LGPL-2.1 | **动态链接**（`libvips` crate 调用未修改的系统共享库，`core-media` 解码/缩略图）；不静态并入本作品，用户可自行替换系统 libvips |
+| ONNX Runtime | MIT | 模型推理运行时（`ort` crate，预编译动态库随安装包分发） |
+| Tauri | MIT OR Apache-2.0 | 桌面外壳（`app-tauri`） |
+| Noto Sans SC（可变字重） | SIL OFL 1.1 | 随包字体，`crates/core-media/assets/fonts/NotoSansSC-wght.ttf` |
+
+Noto Sans SC 字体版权行（取自字体文件内嵌 name 表）：
+"© 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'."
+License: SIL Open Font License, Version 1.1 (https://scripts.sil.org/OFL).
+
+## Model weights & licensing
+
+Model weights have their own terms and are **not** covered by the AGPL license
+of the code (see `registry/models.yaml` for each model's source/preprocess
+contract):
+
+- **DINOv3 ViT-S/16** (near-duplicate detection tower, `dinov3-vits16-onnx`) —
+  weights are gated by **Meta's DINOv3 license** and are **NOT bundled** with
+  installers and NOT downloadable by the app. To enable visual near-duplicate
+  detection, obtain the weights from Meta yourself and place the ONNX export
+  (`model.onnx` + `model.onnx_data`) into
+  `{models root}/models/dinov3-vits16-onnx/`. When absent, the app reports
+  「判重不可用，需自备模型（Meta 许可）」 via `GET /api/library/stats`
+  (`dedupAvailable=false`) and the Settings → Diagnostics section; it never
+  panics and never presents the pHash layer as dedup-tower results.
+- **SigLIP 2 base patch16-224** (semantic embedding tower,
+  `siglip2-base-p224-onnx`) — bundled; ONNX export of
+  `onnx-community/siglip2-base-patch16-224` (Apache-2.0；
+  **许可待复核** — 交付前以 Hugging Face 模型卡当前 license 字段为准).
+- **U²-Net** (subject segmentation, `u2net`) — bundled; rembg-distributed
+  ONNX (Apache-2.0).
+- **RealESRGAN-general-x4v3** (super-resolution, `realesr-general-x4v3`) —
+  bundled; BSD-3-Clause (Real-ESRGAN official weights, ONNX re-export).
+- **PP-OCRv6-medium det/rec** (OCR) — not bundled; fetched on demand with
+  sha256 pinning; Apache-2.0 (PaddlePaddle official ONNX).
+- **Big-LaMa** (inpainting, `lama-fp32`) — not bundled; fetched on demand with
+  sha256 pinning; Apache-2.0 (Carve/LaMa-ONNX export).
+
+Fonts and other assets shipped in packs carry their own permissive
+Apache/BSD/OFL licensing as noted in each pack's metadata.

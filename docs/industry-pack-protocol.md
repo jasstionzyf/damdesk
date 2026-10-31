@@ -13,6 +13,47 @@
 
 ---
 
+## Quick start
+
+20 行写一个能跑的插件 → 自检 → 打包 → 装/激活 → 判定。完整最小工程参考
+`tools/pack-sdk-python/examples/ecommerce_py/`（SDK 版样例包，判定语义与官方电商包逐条对齐）。
+
+**1) 写插件**（Python SDK；`manifest.json` 字段表见 §2）：
+
+```python
+from dampack import PackServer
+
+pack = PackServer(
+    pack_id="com.example.pack.demo", name="示例行业包", version="0.1.0",
+    rules=[{"id": "A1_no_overlay_text", "name": "无促销叠加文字", "deterministic": False}],
+    capabilities=["io.read", "detect.ocr", "report.emit"],
+    timeout_secs=90,
+)
+
+@pack.method("judge")
+def judge(params):
+    path = params["assets"][0]["path"]              # 文件/模型访问全走能力网关（§3）
+    ocr = pack.gateway.detect_ocr(path, lang="chi_sim+eng")
+    verdict = "pass" if not ocr.get("lines") else "review"
+    return {"results": [{"ruleId": "A1_no_overlay_text", "verdict": verdict}],
+            "report": {"summary": "demo"}}          # 结果行契约见 §5
+
+if __name__ == "__main__":
+    pack.serve()                                    # stdio 行式 JSON-RPC（§1）
+```
+
+**2) 自检**：`python3 tools/pack-conformance/run.py --plugin <pack_dir>`（退出码 0 = 12 条断言全过，上车门槛）。
+
+**3) 打包**：`python3 scripts/k15_build_packs.py --out <dir>`（`.dampack`；manifest 原文 sha256 = pluginHash）。
+
+**4) 安装 → 激活 → 判定**（宿主 REST）：
+`POST /api/compliance/packs/install`（`{"path": "<.dampack>"}`，首个版本自动 current）→
+`POST /api/compliance/packs/{id}/activate`（`{"version": "…"}`）→ `POST /api/compliance/judge`。
+
+> 本节只管**跑通**；字段逐条定义、方法契约、错误码、取消语义全在正文。
+
+---
+
 ## 0. 一句话
 
 处理插件（industry processing plugin）= **独立子进程**，用 **stdio 上的行式 JSON-RPC 2.0** 跟宿主说话；
