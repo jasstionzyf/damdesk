@@ -136,21 +136,20 @@ if __name__ == "__main__":
 for you, protects stdout from stray `print()`, and validates every `judge`/`repair` response
 before it reaches the host. Full example: `tools/pack-sdk-python/examples/ecommerce_py`.
 
-## How DAMDesk compares
+## Design notes: why subprocess plugins
 
-The axis that matters is not "has plugins" but "can a third party ship *image-processing* code
-that runs native libraries and private models, with sane install/rollback semantics".
+Three constraints drove the design, and each rules out a simpler approach:
 
-| Project | Third-party code plugins | Runs native libs & private models | Install / switch / rollback + consistency |
-|---|---|---|---|
-| **DAMDesk** | Yes — subprocess + line-delimited JSON-RPC, manifest as the only config surface | **Yes** — per-pack venv, any native dependency, private models | **Yes** — `.dampack` install / activate / rollback via one pointer, optional signatures, enforced by a 14-assertion conformance suite |
-| immich | Yes — WASM (Extism) plugins calling host functions | No — the WASM sandbox cannot load native libs or arbitrary models | Weak — install = env var + drop files + restart; plugin API read-only; no public SDK on npm; no public spec |
-| PhotoPrism | No public plugin system (extension request open since 2019) | — | — |
-| LibrePhotos | No public plugin spec | — | — |
-| Photoview | No public plugin spec | — | — |
-| Damselfly | No public plugin spec | — | — |
-
-*(Snapshot of public docs and repos at time of writing; mechanism described, not community size.)*
+1. **Real image work needs real libraries.** Compliance judgments call `libvips`, ONNX runtimes,
+   OCR and segmentation models. An in-process sandbox cannot host that; a declarative config
+   language cannot express branching between steps. So a pack is an ordinary process, written in
+   any language, free to bring its own dependencies and private models.
+2. **The host must not interpret the flow.** Step count, order and branching live in pack code.
+   The host exposes capabilities (geometry, segmentation, OCR, VL, IO, reporting) and nothing else,
+   so adding an industry never requires touching the core.
+3. **Results must be auditable.** Every verdict carries `pass` / `fail` / `undetermined` plus a
+   `packId@version#hash12` identity; a timeout or crash never silently becomes a pass. Install,
+   activate and rollback are pointer moves over immutable `.dampack` archives.
 
 ## Build & test
 
@@ -167,10 +166,17 @@ removal), `upscale` (4× super-resolution).
 
 ## Models & licensing
 
-Model weights have their own terms. **DINOv3** (dedup embedding tower) is **not bundled** — it is
-gated by Meta and must be obtained by you. The other bundled models (segmentation, OCR,
-super-resolution, fonts) are under permissive Apache/BSD/OFL licenses. Full attributions live in
-[`NOTICE`](NOTICE).
+Model weights have their own terms, so they are split by role:
+
+- **Bundled (offline, works out of the box)**: SigLIP2 base text + vision towers and the tokenizer —
+  semantic search, similarity and search-by-image are usable right after install.
+- **Optional, fetched on demand (~503 MB)**: u2net (matting), PP-OCRv6 det/rec (OCR),
+  Real-ESRGAN x4v3 (upscale), LaMa (inpaint). Install from **Settings → Models** in one click, or
+  unzip `damdesk-models-extras-v1.zip` into the models folder.
+- **Bring your own**: DINOv3 (dedup tower) is gated by Meta and is never redistributed. Without it,
+  dedup reports `undetermined` instead of guessing.
+
+Attributions and license terms: [`NOTICE`](NOTICE).
 
 ## Documentation & community
 
@@ -193,8 +199,5 @@ DAMDesk 是 **local-first 的桌面 DAM**：图库、打标、去重、搜索在
 3. **包生命周期**——`.dampack` 归档，装新版本即切 `current` 指针，**回滚 = 把指针切回去**；
    每包独立 venv，可跑原生库与私有模型；结果行带 `packId@version#hash12` 身份，可审计可回比；
    conformance 套件 14 条断言是任何语言插件的上车门槛。
-
-竞品对比见上表：immich 的 WASM 插件跑不了原生库与私有模型、装机靠改环境变量重启；
-PhotoPrism 的插件诉求七年来仍是 open issue；LibrePhotos / Photoview / Damselfly 无公开插件规范。
 
 跑起来：`pnpm -C web install && pnpm -C web dev` + `cargo run -p app-web`（容器：`docker compose -f deploy/docker-compose.yml up -d --build`）。
