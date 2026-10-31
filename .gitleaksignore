@@ -1,0 +1,3 @@
+# gitleaks fingerprint allowlist — each line is <file>:<rule>:<line>; comments only, no secrets here.
+# smartFolders.ts:95 — localStorage key name 'dam.sf.counts.v1' misdetected by generic-api-key.
+web/src/lib/smartFolders.ts:generic-api-key:95
