@@ -212,9 +212,12 @@ fn models_root_effective(app: &AppHandle, data_dir: &std::path::Path) -> std::pa
 /// `dt5_bundled_models_match_tauri_conf` 核对）：漏一条 = 包里没有该权重，而老用户
 /// appData 里只有 siglip 时整根不会退回资源 → 该能力静默不可用（DT5 修的就是这个）。
 /// `lama-fp32`（208MB）**不**内置（registry 注释裁决，走 model_store 分发），别加进来。
+/// `dinov3-vits16-onnx` **不**内置（GH-5 合规裁决）：DINOv3 权重受 Meta DINOv3 许可约束、
+/// 禁止随包再分发 → 判重塔降级为「可选塔」，缺件时 app-web 如实报
+/// 「判重不可用，需自备模型（Meta 许可）」（`library_api::stats` 的 dedupAvailable），
+/// 用户自备两件套放 `{models_root}/models/dinov3-vits16-onnx/` 即恢复。
 const BUNDLED_MODELS: &[&str] = &[
     "siglip2-base-p224-onnx",
-    "dinov3-vits16-onnx",
     "u2net",
     "realesr-general-x4v3",
     "ppocrv6-medium-det",

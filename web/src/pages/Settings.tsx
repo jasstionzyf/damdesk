@@ -669,6 +669,20 @@ function Diagnostics() {
             </p>
           )}
 
+          {/*
+           * GH-5：判重塔（DINOv3）不随安装包分发（Meta 许可禁止再分发）→ 可选塔。
+           * 缺件时这里如实报缺 + 自备指引（后端给落点路径），不许静默把 pHash 层当判重塔结论。
+           * 可用时不渲染 —— KI-6「设置界面不展示去重模型信息」仅在可用侧仍然成立。
+           */}
+          {stats && stats.dedupAvailable === false && (
+            <p className="mt-1 text-[11px] leading-5 text-amber-400" data-testid="diag-dedup-unavailable">
+              {t('判重不可用，需自备模型（Meta 许可）')}
+              {stats.dedupUnavailableReason && (
+                <span className="block text-ink-dim">{stats.dedupUnavailableReason}</span>
+              )}
+            </p>
+          )}
+
           <div className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
             {tiles.map(([label, v]) => (
               <div key={label} className="rounded border border-line bg-panel-2 px-2 py-2">

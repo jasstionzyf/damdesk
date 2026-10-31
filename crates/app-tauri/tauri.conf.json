@@ -34,7 +34,6 @@
     ],
     "resources": {
       "resources/models/siglip2-base-p224-onnx/**/*": "models/siglip2-base-p224-onnx/",
-      "resources/models/dinov3-vits16-onnx/**/*": "models/dinov3-vits16-onnx/",
       "resources/models/u2net/**/*": "models/u2net/",
       "resources/models/realesr-general-x4v3/**/*": "models/realesr-general-x4v3/",
       "resources/models/ppocrv6-medium-det/**/*": "models/ppocrv6-medium-det/",

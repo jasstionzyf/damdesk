@@ -99,6 +99,10 @@ export interface LibraryStats {
   broken: number
   /** 新鲜度阈值（秒），与后端同一口径 */
   missingStaleSecs: number
+  /** GH-5：判重塔（DINOv3）可用 —— 权重两件套在模型根且构建编入本地推理；false = 判重不可用 */
+  dedupAvailable: boolean
+  /** false 时的自备指引（「判重不可用，需自备模型（Meta 许可）」+ 模型根路径）；true 时缺省 */
+  dedupUnavailableReason?: string
 }
 
 

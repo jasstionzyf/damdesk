@@ -167,10 +167,36 @@ pub async fn assets(
 ///
 /// DESKTOP-MISSING-STAT-1：响应里 missing 附带 missingCheckedAt/missingStale —— 前端
 /// 必须把"失联数"和"核查新鲜度"一起显示，过期时引导用户点「重新核查」（见 verify）。
+///
+/// GH-5：响应附加判重塔可用性（`dedupAvailable` / `dedupUnavailableReason`）——
+/// DINOv3 不随安装包分发（Meta 许可禁止再分发）→ 判重塔是可选能力，缺件时这里**如实报缺**
+/// 并给自备指引（含模型根绝对路径），不许 panic、不许静默把 pHash 层当判重塔结论
+/// （判据三层口径在 dedup_api，`near_visual` 没有向量时按「未检测」呈现，与本字段一致）。
 pub async fn stats(State(state): State<AppState>) -> impl IntoResponse {
     let conn = state.db.lock().await;
     match svc_library::stats(&conn) {
-        Ok(v) => (StatusCode::OK, Json(json!(v))).into_response(),
+        Ok(v) => {
+            let mut body = serde_json::to_value(&v).unwrap_or_else(|_| json!({}));
+            let available = engine_embed::LOCAL_INFER
+                && engine_embed::factory::dedup_files_present(&state.models_root);
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("dedupAvailable".into(), json!(available));
+                if !available {
+                    let reason = if engine_embed::LOCAL_INFER {
+                        format!(
+                            "判重不可用，需自备模型（Meta 许可）：把 model.onnx 与 model.onnx_data \
+                             放入 {}",
+                            core_config::model_dir(&state.models_root, core_config::DEDUP_EMBEDDER)
+                                .display()
+                        )
+                    } else {
+                        "判重不可用：本构建未编入本地 ONNX 推理（web 容器形态无判重塔）".to_string()
+                    };
+                    obj.insert("dedupUnavailableReason".into(), json!(reason));
+                }
+            }
+            (StatusCode::OK, Json(body)).into_response()
+        }
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }

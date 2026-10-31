@@ -148,6 +148,8 @@ export default {
   '版本': 'Version',
   '失联数 {n} 来自上次现场核查，已过期（未实时重查）。':
     'The missing count {n} comes from the last on-disk check and is stale (not re-verified in real time).',
+  // GH-5：判重塔（DINOv3）不随包分发（Meta 许可）→ 缺件时诊断区如实报缺 + 自备指引
+  '判重不可用，需自备模型（Meta 许可）': 'Dedup unavailable — bring your own model (Meta license required)',
   '读取中…': 'Loading…',
 
   // ---- 设置页：模型文件（可选下载）----
