@@ -240,7 +240,7 @@ describe('GH-9 模型分发（设置页）', () => {
     // 缺件行有导入按钮（手动兜底入口常驻）
     expect(screen.getByTestId('model-import-realesr-general-x4v3')).toBeTruthy()
     expect(screen.getByTestId('models-source-mirrors').textContent).toContain('huggingface.co')
-    expect(screen.getByTestId('models-source-mirrors').textContent).toContain('myqcloud.com')
+    expect(screen.getByTestId('models-source-mirrors').textContent).toContain('hf-mirror.com')
   })
 
   it('从文件夹导入：web 形态退化为手填路径，file:// 前缀补齐后走下载通道', async () => {
