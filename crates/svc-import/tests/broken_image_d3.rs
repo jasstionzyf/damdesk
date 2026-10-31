@@ -30,9 +30,18 @@ fn vips_lock() -> std::sync::MutexGuard<'static, ()> {
     .unwrap_or_else(|e| e.into_inner())
 }
 
+/// 生成内容真正不同的 64×64 测试图。
+///
+/// 不能用纯色：纯色图去重口径下 pHash 近似常量，两张不同亮度的纯色会被判成同一张，
+/// 于是「两张真图都入库」的断言在 pHash 的库版本/阈值差异下随机翻车（CI 上只有 1 张入库）。
+/// 用带 seed 的高斯噪声：AC 系数各自随机 → pHash 不同，也不受 libvips 版本影响。
 fn make_png(path: &Path, brighten: f64) {
-    let black = libvips::ops::black(64, 64).unwrap();
-    let img = libvips::ops::linear(&black, &mut [1.0], &mut [brighten]).unwrap();
+    let opts = libvips::ops::GaussnoiseOptions {
+        sigma: 40.0,
+        mean: brighten,
+        seed: brighten as i32,
+    };
+    let img = libvips::ops::gaussnoise_with_opts(64, 64, &opts).unwrap();
     libvips::ops::pngsave(&img, &path.to_string_lossy()).unwrap();
 }
 
