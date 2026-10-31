@@ -1,5 +1,8 @@
 # DAMDesk
 
+[![CI](https://github.com/jasstionzyf/damdesk/actions/workflows/ci.yml/badge.svg)](https://github.com/jasstionzyf/damdesk/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+
 **A local-first desktop DAM where industry processing flows are installable plugins.**
 
 DAMDesk keeps your library on your machine — import, tag, deduplicate, search — and treats
