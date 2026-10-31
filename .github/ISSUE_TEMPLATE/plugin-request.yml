@@ -1,0 +1,81 @@
+name: Plugin Request / Plugin Submission
+description: Request a processing plugin, or submit one you built for inclusion.
+labels: ["industry-pack"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to **request** a pack for an industry/flow DAMDesk does not cover yet,
+        or to **submit** one you built. Submissions must pass the conformance suite — paste its
+        output below, unedited.
+
+        Protocol: `docs/industry-pack-protocol.md` (frozen v1.1). A pack is a directory with
+        `manifest.json`, an entrypoint process speaking JSON-RPC over stdio (six methods), and
+        its spec files.
+  - type: dropdown
+    id: intent
+    attributes:
+      label: This is a …
+      options:
+        - Submission — I built a pack and want it included under `packs/plugins/`
+        - Request — I need a pack for an industry/flow that does not exist yet
+    validations:
+      required: true
+  - type: textarea
+    id: industry
+    attributes:
+      label: Industry / flow and what it must judge
+      description: The concrete rules the pack should enforce (e.g. "marketplace main images - white background, no watermark, no body-text overlays"). For submissions, summarize what your pack already does.
+    validations:
+      required: true
+  - type: textarea
+    id: manifest
+    attributes:
+      label: manifest.json (submissions - required)
+      description: |
+        The full `manifest.json` of your pack. This is the pack's identity — id, version,
+        `api_version`, entrypoint, capabilities. Submissions without it will be closed.
+      render: json
+      placeholder: |
+        {
+          "id": "com.soujpg.pack.<your-pack>",
+          "name": { "en-US": "…" },
+          "version": "1.0.0",
+          "api_version": "1.1",
+          "entrypoint": { "cmd": "python3", "args": ["plugin/__init__.py"] },
+          "capabilities": ["io.read", "…"]
+        }
+    validations:
+      required: true
+  - type: textarea
+    id: conformance
+    attributes:
+      label: Conformance output (submissions - required)
+      description: |
+        Paste the full, unedited output of the conformance suite against your pack:
+
+            python3 tools/pack-conformance/run.py --plugin <your_pack_dir>
+
+        For built-in pack changes also run the whole suite - `bash tools/pack-conformance/run_all.sh`.
+        A submission whose pasted output shows failures will not be reviewed further.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: api-version
+    attributes:
+      label: Protocol version targeted
+      description: >-
+        The `api_version` your pack declares (currently `1.1`). Changing the protocol itself
+        is out of scope for a pack PR — see the pull request template.
+      placeholder: "1.1"
+    validations:
+      required: true
+  - type: checkboxes
+    id: sanity
+    attributes:
+      label: Before submitting
+      options:
+        - label: My pack does not require direct network access (all capability calls go through the gateway).
+        - label: Any model weights my pack needs are fetched by the user, not committed to the repo.
+        - label: I searched existing packs under `packs/plugins/` for overlap.

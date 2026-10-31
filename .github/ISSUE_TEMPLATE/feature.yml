@@ -1,0 +1,51 @@
+name: Feature Request
+description: Propose a capability or an improvement to an existing one.
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before proposing a new host feature, consider whether it could be a **plugin** instead —
+        that is the point of DAMDesk. Things that encode an industry flow, a specific model, or
+        a domain judgment belong in a pack; things that benefit every pack (runtime, gateway,
+        UI surfaces) belong in the host.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / user story
+      description: What are you trying to accomplish, and what blocks you today?
+      placeholder: As a photographer managing a stock library, I want … so that …
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which layer does this belong to?
+      description: If unsure, pick your best guess and explain in the proposal.
+      options:
+        - A new or extended processing plugin (pack)
+        - Plugin runtime / capability gateway
+        - Library / import / search / dedup
+        - Web UI
+        - Build / packaging / docs
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Concrete behavior, not implementation. What does the user see/do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you tried, or existing features that fall short and why.
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to help implement this (see `CONTRIBUTING.md`).
+        - label: This does not require shipping new model weights in the repo (BYO/optional download is fine).

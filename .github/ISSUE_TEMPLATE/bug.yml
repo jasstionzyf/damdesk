@@ -1,0 +1,74 @@
+name: Bug Report
+description: Something in DAMDesk is broken or behaves unexpectedly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill out the sections below —
+        incomplete reports are hard to reproduce and slow to fix.
+
+        Security issues: do **not** open a public issue. See `SECURITY.md` for private reporting.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect to happen instead?
+      placeholder: A clear and concise description of the problem and the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps from a fresh state. Include the exact commands you ran.
+      placeholder: |
+        1. `cargo run -p app-web`
+        2. Import 3 JPEGs
+        3. Run the e-commerce pack judge → 500 in the response
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Import / library / thumbnails
+        - Tagging / embeddings / search
+        - Deduplication
+        - Plugin runtime (install / activate / execute)
+        - Compliance pack (built-in pack behavior)
+        - Web UI
+        - Container / build
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        OS + how you built (native / container / from source commit). If a pack is involved,
+        include its `id@version` (visible in the UI or `packs/<pack>/manifest.json`).
+      placeholder: |
+        - OS: Ubuntu 24.04
+        - Build: source @ commit `abc1234`
+        - Pack: com.soujpg.pack.ecommerce@1.3.0
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Backend stderr / plugin stderr relevant to the failure. Redact absolute paths you
+        consider private. Wrap in code fences.
+      render: shell
+  - type: checkboxes
+    id: sanity
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for a duplicate.
+          required: true
+        - label: The failure happens on a clean checkout (not a locally modified tree).
