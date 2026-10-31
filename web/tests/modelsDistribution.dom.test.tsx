@@ -18,10 +18,10 @@ const { apiMock, statusQueue } = vi.hoisted(() => {
   const apiMock = {
     models: vi.fn(async () => ({
       root: '/home/u/.local/share/com.soujpg.dam.desktop/models',
-      baseUrl: 'https://huggingface.co/damdesk/models/resolve/main',
+      baseUrl: 'https://huggingface.co/jasstionzyf/damdesk-models/resolve/main',
       sources: [
-        'https://huggingface.co/damdesk/models/resolve/main',
-        'https://soujpg-images-1307121509.cos.ap-shanghai.myqcloud.com/damdesk/models',
+        'https://huggingface.co/jasstionzyf/damdesk-models/resolve/main',
+        'https://hf-mirror.com/jasstionzyf/damdesk-models/resolve/main',
       ],
       sourceMode: 'default',
       downloadable: ['u2net', 'realesr-general-x4v3', 'lama-fp32'],

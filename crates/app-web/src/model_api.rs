@@ -46,11 +46,11 @@ pub const DOWNLOADABLE: &[&str] = &[
 
 /// 默认分发根（task 用户裁决）：HF 主源 + COS 镜像。单文件 URL =
 /// base + "/" + manifest.url_path（HF `resolve/main` 与 COS 对象存储都支持子目录路径）。
-pub const MODEL_SOURCE_HF: &str = "https://huggingface.co/damdesk/models/resolve/main";
-pub const MODEL_SOURCE_COS: &str =
-    "https://soujpg-images-1307121509.cos.ap-shanghai.myqcloud.com/damdesk/models";
+pub const MODEL_SOURCE_HF: &str = "https://huggingface.co/jasstionzyf/damdesk-models/resolve/main";
+pub const MODEL_SOURCE_MIRROR: &str =
+    "https://hf-mirror.com/jasstionzyf/damdesk-models/resolve/main";
 /// 下载失败自动切下一个镜像（顺序即优先级）；显式 baseUrl / settings 覆盖 = 单源不 failover。
-pub const MODEL_MIRRORS: &[&str] = &[MODEL_SOURCE_HF, MODEL_SOURCE_COS];
+pub const MODEL_MIRRORS: &[&str] = &[MODEL_SOURCE_HF, MODEL_SOURCE_MIRROR];
 
 fn err(status: StatusCode, code: &str, msg: impl Into<String>) -> Response {
     (status, Json(json!({ "error": msg.into(), "code": code }))).into_response()
@@ -601,7 +601,7 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         assert_eq!(s.first().map(String::as_str), Some(MODEL_SOURCE_HF));
-        assert_eq!(s.last().map(String::as_str), Some(MODEL_SOURCE_COS));
+        assert_eq!(s.last().map(String::as_str), Some(MODEL_SOURCE_MIRROR));
         assert!(!ov);
         // 空串 → 镜像组（不让空源把下载打到裸路径上）
         let (s, ov) = resolve_base_sources("   ", None);

@@ -159,8 +159,8 @@ async fn list_reports_lama_missing_with_absolute_paths() {
     assert_eq!(
         body["sources"],
         serde_json::json!([
-            "https://huggingface.co/damdesk/models/resolve/main",
-            "https://soujpg-images-1307121509.cos.ap-shanghai.myqcloud.com/damdesk/models"
+            "https://huggingface.co/jasstionzyf/damdesk-models/resolve/main",
+            "https://hf-mirror.com/jasstionzyf/damdesk-models/resolve/main"
         ])
     );
 
