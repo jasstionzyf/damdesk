@@ -1,0 +1,11 @@
+[package]
+name = "engine-jobq"
+description = "L1 任务调度：状态机、重试、断点续跑（不关心 job 语义）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+rusqlite.workspace = true
+thiserror.workspace = true

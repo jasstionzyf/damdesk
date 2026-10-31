@@ -1,0 +1,74 @@
+{
+ "corpus": "/data/damdesk-test-corpus/v1",
+ "alpha": [
+  {
+   "file": "alpha/alpha_01.png",
+   "source": "process/convert/cv_png_01.png",
+   "width": 800,
+   "height": 532,
+   "alphaMin": 0,
+   "alphaMax": 255,
+   "alphaBelow255": 425428,
+   "alphaZero": 8,
+   "derive": "语料真图缩到长边 800 + 径向渐变 alpha"
+  },
+  {
+   "file": "alpha/alpha_02.png",
+   "source": "process/convert/cv_png_02.png",
+   "width": 666,
+   "height": 800,
+   "alphaMin": 0,
+   "alphaMax": 255,
+   "alphaBelow255": 532592,
+   "alphaZero": 8,
+   "derive": "语料真图缩到长边 800 + 径向渐变 alpha"
+  },
+  {
+   "file": "alpha/alpha_03.png",
+   "source": "process/convert/cv_png_03.png",
+   "width": 533,
+   "height": 800,
+   "alphaMin": 0,
+   "alphaMax": 255,
+   "alphaBelow255": 426220,
+   "alphaZero": 8,
+   "derive": "语料真图缩到长边 800 + 径向渐变 alpha"
+  }
+ ],
+ "orient": [
+  {
+   "file": "orient/orient_6.jpg",
+   "ref": "orient/ref_2.png",
+   "source": "process/convert/cv_webp_02.jpg",
+   "orientation": 6,
+   "storedSize": [
+    675,
+    900
+   ],
+   "uprightSize": [
+    900,
+    675
+   ],
+   "exifOrientation": 6,
+   "derive": "语料真图摆正后转 90° 存储 + EXIF Orientation=6"
+  },
+  {
+   "file": "orient/orient_8.jpg",
+   "ref": "orient/ref_3.png",
+   "source": "process/convert/cv_webp_03.jpg",
+   "orientation": 8,
+   "storedSize": [
+    707,
+    900
+   ],
+   "uprightSize": [
+    900,
+    707
+   ],
+   "exifOrientation": 8,
+   "derive": "语料真图摆正后转 90° 存储 + EXIF Orientation=8"
+  }
+ ],
+ "generatedBy": "make_codec_fixtures.py",
+ "digest": "ee2ba53d7bb6bc89d2c89fa35dcc80618ee53547630ec0bda90647e81fcdc9ab"
+}

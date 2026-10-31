@@ -1,0 +1,10 @@
+{
+  "id": "test.frame-recorder",
+  "name": "协议帧录制夹具（宿主侧帧编码单测用）",
+  "version": "1.0.0",
+  "api_version": "1.1",
+  "entrypoint": {"cmd": "python3", "args": ["plugin/__init__.py"]},
+  "capabilities": ["io.read"],
+  "deterministic": true,
+  "timeout_secs": 5
+}

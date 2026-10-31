@@ -1,0 +1,35 @@
+[package]
+name = "core-media"
+description = "L0 libvips 封装：解码/缩略图/灰度网格（主色/波形 v2+）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+# DESKTOP-THUMB-PORTRAIT-1：Linux/macOS 强制启用纯 Rust `image` 后端（Windows 目标平台
+# 天然走该分支，无需此 feature），用于在无 Windows 真机时单测/验收 rustimg 缩略图路径。
+rustimg-backend = []
+
+[dependencies]
+core-types.workspace = true
+thiserror.workspace = true
+# C4 do 型变换：共享纯 Rust 编码（jpeg/png/webp/avif）+ 文字水印（ab_glyph + 内嵌 Noto Sans SC）
+# —— 解码仍按目标平台切后端（下），编码统一 image crate 双平台同语义。
+# avif = image 的 `avif` feature（encoder 走 ravif/rav1e 纯 Rust，无 nasm/C 依赖）；
+# rayon = ravif 的多线程编码（33MP 单线程 av1 编码要分钟级，24 核 3s 级 —— 见 N6b 报告）
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "avif", "rayon"] }
+ab_glyph = "0.2"
+# EXIF2：纯 Rust EXIF 解析（BSD-2-Clause，允许链接 AGPL-3.0；依赖审计见 exif.rs 头注释）
+kamadak-exif = "0.6"
+serde_json.workspace = true
+
+# D13 Windows 打包：libvips 无 Windows 交叉编译 SDK → 按目标平台切后端
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+libvips = "1.7"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+
+[dev-dependencies]
+# core-media 自身测试（encode/watermark 造源图）走 image crate
+image = { version = "0.25", default-features = false, features = ["jpeg"] }

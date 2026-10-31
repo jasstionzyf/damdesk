@@ -1,0 +1,174 @@
+{
+  "pack": "com.soujpg.pack.ecommerce",
+  "version": "1.3.0",
+  "api_version": "1.1",
+  "fix_policy": "geometric",
+  "max_rounds": 3,
+  "note": "本文件是电商包的**判据权威**（K07-FIX-I）：`rules[].params` 与 `prompts{}` 由 plugin/ruleset.py 在 import 时读取（THRESHOLDS / PROMPT_TEXTS 生效值即来源于此），代码里的 DEFAULT_* 只是资源缺失时的兜底；单测 test_ruleset_resource_sync 钉住「资源 == 默认值」防两处漂移。阈值口径见 damdesk-repo/references/fix-policy-and-a4.md；R0 三项硬否决（主体数量/完整性/场景度）与 VL 多数票口径见该文件 K07-FIX-I。",
+  "rules": [
+    {
+      "id": "R0_product_main",
+      "name": {
+        "zh-Hans": "领域 gate（画面里有没有商品主体；不判白底/文字/场景）",
+        "en-US": "Domain gate (is a product subject present; does not judge background / text / scene)"
+      },
+      "executor": "model_u2net+vl",
+      "deterministic": false,
+      "fixer": null,
+      "on_fail": "fail",
+      "params": {
+        "subject_area_min": 0.15,
+        "subject_area_absent": 0.02,
+        "solidity_min": 0.25,
+        "full_frame_ratio": 0.98,
+        "foreign_object_ratio_max": 0.3,
+        "edge_margin_ratio": 0.02,
+        "scene_prop_max": 0
+      }
+    },
+    {
+      "id": "R1_size",
+      "name": {
+        "zh-Hans": "尺寸达标（短边 ≥1600；长边门槛由规格给，默认不约束）",
+        "en-US": "Size requirement (short side >= 1600; long-side threshold comes from the spec, unconstrained by default)"
+      },
+      "executor": "classic",
+      "deterministic": true,
+      "fixer": "upscale",
+      "on_fail": "retry_then_human",
+      "params": {
+        "short_side_min": 1600,
+        "long_side_min": 0
+      }
+    },
+    {
+      "id": "R2_white_bg",
+      "name": {
+        "zh-Hans": "白底图纯白",
+        "en-US": "Pure-white background"
+      },
+      "executor": "vl",
+      "deterministic": false,
+      "fixer": "replace_bg",
+      "on_fail": "auto_fix",
+      "params": {
+        "max_dev": 8
+      }
+    },
+    {
+      "id": "R4_subject_ratio",
+      "name": {
+        "zh-Hans": "主体占比 55%~85%",
+        "en-US": "Subject occupies 55%-85% of the frame"
+      },
+      "executor": "model_u2net",
+      "deterministic": true,
+      "fixer": "geometric",
+      "on_fail": "auto_fix",
+      "params": {
+        "min": 0.55,
+        "max": 0.85,
+        "target": 0.75
+      }
+    },
+    {
+      "id": "R3_no_watermark",
+      "name": {
+        "zh-Hans": "无促销文字/水印/牛皮癣",
+        "en-US": "No promo text / watermark / promo stickers"
+      },
+      "executor": "ocr+vl",
+      "deterministic": false,
+      "fixer": "inpaint_ocr_box",
+      "on_fail": "retry_then_human",
+      "params": {
+        "text_area_ratio_max": 0.02,
+        "subject_cover_ratio_max": 0.08,
+        "min_text_chars": 2
+      }
+    },
+    {
+      "id": "R5_attribute",
+      "name": {
+        "zh-Hans": "属性打标（非判定，填词表）",
+        "en-US": "Attribute tagging (non-judging; fills the taxonomy)"
+      },
+      "executor": "vl",
+      "deterministic": false,
+      "fixer": null,
+      "on_fail": "pass"
+    }
+  ],
+  "pipeline_order": [
+    "R0_product_main",
+    "R1_size",
+    "R2_white_bg",
+    "R4_subject_ratio",
+    "R3_no_watermark",
+    "R5_attribute"
+  ],
+  "semantics": {
+    "R0_product_main": "只判「画面里有没有**可售卖、完整、单一**的商品主体」：白底图/模特穿着或使用该商品的图/细节特写图都算有；人像写真、风景、无商品实景、截图、纯文字算没有。三项硬否决（K07-FIX-I，f001 假阳性收口）：① 除主体外的显著物体面积 ≥ 主体 30% → fail（多主体/强陪衬）；② 主体 bbox 任一边距画面边界 < 短边 2% 且 VL 确认有主体 → fail（主体被裁切）；③ 生活场景陪衬物（桌面/餐具饮具/人手/家具/植物/包装箱/装饰摆件）出现即 fail。促销文字/水印/logo/吊牌不构成 R0 否决（由 R3 判）。 判定口径（卡 task）：**画面里没有可判主体（u2net 面积 ≤2% 或 VL 回 subject.present=false）→ skipped**（本包对该图不适用：不判 pass/fail，也不给分数与把握度）；真不合格（有商品但被裁切/多主体/生活场景陪衬）仍是 fail。主体框贴边只是「必须问模型复核」的理由 —— VL 确认有主体且被裁才 fail（非商品图的掩码同样贴边）。",
+    "R3_no_watermark": "OCR 只做候选定位，不直接判 fail：①单字符/空文本行先剔除为图案噪声（min_text_chars=2，真语料 a002 实测）；②框覆盖主体紧框 ≥8% → 叠加水印 fail；③主体外文字面积 ≥2% → 促销条 fail；④主体内文字（吊牌/型号码/洗水标）排除为 pass；⑤主体外文字面积 <2% → VL 裁量性质（促销文案 vs 商品标签）。无文字直接 pass，不问 VL；inpaint 只擦②③的框，吊牌与噪声框不进掩码。",
+    "R4_subject_ratio": "几何修复由 /detect/bbox 的 window / dominant_bbox 驱动（不再用 fg_ratio 反推窗口）：裁主体紧框 → 占比高才扩窗 → 补白只在「补成 1:1 仍达标」时做，否则保留窗口比例并标 letterbox_skipped。"
+  },
+  "prompts": {
+    "R0_product_main": {
+      "id": "ecom.r0_domain",
+      "version": 3,
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "max_tokens": 4096,
+      "samples": 3,
+      "text": "你是电商主图合规审核员，判定这张图算不算合格的电商商品主图。只输出一个 JSON 对象，不要解释、不要代码块。\n看三件事：画面里有没有商品主体、主体是否完整、除主体外有没有显著陪衬物。\nJSON 结构（面积均为占整幅画面的比例 0~1，估不准也要给）：\n{\"subject\": {\"present\": true/false, \"name\": \"主体商品名\", \"area_ratio\": 0.0, \"cut\": true/false},\n \"others\": [{\"name\": \"物体名\", \"kind\": \"product|life_scene|person\", \"area_ratio\": 0.0}],\n \"verdict\": \"pass|fail\", \"reason\": \"一句话\"}\nverdict=fail 的硬条件（满足任意一条）：\n1) 没有可售卖的商品作为主体（人像写真、风景、截图、纯文字、没有商品的实景）；\n2) 除主体外还有显著物体，且其面积达到主体面积的 {foreign_object_ratio_pct} 以上（多主体 / 强陪衬）；\n3) 主体被画面边缘裁切（商品任一侧出画或贴边，距边不足短边的 {edge_margin_pct}），或 subject.cut=true；\n4) 画面里有生活场景陪衬物（桌面、餐具饮具、人手、家具、植物、包装箱、装饰摆件等与主体商品非同类的显著物件），允许个数上限 {scene_prop_max}。\n不构成否决：白底、促销文字/水印/logo、商品自带吊牌、模特穿着或使用该商品、纯色背景。\nothers 只列显著物体（面积 ≥ 整幅 1% 或主体 10%），不列背景纹理；与主体同类的第二件商品 kind 记 product；与商品无关的人记 person。"
+    },
+    "R2_white_bg": {
+      "id": "ecom.r2_white_bg",
+      "version": 1,
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "max_tokens": 4096,
+      "samples": 3,
+      "text": "这张电商图片的商品主体背景是不是纯白色（白底图，背景无明显灰度/阴影/杂物）？只回答「是」或「否」。"
+    },
+    "R3_no_watermark": {
+      "id": "ecom.r3_no_overlay",
+      "version": 1,
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "max_tokens": 4096,
+      "samples": 3,
+      "text": "这张电商主图上是否存在促销文字、水印、logo 等叠加遮挡物？只回答「是」或「否」。"
+    },
+    "R5_attribute": {
+      "id": "ecom.r5_attribute",
+      "version": 1,
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "max_tokens": 4096,
+      "samples": 3,
+      "text": "按 JSON 输出这张商品图的属性，不要解释：{\"dress_silhouette\": \"<A字|直筒|收腰|茧型|未知>\", \"scene\": \"<模特正面|模特背面|平铺|细节图|白底图|未知>\"}"
+    }
+  },
+  "report": {
+    "summary": [
+      "合格",
+      "不合格",
+      "未判定"
+    ],
+    "detail_columns": [
+      "imageSN",
+      "R0_product_main",
+      "R0_product_main_confidence",
+      "R1_size",
+      "R2_white_bg",
+      "R3_no_watermark",
+      "R3_no_watermark_fix",
+      "R3_no_watermark_recheck",
+      "R4_subject_ratio",
+      "R4_subject_ratio_score",
+      "R5_attribute_tags"
+    ],
+    "low_confidence": 0.7
+  }
+}

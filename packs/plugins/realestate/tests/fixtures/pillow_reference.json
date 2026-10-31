@@ -1,0 +1,121 @@
+{
+  "sharp_640x480.jpg": {
+    "width": 640,
+    "height": 480,
+    "laplacian_variance": 7067.41,
+    "dead_ratio": 0.4697,
+    "mean": 191.19,
+    "observed": {
+      "laplacian_variance_rel": 0.1542,
+      "dead_ratio_abs": 0.0303,
+      "mean_abs": 1.12
+    },
+    "tolerances": {
+      "laplacian_variance_rel": 0.216,
+      "dead_ratio_abs": 0.042,
+      "mean_abs": 2.0
+    }
+  },
+  "blur_640x480.jpg": {
+    "width": 640,
+    "height": 480,
+    "laplacian_variance": 0.08,
+    "dead_ratio": 0.0,
+    "mean": 192.0,
+    "observed": {
+      "laplacian_variance_rel": 0.2255,
+      "dead_ratio_abs": 0.0,
+      "mean_abs": 0.02
+    },
+    "tolerances": {
+      "laplacian_variance_rel": 0.316,
+      "dead_ratio_abs": 0.02,
+      "mean_abs": 2.0
+    }
+  },
+  "dup_a_640x480.jpg": {
+    "width": 640,
+    "height": 480,
+    "laplacian_variance": 479.57,
+    "dead_ratio": 0.1289,
+    "mean": 191.84,
+    "observed": {
+      "laplacian_variance_rel": 0.088,
+      "dead_ratio_abs": 0.0002,
+      "mean_abs": 0.48
+    },
+    "tolerances": {
+      "laplacian_variance_rel": 0.123,
+      "dead_ratio_abs": 0.02,
+      "mean_abs": 2.0
+    }
+  },
+  "dup_b_640x480.jpg": {
+    "width": 640,
+    "height": 480,
+    "laplacian_variance": 763.36,
+    "dead_ratio": 0.097,
+    "mean": 191.58,
+    "observed": {
+      "laplacian_variance_rel": 0.0037,
+      "dead_ratio_abs": 0.0085,
+      "mean_abs": 0.64
+    },
+    "tolerances": {
+      "laplacian_variance_rel": 0.03,
+      "dead_ratio_abs": 0.02,
+      "mean_abs": 2.0
+    }
+  },
+  "whiteout_640x480.jpg": {
+    "width": 640,
+    "height": 480,
+    "laplacian_variance": 0.0,
+    "dead_ratio": 1.0,
+    "mean": 255.0,
+    "observed": {
+      "laplacian_variance_rel": 0.0,
+      "dead_ratio_abs": 0.0,
+      "mean_abs": 0.0
+    },
+    "tolerances": {
+      "laplacian_variance_rel": 0.03,
+      "dead_ratio_abs": 0.02,
+      "mean_abs": 2.0
+    }
+  },
+  "sharp444_640x480.jpg": {
+    "width": 640,
+    "height": 480,
+    "laplacian_variance": 8299.41,
+    "dead_ratio": 0.5,
+    "mean": 192.0,
+    "observed": {
+      "laplacian_variance_rel": 0.0172,
+      "dead_ratio_abs": 0.0,
+      "mean_abs": 0.5
+    },
+    "tolerances": {
+      "laplacian_variance_rel": 0.03,
+      "dead_ratio_abs": 0.02,
+      "mean_abs": 2.0
+    }
+  },
+  "small_320x240.jpg": {
+    "width": 320,
+    "height": 240,
+    "laplacian_variance": 9663.53,
+    "dead_ratio": 0.131,
+    "mean": 191.3,
+    "observed": {
+      "laplacian_variance_rel": 0.1367,
+      "dead_ratio_abs": 0.1207,
+      "mean_abs": 1.02
+    },
+    "tolerances": {
+      "laplacian_variance_rel": 0.191,
+      "dead_ratio_abs": 0.169,
+      "mean_abs": 2.0
+    }
+  }
+}

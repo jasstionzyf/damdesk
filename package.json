@@ -1,0 +1,20 @@
+{
+  "name": "damdesk",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "pnpm -C web dev",
+    "build": "pnpm -C web build",
+    "test": "pnpm -C web test"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@tauri-apps/cli"
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "id": "com.soujpg.pack.imaging",
+  "name": {
+    "zh-Hans": "图片处理（缩放 / 裁剪 / 转格式 / 压缩 / 水印 / 改名）",
+    "en-US": "Image Processing (resize / crop / convert / compress / watermark / rename)"
+  },
+  "short_name": {
+    "zh-Hans": "图片处理",
+    "en-US": "Image Tools"
+  },
+  "summary": {
+    "zh-Hans": "批量缩放、裁剪、转格式、压缩、加水印、改名",
+    "en-US": "Batch resize, crop, format conversion, compression, watermarking and renaming"
+  },
+  "version": "1.0.0",
+  "api_version": "1.1",
+  "entrypoint": {
+    "cmd": "python3",
+    "args": [
+      "plugin/__init__.py"
+    ]
+  },
+  "capabilities": [
+    "io.read",
+    "detect.u2net",
+    "op.geometric",
+    "op.overlay"
+  ],
+  "kinds": [
+    "process"
+  ],
+  "deterministic": true,
+  "timeout_secs": 120,
+  "resources": [
+    "resources/params.schema.json"
+  ],
+  "params": "resources/params.schema.json",
+  "permissions": {
+    "read": true,
+    "net": false
+  },
+  "signature": null
+}

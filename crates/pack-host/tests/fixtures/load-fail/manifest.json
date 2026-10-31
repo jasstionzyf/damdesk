@@ -1,0 +1,10 @@
+{
+  "id": "test.load-fail",
+  "name": "加载失败夹具（import 抛异常）",
+  "version": "1.0.0",
+  "api_version": "1.1",
+  "entrypoint": {"cmd": "python3", "args": ["plugin/__init__.py"]},
+  "capabilities": ["io.read"],
+  "deterministic": true,
+  "timeout_secs": 5
+}

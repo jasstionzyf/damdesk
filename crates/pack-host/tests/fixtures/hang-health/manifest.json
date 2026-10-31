@@ -1,0 +1,10 @@
+{
+  "id": "test.hang-health",
+  "name": "健康握手挂死夹具（health 永不应答）",
+  "version": "1.0.0",
+  "api_version": "1.1",
+  "entrypoint": {"cmd": "python3", "args": ["plugin/__init__.py"]},
+  "capabilities": ["io.read"],
+  "deterministic": true,
+  "timeout_secs": 5
+}

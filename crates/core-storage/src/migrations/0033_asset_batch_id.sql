@@ -1,0 +1,25 @@
+-- 0033 asset_batch_id — DM-A4（卡 task）：资产级导入批次溯源。
+--
+-- 一句话：`assets.batchId` = **最后一次把这行写进库的导入批次**；NULL = 没有批次归属
+-- （迁移前就存在的老资产、watcher 捡回来的文件、外部/示例数据）。
+--
+-- 为什么必须落到资产行（而不是继续拿 import_batches.rootPath 猜）：
+-- * 同一目录分两次导入 → 两批在 rootPath 上完全同前缀，前缀法把第一批的图也算进第二批；
+-- * 批次根目录改名/搬迁 → 历史批次的前缀直接对不上；
+-- * 父子目录两个批次 → 前缀互相包含，范围互相串。
+-- 这些都是「范围不准」，会让 `rangeMeta.outOfScopeAssets` / `outsideDupAssets`
+-- 那套「真没有 vs 范围外还有」的诚实口径跟着失真。
+--
+-- 口径（与 svc-import 的写入路径一致，见 svc_import::process_file 文档）：
+-- * Imported（新入库）/ Updated（同路径内容变了重写）→ 写当次批次 id（覆盖上一次）；
+-- * Unchanged（同内容重扫）/ Duplicate（同 hash 命中别的资产）→ **不动**：
+--   这两条路径一个资产行都没写，把老资产搬到新批次等于篡改来源事实；
+-- * relink（文件搬家接回）→ 不动：搬迁不是导入事件。
+--
+-- 历史数据：**不假装有批次**。迁移里不做回填（rootPath 前缀「唯一命中」在一堆
+-- 父子目录/重复导入的老库里本来就不唯一，回填 = 编造来源）。老库的 `batch:<id>`
+-- 范围由 dedup_api 兜成 rootPath 近似并在 `rangeMeta.approx=true` 明示，不许静默当精确。
+--
+-- 迁移纪律：只加不改不删；ALTER TABLE ADD COLUMN 由迁移账本保证只跑一次（同 0004/0013/0019）。
+ALTER TABLE assets ADD COLUMN batchId INTEGER REFERENCES import_batches(batchId);
+CREATE INDEX IF NOT EXISTS idx_assets_batch ON assets(batchId);

@@ -1,0 +1,23 @@
+{
+  "id": "conformance.bad-stdout-pollution",
+  "name": "Bad: stdout pollution",
+  "version": "1.0.0",
+  "api_version": "1.1",
+  "entrypoint": {
+    "cmd": "python3",
+    "args": ["plugin/__init__.py"]
+  },
+  "capabilities": [
+    "io.read",
+    "detect.u2net",
+    "detect.ocr",
+    "op.geometric",
+    "op.generative",
+    "vl.judge",
+    "report.emit"
+  ],
+  "deterministic": false,
+  "timeout_secs": 60,
+  "resources": [],
+  "signature": null
+}

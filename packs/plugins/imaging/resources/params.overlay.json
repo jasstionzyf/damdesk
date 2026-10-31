@@ -1,0 +1,72 @@
+{
+ "schemaVersion": 1,
+ "groups": [
+  {
+   "key": "overlay",
+   "title": "叠加（水印 / 重命名）"
+  }
+ ],
+ "properties": {
+  "watermarkText": {
+   "type": "string",
+   "title": "水印文字",
+   "default": "DAMDesk",
+   "group": "overlay"
+  },
+  "watermarkAnchor": {
+   "type": "enum",
+   "title": "水印位置",
+   "options": [
+    "top_left",
+    "top_right",
+    "center",
+    "bottom_left",
+    "bottom_right"
+   ],
+   "default": "bottom_right",
+   "group": "overlay"
+  },
+  "watermarkOpacity": {
+   "type": "number",
+   "title": "透明度",
+   "min": 0.01,
+   "max": 1,
+   "step": 0.05,
+   "default": 0.5,
+   "group": "overlay"
+  },
+  "watermarkFontSize": {
+   "type": "integer",
+   "title": "字号",
+   "min": 8,
+   "max": 512,
+   "step": 1,
+   "default": 48,
+   "unit": "px",
+   "group": "overlay"
+  },
+  "watermarkMargin": {
+   "type": "integer",
+   "title": "边距",
+   "min": 0,
+   "max": 2000,
+   "step": 1,
+   "default": 16,
+   "unit": "px",
+   "group": "overlay"
+  },
+  "watermarkColor": {
+   "type": "color",
+   "title": "水印颜色",
+   "default": "#ffffff",
+   "group": "overlay"
+  },
+  "renameTemplate": {
+   "type": "string",
+   "title": "改名模板",
+   "default": "{name}_{width}x{height}",
+   "group": "overlay"
+  }
+ },
+ "required": []
+}

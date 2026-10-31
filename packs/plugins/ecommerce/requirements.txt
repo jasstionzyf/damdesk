@@ -1,0 +1,8 @@
+# 官方电商包**不依赖任何第三方库**（只有标准库 zlib/struct/urllib/threading）。
+#
+# 为什么刻意保持空：`docs/industry-pack-protocol.md` §4.0 要求每个包自带 venv
+# 隔离运行；包零依赖时 `<runtime>/python -m venv venv && pip install -r requirements.txt`
+# 可以在断网环境瞬间完成，也不会把 numpy/Pillow 的体积与 CVE 带进桌面安装包。
+# 需要图像解码/模型推理的活一律走宿主网关（10 端点），插件只做编排与几何求解。
+#
+# 若将来真的需要第三方库，请在这里加，并在 README「包内 venv」记录 wheel 缓存路径。

@@ -1,0 +1,45 @@
+{
+  "id": "com.soujpg.pack.segment",
+  "name": {
+    "zh-Hans": "抠图 / 换背景（u2net 主体分割）",
+    "en-US": "Cutout / Background Replace (u2net subject segmentation)"
+  },
+  "short_name": {
+    "zh-Hans": "抠图换背景",
+    "en-US": "Cutout & Background"
+  },
+  "summary": {
+    "zh-Hans": "把图片里的主体抠出来，换成纯色或新背景",
+    "en-US": "Cut out the subject and composite it onto a solid color or a new background"
+  },
+  "version": "1.2.1",
+  "api_version": "1.1",
+  "entrypoint": {
+    "cmd": "python3",
+    "args": [
+      "plugin/__init__.py"
+    ]
+  },
+  "kinds": [
+    "process"
+  ],
+  "capabilities": [
+    "io.read",
+    "detect.u2net",
+    "detect.white",
+    "op.geometric",
+    "report.emit"
+  ],
+  "deterministic": true,
+  "timeout_secs": 180,
+  "resources": [
+    "resources/params.schema.json",
+    "resources/actions.json"
+  ],
+  "params": "resources/params.schema.json",
+  "permissions": {
+    "read": true,
+    "net": false
+  },
+  "signature": null
+}

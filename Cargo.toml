@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0"
+repository = "https://github.com/damdesk-labs/damdesk"
+
+# 分层铁律（PLAN.md §2.1）：L3(app-tauri) → L2(svc-*) → L1(engine-*) → L0(core-*)，
+# 单向向下、同层禁互引；scripts/check_layers.sh 强制检查。
+[workspace.dependencies]
+core-types = { path = "crates/core-types" }
+core-storage = { path = "crates/core-storage" }
+core-hash = { path = "crates/core-hash" }
+core-media = { path = "crates/core-media" }
+core-config = { path = "crates/core-config" }
+engine-embed = { path = "crates/engine-embed" }
+engine-tag = { path = "crates/engine-tag" }
+engine-classic = { path = "crates/engine-classic" }
+engine-jobq = { path = "crates/engine-jobq" }
+engine-search = { path = "crates/engine-search" }
+engine-dedup = { path = "crates/engine-dedup" }
+engine-exif = { path = "crates/engine-exif" }
+svc-import = { path = "crates/svc-import" }
+svc-pipeline = { path = "crates/svc-pipeline" }
+svc-sync = { path = "crates/svc-sync" }
+svc-library = { path = "crates/svc-library" }
+
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+# D5 向量库裁决（reports/D5-spike-decision.md）：sqlite-vec（单 C 文件静态编入，
+# rusqlite 原生、无 protoc/arrow 依赖链；lancedb 备选被否）
+sqlite-vec = "0.1.9"
+# W7：asset protocol 已随旧 invoke 前端下线（媒体统一走内嵌 app-web HTTP）
+tauri = { version = "2" }
+tauri-build = { version = "2", features = [] }
+
+[profile.release]
+codegen-units = 1
+lto = true

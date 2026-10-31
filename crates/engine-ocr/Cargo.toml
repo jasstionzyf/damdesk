@@ -1,0 +1,23 @@
+[package]
+name = "engine-ocr"
+description = "L1 文字识别：PP-OCRv6_medium ONNX（det DB 后处理 + rec CTC 解码，纯 Rust 预/后处理；local-infer 门控）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-config.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+# 与 engine-embed/engine-segment 同版本纪律：=rc.10（ORT 1.22，容器 libstdc++ 兼容）
+ort = { version = "=2.0.0-rc.10", features = ["half"], optional = true }
+
+[features]
+default = ["local-infer"]
+# 本地 OCR 推理（PP-OCRv6_medium det+rec）；web 容器 default-features=false → 仅剩
+# 类型与模型根解析（纯 SQL 的检索加权融合在 svc-library，不依赖本 feature）。
+local-infer = ["dep:ort"]
+
+[dev-dependencies]
+# ocr_bench 示例（CPU 吞吐实测，验收）：解码走 core-media（与生产同一像素入口）
+core-media.workspace = true

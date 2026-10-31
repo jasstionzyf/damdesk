@@ -1,0 +1,43 @@
+{
+  "id": "com.soujpg.pack.upscale",
+  "name": {
+    "zh-Hans": "超分（Real-ESRGAN 2x/4x）",
+    "en-US": "Upscale (Real-ESRGAN 2x/4x)"
+  },
+  "short_name": {
+    "zh-Hans": "图片放大",
+    "en-US": "Upscale"
+  },
+  "summary": {
+    "zh-Hans": "把小图放大 2~4 倍，细节更清楚",
+    "en-US": "Enlarge small images 2-4x with clearer detail"
+  },
+  "version": "1.0.1",
+  "api_version": "1.1",
+  "entrypoint": {
+    "cmd": "python3",
+    "args": [
+      "plugin/__init__.py"
+    ]
+  },
+  "kinds": [
+    "process"
+  ],
+  "capabilities": [
+    "io.read",
+    "op.geometric",
+    "report.emit"
+  ],
+  "deterministic": true,
+  "timeout_secs": 600,
+  "resources": [
+    "resources/params.schema.json",
+    "resources/actions.json"
+  ],
+  "params": "resources/params.schema.json",
+  "permissions": {
+    "read": true,
+    "net": false
+  },
+  "signature": null
+}

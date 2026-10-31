@@ -1,0 +1,49 @@
+[package]
+name = "svc-pipeline"
+description = "L2 打标/embedding 编排（L1 jobq+embed+tag，asset/resource 状态机）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+core-storage.workspace = true
+core-config.workspace = true
+# C2：compliance 编排（classic 检测器 + 像素/尺寸解码 + 产物落盘）
+core-media.workspace = true
+# C9：组级去重检测的兜底派生（库内 pHash/fileHash 缺失时按文件现算）
+core-hash.workspace = true
+engine-exif.workspace = true
+engine-classic.workspace = true
+# C3：local_model 检测（u2net 分割）；feature 门控与 engine-embed 同模式（web 容器关）
+engine-segment = { path = "../engine-segment", default-features = false }
+# C4：修复器推理（x4v3 超分 + lama 重绘）；同一门控（web 容器关 → 插件未注册降级）
+engine-restore = { path = "../engine-restore", default-features = false }
+# OCR-E：文字识别（PP-OCRv6_medium）；同一门控（web 容器关 → run_* 缺席，API 409）
+engine-ocr = { path = "../engine-ocr", default-features = false }
+engine-jobq.workspace = true
+# C9：组级重复检测（engine-dedup::build_dup_groups）—— L2 组合两个 L1（算法 + core-hash 汉明）
+engine-dedup.workspace = true
+engine-embed = { path = "../engine-embed", default-features = false }
+engine-tag.workspace = true
+# C5：compliance vl 通道 HTTP 客户端（ureq 阻塞式，与 engine-tag 同版本）
+ureq = { version = "3", features = ["json"] }
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml = "0.9"
+thiserror.workspace = true
+
+[features]
+default = ["local-infer"]
+# R6：转发 engine-embed 的本地 ONNX 推理；C3 追加 engine-segment（u2net 分割）；
+# C4 追加 engine-restore（x4v3 超分 + lama 重绘）。
+# web 容器关掉 → 嵌入队列走远程 provider、local_model 规则 executor_not_available 降级、
+# 修复插件未注册 → fixer_not_available 转人工；do 型 classic 插件双端保留
+local-infer = ["engine-embed/local-infer", "engine-segment/local-infer", "engine-restore/local-infer", "engine-ocr/local-infer"]
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+serde_yaml = "0.9"
+serde_json.workspace = true
+tempfile = "3"

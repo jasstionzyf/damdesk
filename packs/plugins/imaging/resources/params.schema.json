@@ -1,0 +1,391 @@
+{
+ "schemaVersion": 1,
+ "groups": [
+  {
+   "key": "basic",
+   "title": "基本（选动作）"
+  },
+  {
+   "key": "geometry",
+   "title": "几何（缩放 / 裁剪）"
+  },
+  {
+   "key": "codec",
+   "title": "编码（转格式 / 压缩）"
+  },
+  {
+   "key": "overlay",
+   "title": "叠加（水印 / 重命名）"
+  }
+ ],
+ "properties": {
+  "action": {
+   "type": "enum",
+   "title": "处理动作",
+   "options": [
+    "resize",
+    "crop",
+    "convert",
+    "compress",
+    "watermark",
+    "rename"
+   ],
+   "default": "resize",
+   "group": "basic"
+  },
+  "resizeMode": {
+   "type": "enum",
+   "title": "缩放方式",
+   "options": [
+    "long_edge",
+    "short_edge",
+    "width",
+    "height",
+    "scale"
+   ],
+   "default": "long_edge",
+   "group": "geometry"
+  },
+  "resizeLongEdge": {
+   "type": "integer",
+   "title": "长边上限",
+   "min": 64,
+   "max": 20000,
+   "step": 100,
+   "default": 1600,
+   "unit": "px",
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "long_edge"
+    ]
+   }
+  },
+  "resizeShortEdge": {
+   "type": "integer",
+   "title": "短边上限",
+   "min": 64,
+   "max": 20000,
+   "step": 100,
+   "default": 1600,
+   "unit": "px",
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "short_edge"
+    ]
+   }
+  },
+  "resizeWidth": {
+   "type": "integer",
+   "title": "目标宽",
+   "min": 16,
+   "max": 20000,
+   "step": 10,
+   "default": 1600,
+   "unit": "px",
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "width"
+    ]
+   }
+  },
+  "resizeHeight": {
+   "type": "integer",
+   "title": "目标高",
+   "min": 16,
+   "max": 20000,
+   "step": 10,
+   "default": 1600,
+   "unit": "px",
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "height"
+    ]
+   }
+  },
+  "resizeScale": {
+   "type": "number",
+   "title": "等比系数",
+   "min": 0.05,
+   "max": 8,
+   "step": 0.05,
+   "default": 0.5,
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "scale"
+    ]
+   }
+  },
+  "resizeAllowUpscale": {
+   "type": "boolean",
+   "title": "允许放大（关闭＝只缩不放）",
+   "default": false,
+   "group": "geometry"
+  },
+  "cropAspect": {
+   "type": "enum",
+   "title": "目标比例",
+   "options": [
+    "1:1",
+    "4:3",
+    "3:4",
+    "16:9",
+    "9:16",
+    "3:2",
+    "2:3",
+    "custom"
+   ],
+   "default": "1:1",
+   "group": "geometry"
+  },
+  "cropAspectCustom": {
+   "type": "string",
+   "title": "自定义比例（宽:高）",
+   "default": "3:2",
+   "group": "geometry",
+   "when": {
+    "cropAspect": [
+     "custom"
+    ]
+   }
+  },
+  "cropAnchor": {
+   "type": "enum",
+   "title": "锚点",
+   "options": [
+    "center",
+    "top",
+    "bottom",
+    "left",
+    "right"
+   ],
+   "default": "center",
+   "group": "geometry"
+  },
+  "cropPadding": {
+   "type": "number",
+   "title": "主体留白",
+   "min": 0,
+   "max": 0.2,
+   "step": 0.01,
+   "default": 0.05,
+   "group": "geometry"
+  },
+  "cropBackground": {
+   "type": "color",
+   "title": "补边颜色（裁不下目标比例时用）",
+   "default": "#ffffff",
+   "group": "geometry"
+  },
+  "convertFormat": {
+   "type": "enum",
+   "title": "目标格式",
+   "options": [
+    "jpg",
+    "png",
+    "webp",
+    "avif"
+   ],
+   "default": "jpg",
+   "group": "codec"
+  },
+  "convertQuality": {
+   "type": "integer",
+   "title": "质量（仅 jpg / avif 生效）",
+   "min": 1,
+   "max": 100,
+   "step": 1,
+   "default": 85,
+   "group": "codec"
+  },
+  "convertKeepAlpha": {
+   "type": "boolean",
+   "title": "保留透明通道（目标格式不支持时按背景色合成）",
+   "default": true,
+   "group": "codec"
+  },
+  "convertBackground": {
+   "type": "color",
+   "title": "合成背景色（目标格式无 alpha / 关掉保留时用）",
+   "default": "#ffffff",
+   "group": "codec"
+  },
+  "convertAutoOrient": {
+   "type": "boolean",
+   "title": "按 EXIF 方向摆正",
+   "default": true,
+   "group": "codec"
+  },
+  "compressMode": {
+   "type": "enum",
+   "title": "压缩方式",
+   "options": [
+    "target_bytes",
+    "quality"
+   ],
+   "default": "target_bytes",
+   "group": "codec"
+  },
+  "compressTargetBytes": {
+   "type": "integer",
+   "title": "目标体积上限",
+   "min": 10240,
+   "max": 20971520,
+   "step": 1024,
+   "default": 204800,
+   "unit": "B",
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressMinQuality": {
+   "type": "integer",
+   "title": "质量底线（不低于它；达不到体积就报失败）",
+   "min": 20,
+   "max": 95,
+   "step": 1,
+   "default": 60,
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressPreferredQuality": {
+   "type": "integer",
+   "title": "质量目标（达不到就让图小一点，而不是把质量压到底线）",
+   "min": 40,
+   "max": 95,
+   "step": 1,
+   "default": 80,
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressAllowDownscale": {
+   "type": "boolean",
+   "title": "质量到底线仍超标时允许降采样",
+   "default": true,
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressMinLongEdge": {
+   "type": "integer",
+   "title": "降采样长边下限",
+   "min": 128,
+   "max": 20000,
+   "step": 64,
+   "default": 640,
+   "unit": "px",
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressQuality": {
+   "type": "integer",
+   "title": "质量档",
+   "min": 1,
+   "max": 100,
+   "step": 1,
+   "default": 82,
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "quality"
+    ]
+   }
+  },
+  "compressFormat": {
+   "type": "enum",
+   "title": "输出格式",
+   "options": [
+    "preserve",
+    "jpg",
+    "webp",
+    "png",
+    "avif"
+   ],
+   "default": "preserve",
+   "group": "codec"
+  },
+  "watermarkText": {
+   "type": "string",
+   "title": "水印文字",
+   "default": "DAMDesk",
+   "group": "overlay"
+  },
+  "watermarkAnchor": {
+   "type": "enum",
+   "title": "水印位置",
+   "options": [
+    "top_left",
+    "top_right",
+    "center",
+    "bottom_left",
+    "bottom_right"
+   ],
+   "default": "bottom_right",
+   "group": "overlay"
+  },
+  "watermarkOpacity": {
+   "type": "number",
+   "title": "透明度",
+   "min": 0.01,
+   "max": 1,
+   "step": 0.05,
+   "default": 0.5,
+   "group": "overlay"
+  },
+  "watermarkFontSize": {
+   "type": "integer",
+   "title": "字号",
+   "min": 8,
+   "max": 512,
+   "step": 1,
+   "default": 48,
+   "unit": "px",
+   "group": "overlay"
+  },
+  "watermarkMargin": {
+   "type": "integer",
+   "title": "边距",
+   "min": 0,
+   "max": 2000,
+   "step": 1,
+   "default": 16,
+   "unit": "px",
+   "group": "overlay"
+  },
+  "watermarkColor": {
+   "type": "color",
+   "title": "水印颜色",
+   "default": "#ffffff",
+   "group": "overlay"
+  },
+  "renameTemplate": {
+   "type": "string",
+   "title": "改名模板",
+   "default": "{name}_{width}x{height}",
+   "group": "overlay"
+  }
+ },
+ "required": []
+}

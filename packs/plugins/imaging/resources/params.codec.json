@@ -1,0 +1,157 @@
+{
+ "schemaVersion": 1,
+ "groups": [
+  {
+   "key": "codec",
+   "title": "编码（转格式 / 压缩）"
+  }
+ ],
+ "properties": {
+  "convertFormat": {
+   "type": "enum",
+   "title": "目标格式",
+   "options": [
+    "jpg",
+    "png",
+    "webp",
+    "avif"
+   ],
+   "default": "jpg",
+   "group": "codec"
+  },
+  "convertQuality": {
+   "type": "integer",
+   "title": "质量（仅 jpg / avif 生效）",
+   "min": 1,
+   "max": 100,
+   "step": 1,
+   "default": 85,
+   "group": "codec"
+  },
+  "convertKeepAlpha": {
+   "type": "boolean",
+   "title": "保留透明通道（目标格式不支持时按背景色合成）",
+   "default": true,
+   "group": "codec"
+  },
+  "convertBackground": {
+   "type": "color",
+   "title": "合成背景色（目标格式无 alpha / 关掉保留时用）",
+   "default": "#ffffff",
+   "group": "codec"
+  },
+  "convertAutoOrient": {
+   "type": "boolean",
+   "title": "按 EXIF 方向摆正",
+   "default": true,
+   "group": "codec"
+  },
+  "compressMode": {
+   "type": "enum",
+   "title": "压缩方式",
+   "options": [
+    "target_bytes",
+    "quality"
+   ],
+   "default": "target_bytes",
+   "group": "codec"
+  },
+  "compressTargetBytes": {
+   "type": "integer",
+   "title": "目标体积上限",
+   "min": 10240,
+   "max": 20971520,
+   "step": 1024,
+   "default": 204800,
+   "unit": "B",
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressMinQuality": {
+   "type": "integer",
+   "title": "质量底线（不低于它；达不到体积就报失败）",
+   "min": 20,
+   "max": 95,
+   "step": 1,
+   "default": 60,
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressPreferredQuality": {
+   "type": "integer",
+   "title": "质量目标（达不到就让图小一点，而不是把质量压到底线）",
+   "min": 40,
+   "max": 95,
+   "step": 1,
+   "default": 80,
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressAllowDownscale": {
+   "type": "boolean",
+   "title": "质量到底线仍超标时允许降采样",
+   "default": true,
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressMinLongEdge": {
+   "type": "integer",
+   "title": "降采样长边下限",
+   "min": 128,
+   "max": 20000,
+   "step": 64,
+   "default": 640,
+   "unit": "px",
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "target_bytes"
+    ]
+   }
+  },
+  "compressQuality": {
+   "type": "integer",
+   "title": "质量档",
+   "min": 1,
+   "max": 100,
+   "step": 1,
+   "default": 82,
+   "group": "codec",
+   "when": {
+    "compressMode": [
+     "quality"
+    ]
+   }
+  },
+  "compressFormat": {
+   "type": "enum",
+   "title": "输出格式",
+   "options": [
+    "preserve",
+    "jpg",
+    "webp",
+    "png",
+    "avif"
+   ],
+   "default": "preserve",
+   "group": "codec"
+  }
+ },
+ "required": []
+}

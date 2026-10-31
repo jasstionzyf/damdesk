@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "note": "动作清单的**唯一声明处**：本文件既是 pack.info.actions[] 的来源（插件启动时读它），也是宿主派生「官方默认方案」时读的那一份（crates/app-web/src/spec_seed.rs）。两处消费同一份，禁止在 Python 里再抄一遍。",
+  "actions": [
+    {
+      "id": "upscale",
+      "name": "高清放大",
+      "group": "basic",
+      "summary": "Real-ESRGAN 高清放大；2×/4×、引擎与分块由方案参数决定",
+      "kinds": ["process"],
+      "paramsGroup": "basic"
+    }
+  ]
+}

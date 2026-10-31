@@ -1,0 +1,16 @@
+[package]
+name = "engine-classic"
+description = "L1 经典算法：主色/调色板/均值 hash + 合规四检测器（size/white_edge/sharpness/exposure，纯 Rust 无模型，C1）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+serde.workspace = true
+serde_yaml = "0.9"
+thiserror.workspace = true
+
+# 仅测试用：fixtures 真图解码（c1_fixtures 集成测试），本体保持零解码依赖
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg"] }

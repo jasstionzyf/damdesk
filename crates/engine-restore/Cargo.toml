@@ -1,0 +1,27 @@
+[package]
+name = "engine-restore"
+description = "L1 图像修复推理：realesr-general-x4v3 超分 + big-lama 局部重绘（ONNX，C4；local-infer 门控）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-config.workspace = true
+thiserror.workspace = true
+# 与 engine-embed/engine-segment 同版本纪律：=rc.10（ORT 1.22，容器 libstdc++ 兼容）
+ort = { version = "=2.0.0-rc.10", features = ["half"], optional = true }
+ndarray = { version = "0.17", optional = true }
+# inpaint 需要 512² 缩放（纯 Rust imageops）；不引解码（像素入口由调用方 core-media 提供）
+image = { version = "0.25", default-features = false, optional = true }
+
+[features]
+default = ["local-infer"]
+# 本地 ONNX 修复推理（x4v3 超分 + lama 重绘）；web 容器 default-features=false →
+# 仅剩类型与模型根解析（svc-pipeline 侧修复插件未注册 → fixer_not_available 转人工）。
+local-infer = ["dep:ort", "dep:ndarray", "dep:image"]
+# 独显高性能档：ORT CUDA EP（需 CUDA 运行时的打包环境；dam-dev 容器无独显未验证——
+# 检测逻辑 detect_device() 全档可用，enable 后会话优先注册 CUDA EP，失败回退 CPU）
+cuda = ["local-infer", "ort/cuda"]
+
+[dev-dependencies]
+core-media.workspace = true

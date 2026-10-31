@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dampack-sdk"
+version = "1.0.0"
+description = "DAMDesk 行业包 SDK（Python）—— 协议 v1.0 的插件运行时：网关客户端 / Verdict / 错误码 / stdout 保护 / 启动器 / 每包 venv"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "AGPL-3.0" }
+dependencies = []            # 只用标准库：包内 venv 可在断网环境瞬间建好
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+Documentation = "https://github.com/damdesk-labs/damdesk/blob/main/docs/industry-pack-protocol.md"
+
+[tool.setuptools]
+packages = ["dampack"]
+# 顶层 `dampack_launcher.py` 必须随 SDK 一起装：宿主以 `python -m dampack_launcher` 拉起插件，
+# 第三方包的 venv 里没有这个模块就等于没有启动器。
+py-modules = ["dampack_launcher"]

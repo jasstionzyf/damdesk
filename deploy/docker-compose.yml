@@ -1,0 +1,43 @@
+# DAMDesk (container form): a single axum process serves both the web bundle and the JSON API.
+#
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#   curl 127.0.0.1:8787/healthz   ->  {"status":"ok","db":"ok"}
+#
+# The container build is the *server* form: no ONNX runtime, no bundled models
+# (binary ~9 MB). Point the embedding/tagging providers at any OpenAI-compatible
+# endpoint via the environment below, or switch to `local` in the desktop build.
+#
+# Optional build-time proxy (empty = direct):
+#   HTTP_PROXY=... HTTPS_PROXY=... docker compose -f deploy/docker-compose.yml build
+
+services:
+  damdesk:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+    image: damdesk:latest
+    container_name: damdesk
+    ports:
+      # Single-user product without login: keep it bound to loopback unless you
+      # put a reverse proxy with auth in front of it.
+      - "127.0.0.1:8787:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # First-boot seeding only (existing settings rows win).
+      DAM_WEB_EMBEDDER: ${DAM_WEB_EMBEDDER:-openai-compat-embedding}
+      DAM_WEB_EMBED_BASE_URL: ${DAM_WEB_EMBED_BASE_URL:-http://host.docker.internal:8090/v1}
+      DAM_WEB_EMBED_MODEL: ${DAM_WEB_EMBED_MODEL:-qwen3-vl-embedding-2b}
+      DAM_WEB_EMBED_PROXY: ${DAM_WEB_EMBED_PROXY:-}
+    volumes:
+      - dam_web_data:/data
+      # Optional read-only corpus for local testing:
+      # - /path/to/photos:/corpus:ro
+    restart: unless-stopped
+
+volumes:
+  dam_web_data:

@@ -1,0 +1,81 @@
+[package]
+name = "dev-e2e"
+description = "L3 开发/验收 harness（真图 e2e、云 VL 实测、CPU 性能基准）——只用于开发验收，不进安装包"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "d6_e2e"
+path = "src/main.rs"
+
+[[bin]]
+name = "c5_e2e"
+path = "src/bin/c5_e2e.rs"
+
+[[bin]]
+name = "verify_all"
+path = "src/bin/verify_all.rs"
+
+[[bin]]
+name = "ocr_e2e"
+path = "src/bin/ocr_e2e.rs"
+
+[[bin]]
+name = "ocr_match_bench"
+path = "src/bin/ocr_match_bench.rs"
+
+[[bin]]
+name = "ocr_match_eval"
+path = "src/bin/ocr_match_eval.rs"
+
+# C8：装载前 lint 命令行（任意 pack 目录 → 键级 + 注册表层 issue 清单）
+[[bin]]
+name = "pack_lint"
+path = "src/bin/pack_lint.rs"
+
+# COMPLIANCE-DOMAIN：领域 gate 真图端到端（真 pack + 真 VL + 逐图证据）
+[[bin]]
+name = "domain_spike"
+path = "src/bin/domain_spike.rs"
+
+# W3：以图搜图模型对比 probe（siglip2 vs dinov3 全量 cos 矩阵 + 单图编码耗时）
+[[bin]]
+name = "image_sim_probe"
+path = "src/bin/image_sim_probe.rs"
+
+# R3 多实例主体标定：一张图 → u2net 全部连通域 + OCR 行 + 两种主体口径的归属
+[[bin]]
+name = "r3_probe"
+path = "src/bin/r3_probe.rs"
+
+# DM-C1（task）：真图 × 真 OCR/lama × mock VL 的 region: ocr_text 真实链路验收
+[[bin]]
+name = "dm_c1_chain"
+path = "src/bin/dm_c1_chain.rs"
+
+[dependencies]
+core-types.workspace = true
+core-storage.workspace = true
+core-hash.workspace = true
+core-media.workspace = true
+core-config.workspace = true
+engine-embed.workspace = true
+engine-tag.workspace = true
+engine-search.workspace = true
+# C5：语料预扫描（u2net fg_ratio）+ 预放大（realesr）直连 L1 推理
+# C7：classic 检测器注册表直探（pack 配置探针 / 阈值标定）
+engine-classic = { path = "../engine-classic" }
+engine-dedup = { path = "../engine-dedup" }
+engine-segment = { path = "../engine-segment" }
+engine-ocr = { path = "../engine-ocr" }
+engine-restore = { path = "../engine-restore" }
+svc-import.workspace = true
+svc-pipeline.workspace = true
+svc-library.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml = "0.9"
+# D7 verify_all：生成确定性 PNG fixture（与 app-tauri 同版本同 feature）
+image = { version = "0.25", default-features = false, features = ["png"] }

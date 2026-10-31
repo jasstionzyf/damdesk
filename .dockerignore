@@ -1,0 +1,9 @@
+# dam-web 构建上下文精简（deploy/Dockerfile 用）
+node_modules
+dist
+target
+data
+*.db
+*.db-wal
+*.db-shm
+.cache

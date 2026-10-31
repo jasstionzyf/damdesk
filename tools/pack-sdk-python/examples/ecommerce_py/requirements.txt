@@ -1,0 +1,11 @@
+# 本包唯一的依赖是 SDK。装法（宿主安装第三方包时同一套）：
+#     DAMPACK_SDK_DIR=<SDK 源目录或 wheel 目录> pip install -r requirements.txt
+#
+# 用 `${DAMPACK_SDK_DIR}` 而不是相对路径 `../..`：pip 的 `-e`/相对路径按**当前工作目录**
+# 解析，包被拷到别处（宿主装机解包到 appData、CI 复制到临时目录）时相对路径会指到错地方
+# —— 实测过一次：`-e ../..` 在拷贝目录里解析成了 /tmp/scratch，直接 `does not appear to
+# be a Python project`。环境变量插值（pip ≥20.3）与 cwd 无关，才是稳的。
+#
+# 发布形态换成索引安装即可：`dampack-sdk>=1.0,<2`（SDK 零第三方依赖，装它不会带进
+# numpy/Pillow 的体积与 CVE）。
+dampack-sdk @ file://${DAMPACK_SDK_DIR}

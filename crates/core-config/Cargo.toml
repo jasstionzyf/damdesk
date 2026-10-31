@@ -1,0 +1,13 @@
+[package]
+name = "core-config"
+description = "L0 settings/provider 配置读写 + registry/models.yaml 解析（ModelSpec）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml = "0.9"
+thiserror.workspace = true

@@ -1,0 +1,12 @@
+{
+  "bundle": {
+    "resources": {
+      "resources/bin/DirectML.dll": "."
+    },
+    "windows": {
+      "nsis": {
+        "minimumWebview2Version": "109.0.1518.140"
+      }
+    }
+  }
+}

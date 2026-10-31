@@ -1,0 +1,44 @@
+node_modules/
+dist/
+target/
+*.local
+.DS_Store
+*.log
+# 运行期日志与核对图（本地产物，可由脚本重建；机器可读汇总的归档副本在 reports/D6-summary.json）
+reports/logs/
+
+# D6 真图测试集：本地采样，版权/体积原因不入库（scripts/sample_real_photos.sh 可重建）
+tests/fixtures/reals/
+
+# D13 打包：安装包内置模型/运行库体积大，不入库（/data 分发源，构建时 cp 进来）
+crates/app-tauri/resources/models/
+crates/app-tauri/resources/bin/
+# D13 图标：只留桌面端用到的格式，移动端 mipmap/Assets 不入库
+crates/app-tauri/icons/android/
+crates/app-tauri/icons/ios/
+.pnpm-store/
+web/tsconfig.tsbuildinfo
+web/dist/
+
+# 批次证据里的阶段日志是交付物（报告直接引用），按目录例外保留
+!reports/evidence/**/*.log
+
+# 本地 taskboard worktree（每卡独立工作树，不入库）
+.worktrees/
+
+# Python 启动器在容器内跑测试时产生的字节码缓存（tools/dampack_launcher.py）
+__pycache__/
+*.pyc
+
+# KI-28 内置 python 运行时（python-build-standalone，体积大不入库；scripts/stage_pack_runtime.py 重建）
+crates/app-tauri/resources/runtime/**
+!crates/app-tauri/resources/runtime/README.txt
+# 随包启动器 = tools/dampack_launcher.py 的 staging 副本（打包门禁比对同步性）
+crates/app-tauri/resources/pack-launcher/*.py
+web/dist-live/
+
+# GH-1 公开仓基线：内部产物/本地数据不入库
+.agent/
+reports/
+data/
+*.bak-*

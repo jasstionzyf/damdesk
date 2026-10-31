@@ -1,0 +1,160 @@
+{
+ "schemaVersion": 1,
+ "groups": [
+  {
+   "key": "geometry",
+   "title": "几何（缩放 / 裁剪）"
+  }
+ ],
+ "properties": {
+  "resizeMode": {
+   "type": "enum",
+   "title": "缩放方式",
+   "options": [
+    "long_edge",
+    "short_edge",
+    "width",
+    "height",
+    "scale"
+   ],
+   "default": "long_edge",
+   "group": "geometry"
+  },
+  "resizeLongEdge": {
+   "type": "integer",
+   "title": "长边上限",
+   "min": 64,
+   "max": 20000,
+   "step": 100,
+   "default": 1600,
+   "unit": "px",
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "long_edge"
+    ]
+   }
+  },
+  "resizeShortEdge": {
+   "type": "integer",
+   "title": "短边上限",
+   "min": 64,
+   "max": 20000,
+   "step": 100,
+   "default": 1600,
+   "unit": "px",
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "short_edge"
+    ]
+   }
+  },
+  "resizeWidth": {
+   "type": "integer",
+   "title": "目标宽",
+   "min": 16,
+   "max": 20000,
+   "step": 10,
+   "default": 1600,
+   "unit": "px",
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "width"
+    ]
+   }
+  },
+  "resizeHeight": {
+   "type": "integer",
+   "title": "目标高",
+   "min": 16,
+   "max": 20000,
+   "step": 10,
+   "default": 1600,
+   "unit": "px",
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "height"
+    ]
+   }
+  },
+  "resizeScale": {
+   "type": "number",
+   "title": "等比系数",
+   "min": 0.05,
+   "max": 8,
+   "step": 0.05,
+   "default": 0.5,
+   "group": "geometry",
+   "when": {
+    "resizeMode": [
+     "scale"
+    ]
+   }
+  },
+  "resizeAllowUpscale": {
+   "type": "boolean",
+   "title": "允许放大（关闭＝只缩不放）",
+   "default": false,
+   "group": "geometry"
+  },
+  "cropAspect": {
+   "type": "enum",
+   "title": "目标比例",
+   "options": [
+    "1:1",
+    "4:3",
+    "3:4",
+    "16:9",
+    "9:16",
+    "3:2",
+    "2:3",
+    "custom"
+   ],
+   "default": "1:1",
+   "group": "geometry"
+  },
+  "cropAspectCustom": {
+   "type": "string",
+   "title": "自定义比例（宽:高）",
+   "default": "3:2",
+   "group": "geometry",
+   "when": {
+    "cropAspect": [
+     "custom"
+    ]
+   }
+  },
+  "cropAnchor": {
+   "type": "enum",
+   "title": "锚点",
+   "options": [
+    "center",
+    "top",
+    "bottom",
+    "left",
+    "right"
+   ],
+   "default": "center",
+   "group": "geometry"
+  },
+  "cropPadding": {
+   "type": "number",
+   "title": "主体留白",
+   "min": 0,
+   "max": 0.2,
+   "step": 0.01,
+   "default": 0.05,
+   "group": "geometry"
+  },
+  "cropBackground": {
+   "type": "color",
+   "title": "补边颜色（裁不下目标比例时用）",
+   "default": "#ffffff",
+   "group": "geometry"
+  }
+ },
+ "required": []
+}
