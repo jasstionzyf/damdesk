@@ -182,7 +182,7 @@ Attributions and license terms: [`NOTICE`](NOTICE).
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — crates, layers, data flow
 - [`docs/industry-pack-protocol.md`](docs/industry-pack-protocol.md) — the plugin protocol, field by field (authoritative)
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`SECURITY.md`](SECURITY.md) — contributing, security reports
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`SECURITY.md`](SECURITY.md) · [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — contributing, security reports, conduct
 - Plugin SDK: [`tools/pack-sdk-python`](tools/pack-sdk-python) · conformance: [`tools/pack-conformance`](tools/pack-conformance)
 
 ## 中文摘要
