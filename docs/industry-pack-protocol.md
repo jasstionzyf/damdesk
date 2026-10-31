@@ -7,7 +7,7 @@
 > 现已统一为**处理插件**（一个行业 = 一个插件，插件自带规则/词表/报告元数据/流程代码）。
 > 协议名与语义**未变**，本文的字段/端点/错误码照旧。
 >
-> 配套可执行规格：`tools/pack-conformance/`（12 条断言 + 假网关 + 参考实现 + 4 个违规变体）。
+> 配套可执行规格：`tools/pack-conformance/`（14 条断言：01–12 协议面 + 13/14 多语言字段；不涉及 i18n 的包跑 12 条。含假网关 + 参考实现 + 4 个违规变体）。
 > 
 > docs/ARCHITECTURE.md 的“为什么是子进程插件”一节。本文只讲**协议面**，不讲产品取舍。
 
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     pack.serve()                                    # stdio 行式 JSON-RPC（§1）
 ```
 
-**2) 自检**：`python3 tools/pack-conformance/run.py --plugin <pack_dir>`（退出码 0 = 12 条断言全过，上车门槛）。
+**2) 自检**：`python3 tools/pack-conformance/run.py --plugin <pack_dir>`（退出码 0 = 该包适用的断言全过：协议面 12 条，含多语言字段则 14 条。上车门槛）。
 
 **3) 打包**：`python3 scripts/k15_build_packs.py --out <dir>`（`.dampack`；manifest 原文 sha256 = pluginHash）。
 
