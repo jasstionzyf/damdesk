@@ -1,7 +1,6 @@
 //! 插件**参数 schema**（K07-I）：参数由插件声明，宿主通用渲染 + 合并 + 校验。
 //!
-//! 设计口径：`~/.agent/profiles/soujpg/skills/damdesk/damdesk-product/references/plugin-param-schema.md`
-//! （六条硬规则 + 运行时链路）。本模块只做宿主侧的三件事，**不碰子进程、不碰数据库**：
+//! 设计口径见 `docs/industry-pack-protocol.md`（参数 schema 与运行时链路）。本模块只做宿主侧的三件事，**不碰子进程、不碰数据库**：
 //!
 //! 1. [`ParamSchema::parse`]：JSON Schema 子集解析与校验（未知键即拒 —— 与 `manifest.json`
 //!    同一条纪律：写错键名却静默生效，比报错危险得多）；

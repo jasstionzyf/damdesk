@@ -147,8 +147,8 @@ else
   echo
   echo "== [7/7] 前端：vitest（ocrChip 口径 + DOM 文本存证）+ tsc/vite 构建 =="
   set +e
-  (cd web && HTTPS_PROXY="${NPM_PROXY:-http://192.0.2.11:11700}" \
-      HTTP_PROXY="${NPM_PROXY:-http://192.0.2.11:11700}" \
+  (cd web && HTTPS_PROXY="${NPM_PROXY:-}" \
+      HTTP_PROXY="${NPM_PROXY:-}" \
       NO_PROXY="127.0.0.1,localhost,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16" \
       pnpm install --prefer-offline >/dev/null 2>&1; pnpm test 2>&1 | tail -60) \
     | tee "$EV/07-web-test.log"

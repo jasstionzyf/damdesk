@@ -66,16 +66,6 @@ def read_api_key(explicit):
     env = os.environ.get("DEEPSEEK_API_KEY")
     if env:
         return env.strip()
-    config = os.path.expanduser("~/.agent/profiles/soujpg/config.yaml")
-    if os.path.isfile(config):
-        section = None
-        for line in open(config, encoding="utf-8"):
-            indent = len(line) - len(line.lstrip())
-            stripped = line.strip()
-            if indent == 2 and stripped.endswith(":"):
-                section = stripped[:-1]
-            elif section == "custom" and stripped.startswith("api_key:"):
-                return stripped.split(":", 1)[1].strip()
     return ""
 
 

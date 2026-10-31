@@ -8,7 +8,7 @@ import { Button, buttonClass } from '../src/components/Button'
  * KI-8（卡 task）回归：按钮可点性载体。
  *
  * 断言的是「静止态（不 hover、不 focus）就有可点信号」这一条硬判据
- * （skill soujpg-ui-patterns §9.8），不是「代码里写了 Button」这种静态证据：
+ * （内部 UI 走查规范 §9.8），不是「代码里写了 Button」这种静态证据：
  * - 二级/图标载体：ink-dim/60 描边（去色后对底 ≥3:1）+ panel-2 提亮底 + ink 字；
  * - 禁止 text-ink-dim 当按钮字色（灰 = 次要信息，不是可点信号）；
  * - 主按钮实心 accent；选中态用 accent-soft 底色承载（不只换字色）；

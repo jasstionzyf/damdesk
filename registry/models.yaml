@@ -44,8 +44,10 @@ models:
     preprocess: {}
 
   # 主体分割（C3）：u2net ONNX FP32（~168MB，rembg 同源 sha256 8d10d2f3…）。
-  # 2026-10-16 用户裁决：随安装包内置分发（bundle.resources + models_root_effective
-  # 包内优先）；分发源 rembg GitHub release / HF 镜像 tomjackson2023/rembg，
+  # 分发（GH-7 收口，替换 2026-10-16 的「随安装包内置」裁决）：v0.1.0-preview 起
+  # 安装包为 lite 形态只内置 siglip2 检索塔，本模型走 model_store 分发（GH-9：
+  # 应用内下载 HF→COS failover / file:// 导入 / 官方 extras zip）。
+  # 分发源 rembg GitHub release / HF 镜像 tomjackson2023/rembg，
   # 公网下载仅 web 表单兜底（url_path 相对 base_url，与 dinov3 自建镜像同模式）。
   # 输入固定 320²（权重原生档）；预处理 = im/max(im) + ImageNet mean/std（rembg 口径锁定）。
   # 消费方：engine-segment（fg_ratio 检测器 + smart_crop 裁剪窗），provider 声明为
@@ -61,8 +63,9 @@ models:
       std: [0.229, 0.224, 0.225]
 
   # 超分（C4）：realesr-general-x4v3 ONNX（BSD-3-Clause，Real-ESRGAN 官方权重再打包，
-  # SRVGGNetCompact ~4.7MB）。2026-10-16 卡内裁决：随安装包内置分发（bundle.resources，
-  # 轻量档）；消费方 engine-restore::upscale（4× 放大，动态输入，输出消费端 clamp）。
+  # SRVGGNetCompact ~4.7MB）。分发（GH-7 收口）：不随安装包内置（lite 包只带 siglip2），
+  # 走 model_store 分发（GH-9）/ extras zip；消费方 engine-restore::upscale
+  # （4× 放大，动态输入，输出消费端 clamp）。
   - name: realesr-general-x4v3
     kind: super_resolution
     dims: 0

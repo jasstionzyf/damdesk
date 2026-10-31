@@ -206,18 +206,19 @@ fn models_root_effective(app: &AppHandle, data_dir: &std::path::Path) -> std::pa
 /// 与 `tauri.conf.json` 的 `bundle.resources` 必须逐条一致（单测
 /// `dt5_bundled_models_match_tauri_conf` 核对）：漏一条 = 包里没有该权重，而老用户
 /// appData 里只有 siglip 时整根不会退回资源 → 该能力静默不可用（DT5 修的就是这个）。
-/// `lama-fp32`（208MB）**不**内置（registry 注释裁决，走 model_store 分发），别加进来。
-/// `dinov3-vits16-onnx` **不**内置（GH-5 合规裁决）：DINOv3 权重受 Meta DINOv3 许可约束、
-/// 禁止随包再分发 → 判重塔降级为「可选塔」，缺件时 app-web 如实报
-/// 「判重不可用，需自备模型（Meta 许可）」（`library_api::stats` 的 dedupAvailable），
-/// 用户自备两件套放 `{models_root}/models/dinov3-vits16-onnx/` 即恢复。
-const BUNDLED_MODELS: &[&str] = &[
-    "siglip2-base-p224-onnx",
-    "u2net",
-    "realesr-general-x4v3",
-    "ppocrv6-medium-det",
-    "ppocrv6-medium-rec",
-];
+///
+/// GH-7 裁决（v0.1.0-preview 起）：安装包为 **lite 形态，只内置检索必需塔
+/// `siglip2-base-p224-onnx`**（双塔 + tokenizer，749MB）——分割/OCR/超分/重绘四项
+/// 增强能力不再随包（2026-10-16 的「u2net/realesr 随包内置」裁决被本卡收口替换），
+/// 改走 model_store 分发（GH-9）：应用内一键下载（HF 主源 → COS 镜像 failover）、
+/// 从文件夹导入（file://）或官方 extras zip 解压；`lama-fp32` 同走分发；
+/// `dinov3-vits16-onnx` 不内置且禁止随包再分发（Meta DINOv3 许可，GH-5 合规裁决）→
+/// 判重塔降级为「自备塔」，缺件时 app-web 如实报「判重不可用，需自备模型（Meta 许可）」
+/// （`library_api::stats` 的 dedupAvailable），用户自备两件套放
+/// `{models_root}/models/dinov3-vits16-onnx/` 即恢复。
+/// 打包红线由 `scripts/models_bundle_gate.sh`（结构）+ `tests/bundle_models_gate.rs`
+/// （bytes+sha256，DAM_RELEASE_GATE=1 强制）双重断言。
+const BUNDLED_MODELS: &[&str] = &["siglip2-base-p224-onnx"];
 
 /// 模型目录是否可用：存在且非空（空目录 = 权重没解开，按「没有」处理，不猜）。
 fn model_dir_usable(dir: &std::path::Path) -> bool {

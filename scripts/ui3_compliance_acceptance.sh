@@ -15,7 +15,7 @@
 #
 # 容器口径：默认用共享 dam-dev；并行卡（自有 worktree + 自有 target）用 DAM_CONTAINER=<容器名>。
 # 容器需挂：/workspace=repo、/models=/data、/tmp/ui3-stage=真图语料。
-# VL Key：C6 同口径，缺省从 agent soujpg profile 的 deepseek key 取；也可 UI3_VL_API_KEY 覆盖。
+# VL Key：C6 同口径，由 UI3_VL_API_KEY 注入。
 set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
@@ -52,12 +52,10 @@ N=$(run "ls $CORPUS | wc -l" | tr -d '\r')
 say "语料：$N 张真图（$STAGE → $CORPUS）"
 [ "$N" -ge 8 ] || { fail "语料不足（$N 张）"; exit 1; }
 
-# 推理设置：合规判定走 settings.tag（VL）；api_key 从 agent soujpg profile 取（不落日志）
+# 推理设置：合规判定走 settings.tag（VL）；api_key 由 UI3_VL_API_KEY 注入（不落日志）
 if [ -z "${UI3_VL_API_KEY:-}" ]; then
-  UI3_VL_API_KEY=$(grep -A3 '^  deepseek:' ~/.agent/profiles/soujpg/config.yaml 2>/dev/null \
-    | grep 'api_key:' | head -1 | sed 's/.*api_key: *//' | tr -d '"' || true)
+  fail "缺少 UI3_VL_API_KEY"; exit 1
 fi
-[ -n "${UI3_VL_API_KEY:-}" ] || { fail "缺少 UI3_VL_API_KEY（或 agent soujpg profile 的 deepseek key）"; exit 1; }
 # 起真实 dam-web（真 SQLite + 真 dist）。UI3_BIND=0.0.0.0 供跨容器 CDP 浏览器访问；
 # 裸机验收保持 127.0.0.1（R4 单用户口径）。
 GW=$(docker inspect "$CONTAINER" --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}')
