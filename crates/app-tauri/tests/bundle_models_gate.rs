@@ -47,7 +47,9 @@ fn find_dinov3(dir: &Path, hits: &mut Vec<PathBuf>) {
 fn gh7_bundle_is_siglip2_only_and_sha256_locked() {
     if !gate_enforced() {
         // 不算假绿：CI/开发环境没有权重目录是常态；release 流程必设 DAM_RELEASE_GATE=1。
-        eprintln!("SKIP  bundle gate：未设 DAM_RELEASE_GATE=1（非 release 打包环境，权重目录缺省是常态）");
+        eprintln!(
+            "SKIP  bundle gate：未设 DAM_RELEASE_GATE=1（非 release 打包环境，权重目录缺省是常态）"
+        );
         return;
     }
 
@@ -64,7 +66,10 @@ fn gh7_bundle_is_siglip2_only_and_sha256_locked() {
     );
 
     // ---- 结构：models/ 下有且只有一个条目 = siglip2-base-p224-onnx ----
-    assert!(bundled_dir.is_dir(), "{bundled_dir:?} 不存在 —— 先 stage siglip2 权重再出包");
+    assert!(
+        bundled_dir.is_dir(),
+        "{bundled_dir:?} 不存在 —— 先 stage siglip2 权重再出包"
+    );
     let mut entries: Vec<String> = std::fs::read_dir(&models)
         .expect("读 resources/models")
         .flatten()
@@ -79,20 +84,22 @@ fn gh7_bundle_is_siglip2_only_and_sha256_locked() {
 
     // ---- 字节级：manifest 声明的每个文件，bytes + sha256 必须与盘上一致 ----
     // （名字用字面量：core-config 不在 dev-deps；与 shell.rs BUNDLED_MODELS 同源，dt5 单测钉住一致性）
-    let manifest = manifest_for(BUNDLED)
-        .expect("model_store::manifests() 必须声明 siglip2（内置检索塔）");
+    let manifest =
+        manifest_for(BUNDLED).expect("model_store::manifests() 必须声明 siglip2（内置检索塔）");
     assert!(!manifest.files.is_empty(), "siglip2 manifest 文件表为空");
     for f in &manifest.files {
         let p = bundled_dir.join(&f.name);
-        let (bytes, sha) = sha256_file(&p)
-            .unwrap_or_else(|e| panic!("内置塔文件 {} 不可读：{e}", p.display()));
+        let (bytes, sha) =
+            sha256_file(&p).unwrap_or_else(|e| panic!("内置塔文件 {} 不可读：{e}", p.display()));
         assert_eq!(
-            bytes, f.bytes,
+            bytes,
+            f.bytes,
             "{} 字节数 ≠ model_store.rs 声明（stage 的权重版本不对或文件截断）",
             p.display()
         );
         assert_eq!(
-            sha, f.sha256,
+            sha,
+            f.sha256,
             "{} sha256 ≠ model_store.rs 声明 —— 进包必判损坏（下载端按 sha256 锁定）",
             p.display()
         );
