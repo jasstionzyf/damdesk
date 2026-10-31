@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---------- Rust 侧 ----------
+      # ---------- Rust toolchain ----------
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -26,17 +26,12 @@ jobs:
             libvips-dev pkg-config cmake \
             libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev patchelf
 
-      - name: cargo fmt --check
-        run: cargo fmt --all -- --check
-
-      - name: cargo clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: cargo test (core crates)
-        run: cargo test -p core-storage -p engine-dedup -p engine-exif -p pack-host -p svc-import
-
-      # ---------- Web 侧 ----------
-      # pnpm 版本由 package.json 的 packageManager 字段钉死（pnpm@12.11.2）
+      # ---------- Web bundle first ----------
+      # The Tauri crate's build script resolves `web/dist/**` as a resource glob,
+      # so the frontend bundle must exist before any `cargo` command touches
+      # app-tauri (clippy included) — otherwise the build script fails on a
+      # missing glob instead of on real code.
+      # pnpm version is pinned by package.json's packageManager field.
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -50,10 +45,20 @@ jobs:
       - name: pnpm build
         run: pnpm -C web build
 
+      # ---------- Rust side ----------
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test (core crates)
+        run: cargo test -p core-storage -p engine-dedup -p engine-exif -p pack-host -p svc-import
+
       - name: pnpm test
         run: pnpm -C web test
 
-      # ---------- 行业包 ----------
+      # ---------- Packs ----------
       - name: pack conformance suite
         run: bash tools/pack-conformance/run_all.sh
 
