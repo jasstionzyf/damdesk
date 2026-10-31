@@ -25,8 +25,7 @@ const TOKEN: &str = "watermark-token";
 fn empty_models_root() -> PathBuf {
     static ONCE: OnceLock<PathBuf> = OnceLock::new();
     ONCE.get_or_init(|| {
-        let root =
-            std::env::temp_dir().join(format!("pack-host-wm-models-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("pack-host-wm-models-{}", std::process::id()));
         std::fs::create_dir_all(root.join("models")).unwrap();
         std::env::set_var("DAM_MODELS_ROOT", &root);
         root
@@ -231,7 +230,10 @@ fn bad_params_fail_loudly() {
         ("边距为负", base(json!({ "margin": -1 }))),
         ("未知锚点", base(json!({ "position": "middle_out" }))),
         ("三位颜色", base(json!({ "color": "fff" }))),
-        ("缺 out", json!({ "path": src.to_string_lossy(), "text": "x" })),
+        (
+            "缺 out",
+            json!({ "path": src.to_string_lossy(), "text": "x" }),
+        ),
     ];
     for (why, body) in cases {
         let r = post_watermark(&gw, body.clone());

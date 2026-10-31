@@ -600,13 +600,18 @@ models:
         assert_eq!(m.dims, 0);
         assert!(m.modalities.contains(&"image".to_string()));
         // 预处理口径锁定（rembg/u2net 官方）：320² + ImageNet mean/std
-        assert_eq!(m.preprocess.get("image_size").and_then(|v| v.as_u64()), Some(320));
+        assert_eq!(
+            m.preprocess.get("image_size").and_then(|v| v.as_u64()),
+            Some(320)
+        );
     }
 
     #[test]
     fn builtin_registry_has_c4_restore_models() {
         let reg = Registry::from_yaml_str(BUILTIN_REGISTRY_YAML).unwrap();
-        let sr = reg.by_name("realesr-general-x4v3").expect("x4v3 in registry");
+        let sr = reg
+            .by_name("realesr-general-x4v3")
+            .expect("x4v3 in registry");
         assert_eq!(sr.kind, SpecKind::SuperResolution);
         assert_eq!(sr.provider, "onnx_realesrgan");
         assert_eq!(sr.dims, 0);
@@ -628,8 +633,14 @@ models:
         assert_eq!(rec.kind, SpecKind::Ocr);
         assert_eq!(rec.provider, "onnx_ppocr_rec");
         // rec 预处理口径锁定（PaddleX OCRReisizeNormImg）：高 48、基准宽 320、最大 3200
-        assert_eq!(rec.preprocess.get("image_height").and_then(|v| v.as_u64()), Some(48));
-        assert_eq!(rec.preprocess.get("max_width").and_then(|v| v.as_u64()), Some(3200));
+        assert_eq!(
+            rec.preprocess.get("image_height").and_then(|v| v.as_u64()),
+            Some(48)
+        );
+        assert_eq!(
+            rec.preprocess.get("max_width").and_then(|v| v.as_u64()),
+            Some(3200)
+        );
     }
 
     #[test]
@@ -714,10 +725,7 @@ models:
         assert_eq!(TAG_PROVIDER_PRESETS.len(), 6);
         // R7：dam-ai /v1/tagging 是自托管默认（表首位，web/容器形态不变）
         let dm = tag_provider_preset(TAG_PROVIDER_DAMAI).unwrap();
-        assert_eq!(
-            dm.base_url,
-            "http://host.docker.internal:8091/v1"
-        );
+        assert_eq!(dm.base_url, "http://host.docker.internal:8091/v1");
         assert!(dm.models.contains(&"qwen3.5-4b"));
         assert!(!dm.scan);
         assert_eq!(TAG_PROVIDER_PRESETS[0].id, TAG_PROVIDER_DAMAI);
@@ -762,10 +770,12 @@ models:
         assert_eq!(legacy.provider, TAG_PROVIDER_CUSTOM);
         assert!(legacy.configured());
         // roundtrip 保留 provider
-        let mut s = TagSettings::default();
-        s.provider = TAG_PROVIDER_OLLAMA.to_string();
-        s.base_url = "http://127.0.0.1:11434/v1".into();
-        s.model = "qwen2.5vl".into();
+        let s = TagSettings {
+            provider: TAG_PROVIDER_OLLAMA.to_string(),
+            base_url: "http://127.0.0.1:11434/v1".into(),
+            model: "qwen2.5vl".into(),
+            ..Default::default()
+        };
         let rt: TagSettings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(rt.provider, TAG_PROVIDER_OLLAMA);
         assert_eq!(rt.model, "qwen2.5vl");
@@ -780,9 +790,11 @@ models:
         let j = serde_json::to_string(&s).unwrap();
         assert_eq!(serde_json::from_str::<InferenceSettings>(&j).unwrap(), s);
 
-        let mut t = TagSettings::default();
-        t.base_url = "http://127.0.0.1:9/v1".into();
-        t.model = "vl".into();
+        let t = TagSettings {
+            base_url: "http://127.0.0.1:9/v1".into(),
+            model: "vl".into(),
+            ..Default::default()
+        };
         assert!(t.configured());
         assert!(t.prompt_template.contains("title_ch"));
         // 向前兼容：老配置缺字段 → serde default 兜底
@@ -810,5 +822,4 @@ models:
         let reg2 = load_registry(None).unwrap();
         assert_eq!(reg2.models.len(), reg.models.len());
     }
-
 }

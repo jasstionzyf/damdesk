@@ -69,12 +69,10 @@ fn corpus_root() -> Option<PathBuf> {
         Some(PathBuf::from("/data/damdesk-test-corpus/v1")),
         Some(PathBuf::from("/tmp/corpus_v1")),
     ];
-    for dir in candidates.into_iter().flatten() {
-        if dir.join("labels/upscale.json").is_file() {
-            return Some(dir);
-        }
-    }
-    None
+    candidates
+        .into_iter()
+        .flatten()
+        .find(|dir| dir.join("labels/upscale.json").is_file())
 }
 
 struct Harness {
@@ -94,15 +92,21 @@ fn start(tag: &str) -> Option<Harness> {
     let work = guard.path().join(format!("work-{tag}"));
     std::fs::create_dir_all(&work).unwrap();
     let pack_dir = repo_root().join(PACK);
-    let manifest = pack_host::load_pack(&pack_dir).expect("超分包 manifest 必须合法").0;
-    let gw = Gateway::start(
-        GatewayConfig::from_manifest(&manifest, &work).with_token("upscale-e2e"),
-    )
-    .expect("网关启动失败");
+    let manifest = pack_host::load_pack(&pack_dir)
+        .expect("超分包 manifest 必须合法")
+        .0;
+    let gw =
+        Gateway::start(GatewayConfig::from_manifest(&manifest, &work).with_token("upscale-e2e"))
+            .expect("网关启动失败");
     let mut cfg = PackHostConfig::new(gw.base_url(), gw.token(), &work);
     cfg.runtime_python = Some(PathBuf::from("python3"));
     let host = PackHost::open(&pack_dir, cfg).expect("超分包打不开（health 握手失败？）");
-    Some(Harness { gw, host, work, _guard: guard })
+    Some(Harness {
+        gw,
+        host,
+        work,
+        _guard: guard,
+    })
 }
 
 impl Harness {
@@ -147,7 +151,11 @@ fn psnr_against(out: &Path, reference: &Path) -> (f64, u32, u32) {
             }
         }
     }
-    let psnr = if sq == 0.0 { 99.0 } else { 10.0 * (255.0 * 255.0 / (sq / n)).log10() };
+    let psnr = if sq == 0.0 {
+        99.0
+    } else {
+        10.0 * (255.0 * 255.0 / (sq / n)).log10()
+    };
     (psnr, aw, ah)
 }
 
@@ -155,10 +163,14 @@ fn psnr_against(out: &Path, reference: &Path) -> (f64, u32, u32) {
 #[test]
 fn corpus_10_size_exact_and_psnr_table() {
     let Some(corpus) = corpus_root() else {
-        eprintln!("skip: 找不到语料（DAMDESK_CORPUS / /data/damdesk-test-corpus/v1 / /tmp/corpus_v1）");
+        eprintln!(
+            "skip: 找不到语料（DAMDESK_CORPUS / /data/damdesk-test-corpus/v1 / /tmp/corpus_v1）"
+        );
         return;
     };
-    let Some(harness) = start("corpus") else { return };
+    let Some(harness) = start("corpus") else {
+        return;
+    };
     let labels: Value = serde_json::from_slice(
         &std::fs::read(corpus.join("labels/upscale.json")).expect("读 labels"),
     )
@@ -206,8 +218,7 @@ fn corpus_10_size_exact_and_psnr_table() {
             let out_row = harness.judge(&format!("{stem}-{engine}"), &src, 2, engine, "auto");
             let result = out_row["result"].as_str().unwrap_or("?");
             assert_eq!(
-                result,
-                "ok",
+                result, "ok",
                 "{} / engine={engine} 必须成功：{out_row}",
                 name
             );
@@ -241,13 +252,15 @@ fn corpus_10_size_exact_and_psnr_table() {
                 "sha256": ev["sha256"],
             }));
             row[engine] = psnrs.last().cloned().unwrap();
-
         }
         let light = &row["light"];
         let full = &row["full"];
         println!(
             "| {stem} | {}x{} | {}x{} | {}x{} | {:.2} | {:.2} |",
-            input[0], input[1], expect[0], expect[1],
+            input[0],
+            input[1],
+            expect[0],
+            expect[1],
             light["out"][0].as_u64().unwrap_or(0),
             light["out"][1].as_u64().unwrap_or(0),
             light["psnr"].as_f64().unwrap_or(0.0),
@@ -275,10 +288,22 @@ fn corpus_10_size_exact_and_psnr_table() {
     )
     .ok();
 
-    assert_eq!(exact, 7, "语料里恰好 3 张是奇数边原图派生（floor 掉 1px）→ 7 张严格等于 label");
-    assert!(light_pass >= 9, "light 引擎 ≥28dB 至少 9/10（实测 {light_pass}）");
-    assert!(full_pass >= 7, "full 引擎 ≥28dB 至少 7/10（实测 {full_pass}）");
-    assert!(min_light >= 20.0 && min_full >= 20.0, "任何一张都不许是垃圾产物（≥20dB）");
+    assert_eq!(
+        exact, 7,
+        "语料里恰好 3 张是奇数边原图派生（floor 掉 1px）→ 7 张严格等于 label"
+    );
+    assert!(
+        light_pass >= 9,
+        "light 引擎 ≥28dB 至少 9/10（实测 {light_pass}）"
+    );
+    assert!(
+        full_pass >= 7,
+        "full 引擎 ≥28dB 至少 7/10（实测 {full_pass}）"
+    );
+    assert!(
+        min_light >= 20.0 && min_full >= 20.0,
+        "任何一张都不许是垃圾产物（≥20dB）"
+    );
 }
 
 /// 幂等：同参数重跑 sha256 一致（N14 的前置条件）。
@@ -300,7 +325,10 @@ fn rerun_same_params_same_sha() {
     );
     let light_first = harness.judge("idem-3", &src, 4, "light", "auto");
     let light_second = harness.judge("idem-4", &src, 4, "light", "auto");
-    assert_eq!(light_first["evidence"]["sha256"], light_second["evidence"]["sha256"]);
+    assert_eq!(
+        light_first["evidence"]["sha256"],
+        light_second["evidence"]["sha256"]
+    );
 }
 
 /// 分块与整图：真模型下也逐字节一致（同一模型、同一像素入口；边距保证拼缝不落在截断像素上）。
@@ -321,8 +349,14 @@ fn tiled_matches_untiled_under_real_model() {
         Path::new(tiled["artifacts"][0]["path"].as_str().unwrap()),
         Path::new(untiled["artifacts"][0]["path"].as_str().unwrap()),
     );
-    println!("分块 vs 整图 PSNR = {psnr:.2}dB（tiles={}）", tiled["evidence"]["tiles"]);
-    assert!(psnr >= 30.0, "分块产物与整图产物必须在 30dB 以上（实测 {psnr:.2}）");
+    println!(
+        "分块 vs 整图 PSNR = {psnr:.2}dB（tiles={}）",
+        tiled["evidence"]["tiles"]
+    );
+    assert!(
+        psnr >= 30.0,
+        "分块产物与整图产物必须在 30dB 以上（实测 {psnr:.2}）"
+    );
     std::fs::write(
         evidence_dir().join("tiling_vs_whole.json"),
         serde_json::to_vec_pretty(&json!({
@@ -365,7 +399,10 @@ fn three_concurrent_jobs_run_at_concurrency_one() {
             for note in harness.host.notifications() {
                 notes.lock().unwrap().push(note);
             }
-            collected.lock().unwrap().push((format!("conc-{index}"), row));
+            collected
+                .lock()
+                .unwrap()
+                .push((format!("conc-{index}"), row));
         }));
     }
     for handle in handles {
@@ -400,13 +437,18 @@ fn three_concurrent_jobs_run_at_concurrency_one() {
         );
     }
     let queued = windows.iter().filter(|w| w.3 > 0).count();
-    assert!(queued >= 1, "3 个任务串行跑，至少一个必须真的排过队：{windows:?}");
+    assert!(
+        queued >= 1,
+        "3 个任务串行跑，至少一个必须真的排过队：{windows:?}"
+    );
     let waiting_notes = notes
         .lock()
         .unwrap()
         .iter()
         .filter(|note| {
-            note.get("params").map(|p| p["step"] == json!("waiting")).unwrap_or(false)
+            note.get("params")
+                .map(|p| p["step"] == json!("waiting"))
+                .unwrap_or(false)
                 || note["step"] == json!("waiting")
         })
         .count();
@@ -440,15 +482,20 @@ fn gateway_reports_model_op_for_scale4() {
         eprintln!("skip: 找不到语料");
         return;
     };
-    let Some(harness) = start("probe") else { return };
+    let Some(harness) = start("probe") else {
+        return;
+    };
     let src = corpus.join("process/upscale/up_05.png");
     let out = harness.work.join("probe-4x.png");
     let body = json!({"path": src.to_string_lossy(), "scale": 4,
                       "out": out.to_string_lossy()});
     let (status, doc) = http_post(&harness.gw, "/op/upscale", body);
     assert_eq!(status, 200, "{doc}");
-    assert_eq!(doc["op"], json!("upscale.realesr-x4v3"),
-               "模型在盘时必须报 realesr（否则 e2e 只是空跑重采样）：{doc}");
+    assert_eq!(
+        doc["op"],
+        json!("upscale.realesr-x4v3"),
+        "模型在盘时必须报 realesr（否则 e2e 只是空跑重采样）：{doc}"
+    );
 
     // 回归护栏（卡 task 实测到的两个引擎 bug）：
     //   ① 输出 CHW 未反交错、② 量纲阈值 peak<=1.001 对真实照片误判 → 产物近全黑。

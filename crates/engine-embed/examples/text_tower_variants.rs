@@ -42,7 +42,11 @@ fn l2(mut v: Vec<f32>) -> Vec<f32> {
 fn run(sess: &mut Session, out: &str, ids: &[i64]) -> Vec<f32> {
     let t = Tensor::from_array((vec![1usize, ids.len()], ids.to_vec().into_boxed_slice())).unwrap();
     let outputs = sess.run(ort::inputs!["input_ids" => t]).unwrap();
-    let arr = outputs.get(out).unwrap().try_extract_array::<f32>().unwrap();
+    let arr = outputs
+        .get(out)
+        .unwrap()
+        .try_extract_array::<f32>()
+        .unwrap();
     let shape = arr.shape().to_vec();
     let flat: Vec<f32> = arr.iter().copied().collect();
     let v = if shape.len() <= 2 {
@@ -57,7 +61,10 @@ fn run(sess: &mut Session, out: &str, ids: &[i64]) -> Vec<f32> {
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let models = PathBuf::from(args.next().unwrap_or("/models/siglip2-base-p224-onnx".into()));
+    let models = PathBuf::from(
+        args.next()
+            .unwrap_or("/models/siglip2-base-p224-onnx".into()),
+    );
     let corpus = PathBuf::from(args.next().unwrap_or("/corpus".into()));
 
     let spec = core_config::load_registry(None)

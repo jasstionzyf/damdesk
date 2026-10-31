@@ -1,3 +1,5 @@
+#![allow(non_snake_case)] // 本模块 DTO 字段 = 前端 JSON camelCase 契约，勿改
+#![allow(clippy::result_large_err)] // 能力探测错误即 Response（axum handler 惯例）
 //! OCR-E 文字识别 API：批量识别队列（PP-OCRv6_medium 本地 ONNX）。
 //!
 //! 复用 svc-pipeline::ocr_queue（`job_queue(kind='ocr')`，与打标/嵌入同一套状态机：
@@ -12,7 +14,7 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -157,7 +159,10 @@ fn capability() -> Result<(), axum::response::Response> {
 }
 
 /// POST /api/ocr/start：入队（仅新增 / 全库重跑）+ 后台消费。
-pub async fn start(State(state): State<AppState>, Json(req): Json<StartReq>) -> axum::response::Response {
+pub async fn start(
+    State(state): State<AppState>,
+    Json(req): Json<StartReq>,
+) -> axum::response::Response {
     let mode = req.mode.unwrap_or_else(|| "pending".into());
     let limit = req.limit.unwrap_or(0);
     if mode != "pending" && mode != "all" {
@@ -206,7 +211,11 @@ pub async fn start(State(state): State<AppState>, Json(req): Json<StartReq>) -> 
         }
         Err(e) => {
             state.ocr.running.store(false, Ordering::SeqCst);
-            return err(StatusCode::INTERNAL_SERVER_ERROR, "enqueue_failed", e.to_string());
+            return err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "enqueue_failed",
+                e.to_string(),
+            );
         }
     };
     spawn_ocr_job(state.clone(), limit);
@@ -224,10 +233,15 @@ fn spawn_ocr_job(state: AppState, limit: usize) {
             let mut last_progress = None;
             let res = (|| -> Result<core_types::OcrRunReport, String> {
                 let conn = opened.map_err(|e| e.to_string())?;
-                svc_pipeline::run_ocr_queue_with_limit(&conn, &cancel, &mut |p: core_types::OcrProgress| {
-                    slot.total.store(p.total, Ordering::SeqCst);
-                    last_progress = Some(p);
-                }, limit)
+                svc_pipeline::run_ocr_queue_with_limit(
+                    &conn,
+                    &cancel,
+                    &mut |p: core_types::OcrProgress| {
+                        slot.total.store(p.total, Ordering::SeqCst);
+                        last_progress = Some(p);
+                    },
+                    limit,
+                )
                 .map_err(|e| e.to_string())
             })();
             match res {
@@ -279,7 +293,11 @@ pub async fn status(State(state): State<AppState>) -> axum::response::Response {
         }))
         .into_response(),
         Ok(Err(e)) => err(StatusCode::INTERNAL_SERVER_ERROR, "stats_failed", e),
-        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, "join_failed", e.to_string()),
+        Err(e) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "join_failed",
+            e.to_string(),
+        ),
     }
 }
 
@@ -290,15 +308,20 @@ pub async fn failed(
 ) -> axum::response::Response {
     let data_dir = state.data_dir.clone();
     let limit = q.limit.unwrap_or(50).clamp(1, 500);
-    let res = tokio::task::spawn_blocking(move || -> Result<Vec<core_types::OcrFailedItem>, String> {
-        let conn = core_storage::open(&infer::db_path(&data_dir)).map_err(|e| e.to_string())?;
-        svc_pipeline::ocr_failed_list(&conn, limit).map_err(|e| e.to_string())
-    })
-    .await;
+    let res =
+        tokio::task::spawn_blocking(move || -> Result<Vec<core_types::OcrFailedItem>, String> {
+            let conn = core_storage::open(&infer::db_path(&data_dir)).map_err(|e| e.to_string())?;
+            svc_pipeline::ocr_failed_list(&conn, limit).map_err(|e| e.to_string())
+        })
+        .await;
     match res {
         Ok(Ok(items)) => Json(json!({ "items": items })).into_response(),
         Ok(Err(e)) => err(StatusCode::INTERNAL_SERVER_ERROR, "list_failed", e),
-        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, "join_failed", e.to_string()),
+        Err(e) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "join_failed",
+            e.to_string(),
+        ),
     }
 }
 
@@ -335,7 +358,11 @@ pub async fn retry_failed(State(state): State<AppState>) -> axum::response::Resp
         }
         Err(e) => {
             state.ocr.running.store(false, Ordering::SeqCst);
-            err(StatusCode::INTERNAL_SERVER_ERROR, "join_failed", e.to_string())
+            err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "join_failed",
+                e.to_string(),
+            )
         }
     }
 }
@@ -364,8 +391,16 @@ pub async fn asset_text(
     .await;
     match res {
         Ok(Ok(text)) => Json(json!({ "assetId": asset_id, "ocrText": text })).into_response(),
-        Ok(Err(_)) => err(StatusCode::NOT_FOUND, "asset_not_found", format!("asset {asset_id} 不存在")),
-        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, "join_failed", e.to_string()),
+        Ok(Err(_)) => err(
+            StatusCode::NOT_FOUND,
+            "asset_not_found",
+            format!("asset {asset_id} 不存在"),
+        ),
+        Err(e) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "join_failed",
+            e.to_string(),
+        ),
     }
 }
 

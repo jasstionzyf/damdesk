@@ -162,7 +162,9 @@ impl Guard {
     /// WebView2 线程上收到的失败事件（**不在此线程做重活**，见 `post_to_main`）。
     fn on_process_failed(self: &Arc<Self>, kind: i32) {
         if self.rebuilding.load(Ordering::SeqCst) {
-            boot_log(&format!("guard: ProcessFailed kind={kind} ignored (rebuild in progress)"));
+            boot_log(&format!(
+                "guard: ProcessFailed kind={kind} ignored (rebuild in progress)"
+            ));
             return;
         }
         let used = self.used_rebuilds();
@@ -400,7 +402,10 @@ mod tests {
     #[test]
     fn browser_process_exit_rebuilds() {
         assert_eq!(decide(KIND_BROWSER_PROCESS_EXITED, 0), Action::Rebuild);
-        assert_eq!(decide(KIND_BROWSER_PROCESS_EXITED, MAX_REBUILDS - 1), Action::Rebuild);
+        assert_eq!(
+            decide(KIND_BROWSER_PROCESS_EXITED, MAX_REBUILDS - 1),
+            Action::Rebuild
+        );
     }
 
     /// 渲染进程级失败不动窗口（重载即可），且**永不**因预算耗尽弹错误。
@@ -416,8 +421,14 @@ mod tests {
     /// 持续性崩溃（预算耗尽）→ 停止重建、改给可读错误（不无限重启）。
     #[test]
     fn budget_exhausted_gives_up() {
-        assert_eq!(decide(KIND_BROWSER_PROCESS_EXITED, MAX_REBUILDS), Action::GiveUp);
-        assert_eq!(decide(KIND_BROWSER_PROCESS_EXITED, MAX_REBUILDS + 5), Action::GiveUp);
+        assert_eq!(
+            decide(KIND_BROWSER_PROCESS_EXITED, MAX_REBUILDS),
+            Action::GiveUp
+        );
+        assert_eq!(
+            decide(KIND_BROWSER_PROCESS_EXITED, MAX_REBUILDS + 5),
+            Action::GiveUp
+        );
     }
 
     /// 计数窗口：窗口内保留计数，超过窗口归零（下一轮崩溃重新给满预算）。

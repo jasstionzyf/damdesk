@@ -85,7 +85,12 @@ fn main() {
     };
 
     let files = images_in(&args.images);
-    println!("model={} dims={} files={}", args.model, spec.dims, files.len());
+    println!(
+        "model={} dims={} files={}",
+        args.model,
+        spec.dims,
+        files.len()
+    );
 
     // 冷启动（首次调用含会话加载），单独计时
     let cold = Instant::now();
@@ -104,7 +109,12 @@ fn main() {
         }
         times.push(dt);
         vecs.push(v.into_iter().next().unwrap());
-        println!("  {:>2} {:>30} {:>8.1}ms", i, f.file_name().unwrap().to_string_lossy(), dt);
+        println!(
+            "  {:>2} {:>30} {:>8.1}ms",
+            i,
+            f.file_name().unwrap().to_string_lossy(),
+            dt
+        );
     }
     let cold_ms = cold.elapsed().as_secs_f64() * 1000.0;
     let mut sorted = times.clone();

@@ -156,10 +156,10 @@ mod tests {
         let s = spec(3, true);
         let good = vec![vec![0.0, 0.0, 1.0]];
         assert!(validate_vectors(&s, &good).is_ok());
-        assert!(validate_vectors(&s, &vec![vec![1.0, 0.0]]).is_err()); // dim
-        assert!(validate_vectors(&s, &vec![vec![1.0, 1.0, 1.0]]).is_err()); // not unit
+        assert!(validate_vectors(&s, &[vec![1.0, 0.0]]).is_err()); // dim
+        assert!(validate_vectors(&s, &[vec![1.0, 1.0, 1.0]]).is_err()); // not unit
         let raw = spec(2, false);
-        assert!(validate_vectors(&raw, &vec![vec![3.0, 4.0]]).is_ok()); // dims only
+        assert!(validate_vectors(&raw, &[vec![3.0, 4.0]]).is_ok()); // dims only
     }
 
     #[test]

@@ -37,7 +37,9 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -58,7 +60,9 @@ async fn post(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_json::Va
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
@@ -122,7 +126,8 @@ fn plugin_row(
         })
         .unwrap();
     // 写侧（svc-pipeline）在插件通道逐行补写来源列 —— 读侧可见性不该依赖它，但断言要看它
-    repo.set_verdict_pack_source(id, version, plugin_hash).unwrap();
+    repo.set_verdict_pack_source(id, version, plugin_hash)
+        .unwrap();
     id
 }
 
@@ -156,7 +161,7 @@ const HASH_B: &str = "f5fe452a1da10000000000000000000000000000000000000000000000
 #[tokio::test]
 async fn plugin_runs_are_visible_on_every_read_path() {
     let (dir, conn, app) = seed("visible");
-        // 1 张图 6 条规则：域闸门 undetermined + 其余按短路口径 skipped（与 K10 真机现场同形）
+    // 1 张图 6 条规则：域闸门 undetermined + 其余按短路口径 skipped（与 K10 真机现场同形）
     for (i, rule) in RULES.iter().enumerate() {
         plugin_row(
             &conn,
@@ -173,7 +178,10 @@ async fn plugin_runs_are_visible_on_every_read_path() {
     // ---- verdicts（网格/检查器的数据源）
     let (code, v) = get(&app, "/api/compliance/verdicts?assetId=1").await;
     assert_eq!(code, 200, "{v}");
-    assert_eq!(v["packId"], PLUGIN_ID, "verdicts 的读口径必须是插件包 id：{v}");
+    assert_eq!(
+        v["packId"], PLUGIN_ID,
+        "verdicts 的读口径必须是插件包 id：{v}"
+    );
     let items = v["items"].as_array().expect("items");
     assert_eq!(items.len(), RULES.len(), "6 条规则的行必须都能取到：{v}");
     // DECouple-BE：资产级 state 已下线（资产视图只回判定行原文）；「判过没有」看行数/行结论
@@ -279,7 +287,7 @@ async fn plugin_runs_are_visible_on_every_read_path() {
 #[tokio::test]
 async fn version_switch_shows_latest_rows_and_pack_version() {
     let (dir, conn, app) = seed("switch");
-        // 旧版本 1.1.0 先把 6 条规则判一遍
+    // 旧版本 1.1.0 先把 6 条规则判一遍
     for rule in RULES {
         plugin_row(&conn, 1, rule, "undetermined", "1.1.0", HASH_A);
     }
@@ -314,7 +322,10 @@ async fn version_switch_shows_latest_rows_and_pack_version() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(latest_version, "1.2.0", "最新判定行的 packVersion 应是新版本");
+    assert_eq!(
+        latest_version, "1.2.0",
+        "最新判定行的 packVersion 应是新版本"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

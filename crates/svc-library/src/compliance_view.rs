@@ -1,3 +1,4 @@
+#![allow(non_snake_case)] // 本模块全部视图字段 = JSON 线上 camelCase 契约，勿改
 //! C6 合规状态视图层：**单资产合规状态的唯一口径** + 人工反馈（误判）读写 + 待人工队列。
 //!
 //! 为什么单独一个模块：合规状态此前只在导出报告里算过一次（`export::asset_status`），
@@ -142,7 +143,9 @@ pub fn state_of_verdicts_with(rows: &[&VerdictRow], reviews: &ReviewIndex) -> As
     let mut saw_conclusion = false;
     for r in rows {
         let ov = reviews.rule_override(r.asset_id, &r.rule_id);
-        let effective = ov.map(|o| o.humanStatus.as_str()).unwrap_or(r.result.as_str());
+        let effective = ov
+            .map(|o| o.humanStatus.as_str())
+            .unwrap_or(r.result.as_str());
         match effective {
             // undetermined 只是「没结论」，不能压过别的规则的硬 fail
             core_storage::compliance::result::UNDETERMINED => saw_undetermined = true,
@@ -190,12 +193,7 @@ pub struct RunAssetStatus {
 }
 
 impl RunAssetStatus {
-    fn from_rows(
-        asset_id: i64,
-        rows: &[&VerdictRow],
-        reviews: &ReviewIndex,
-        stale: bool,
-    ) -> Self {
+    fn from_rows(asset_id: i64, rows: &[&VerdictRow], reviews: &ReviewIndex, stale: bool) -> Self {
         let machine = state_of_verdicts(rows);
         let effective = state_of_verdicts_with(rows, reviews);
         let ov = reviews.asset_override(asset_id);
@@ -215,13 +213,20 @@ impl RunAssetStatus {
 /// 一次执行的逐资产结论（L3 下钻/统计的唯一口径）。
 ///
 /// 只取**逐图**判定行（组级行不参与资产状态：C9 裁决，库视图筛选 SQL 同口径）。
-pub fn run_asset_statuses(conn: &Connection, pack_id: &str, run_id: i64) -> Result<Vec<RunAssetStatus>> {
+pub fn run_asset_statuses(
+    conn: &Connection,
+    pack_id: &str,
+    run_id: i64,
+) -> Result<Vec<RunAssetStatus>> {
     let repo = SqliteComplianceRepo::new(conn);
     let rows = repo.find_verdicts(&VerdictFilter::run(pack_id, run_id))?;
     let reviews = ReviewIndex::load(conn, pack_id)?;
     let stale = stale_review_assets(conn, pack_id)?;
     let mut by_asset: std::collections::BTreeMap<i64, Vec<&VerdictRow>> = Default::default();
-    for r in rows.iter().filter(|r| r.judgement_scope.as_deref() != Some("per_group")) {
+    for r in rows
+        .iter()
+        .filter(|r| r.judgement_scope.as_deref() != Some("per_group"))
+    {
         by_asset.entry(r.asset_id).or_default().push(r);
     }
     Ok(by_asset
@@ -317,7 +322,11 @@ impl ReviewIndex {
                 }
                 Some(rule) => {
                     let key = (r.asset_id, rule.clone());
-                    let newer = out.per_rule.get(&key).map(|v| v.id < view.id).unwrap_or(true);
+                    let newer = out
+                        .per_rule
+                        .get(&key)
+                        .map(|v| v.id < view.id)
+                        .unwrap_or(true);
                     if newer {
                         out.per_rule.insert(key, view);
                     }
@@ -386,7 +395,11 @@ pub fn is_soft_fail(r: &VerdictRow) -> bool {
     r.evidence
         .as_deref()
         .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
-        .and_then(|v| v.get("on_fail").and_then(|o| o.as_str()).map(|s| s == "pass"))
+        .and_then(|v| {
+            v.get("on_fail")
+                .and_then(|o| o.as_str())
+                .map(|s| s == "pass")
+        })
         .unwrap_or(false)
 }
 
@@ -437,7 +450,7 @@ pub fn states_summary(conn: &Connection, pack_id: &str) -> Result<StatesSummary>
         by_asset.entry(r.asset_id).or_default().push(r);
     }
     let mut out = StatesSummary::default();
-    for (_asset, rs) in &by_asset {
+    for rs in by_asset.values() {
         match state_of_verdicts_with(rs, &reviews) {
             AssetComplianceState::Pass => out.pass += 1,
             AssetComplianceState::Fail => out.fail += 1,
@@ -445,11 +458,10 @@ pub fn states_summary(conn: &Connection, pack_id: &str) -> Result<StatesSummary>
             AssetComplianceState::Unjudged => {}
         }
     }
-    let lib_total: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM assets WHERE deleted = 0",
-        [],
-        |r| r.get(0),
-    )?;
+    let lib_total: i64 =
+        conn.query_row("SELECT COUNT(*) FROM assets WHERE deleted = 0", [], |r| {
+            r.get(0)
+        })?;
     out.unjudged = (lib_total - out.judged()).max(0);
     Ok(out)
 }
@@ -467,7 +479,11 @@ pub fn state_condition(f: &ComplianceStateFilter, next_index: usize) -> (String,
 /// Rust 口径下的资产 id 集合（对账/审计用；小库直接算，全库筛走 SQL）。
 ///
 /// 与 SQL 口径（`state_condition`）同义 —— 含人工改判（生效结论）。
-pub fn asset_ids_by_state(conn: &Connection, pack_id: &str, state: AssetComplianceState) -> Result<Vec<i64>> {
+pub fn asset_ids_by_state(
+    conn: &Connection,
+    pack_id: &str,
+    state: AssetComplianceState,
+) -> Result<Vec<i64>> {
     let rows = verdicts_latest(conn, pack_id)?;
     let reviews = ReviewIndex::load(conn, pack_id)?;
     let mut by_asset: std::collections::BTreeMap<i64, Vec<&VerdictRow>> = Default::default();
@@ -484,7 +500,10 @@ pub fn asset_ids_by_state(conn: &Connection, pack_id: &str, state: AssetComplian
         let all: Vec<i64> = stmt
             .query_map([], |r| r.get(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        out = all.into_iter().filter(|id| !by_asset.contains_key(id)).collect();
+        out = all
+            .into_iter()
+            .filter(|id| !by_asset.contains_key(id))
+            .collect();
     }
     out.sort_unstable();
     Ok(out)
@@ -741,7 +760,10 @@ fn feedback_index(
 
 /// (fileName, absPath, missing, thumbPath) —— 复核视图要缩略图，这里一次取全，
 /// 不让前端为每张卡片再打一次接口（N+1）。
-fn asset_identity(conn: &Connection, asset_id: i64) -> Result<(String, String, i64, Option<String>)> {
+fn asset_identity(
+    conn: &Connection,
+    asset_id: i64,
+) -> Result<(String, String, i64, Option<String>)> {
     Ok(conn.query_row(
         "SELECT a.fileName, a.absPath, a.missing, r.thumbPath
            FROM assets a
@@ -822,18 +844,17 @@ pub fn record_feedback(
             "资产 {asset_id} 在 pack {pack_id} 下没有规则 {rule_id} 的机器判定 —— 先跑判定再复核"
         )));
     };
-    let auto_reason = if matches!(machine.result.as_str(), "pass" | "fail")
-        && machine.result != human_result
-    {
-        Some(format!(
-            "误判：机器 {} → 人工 {}",
-            machine.result, human_result
-        ))
-    } else if machine.result == "undetermined" {
-        Some(format!("人工复核转人工项 → {human_result}"))
-    } else {
-        None
-    };
+    let auto_reason =
+        if matches!(machine.result.as_str(), "pass" | "fail") && machine.result != human_result {
+            Some(format!(
+                "误判：机器 {} → 人工 {}",
+                machine.result, human_result
+            ))
+        } else if machine.result == "undetermined" {
+            Some(format!("人工复核转人工项 → {human_result}"))
+        } else {
+            None
+        };
     let note = match reason.map(str::trim).filter(|r| !r.is_empty()) {
         Some(r) => Some(r.to_string()),
         None => auto_reason,
@@ -847,10 +868,9 @@ pub fn record_feedback(
         human_result: human_result.to_string(),
         reason: note.clone(),
     })?;
-    let ts: i64 =
-        conn.query_row("SELECT ts FROM rule_feedback WHERE id = ?1", [id], |r| {
-            r.get(0)
-        })?;
+    let ts: i64 = conn.query_row("SELECT ts FROM rule_feedback WHERE id = ?1", [id], |r| {
+        r.get(0)
+    })?;
     Ok(FeedbackRow {
         id,
         pack_id: pack_id.to_string(),
@@ -903,7 +923,8 @@ pub fn feedback_count(conn: &Connection, pack_id: &str) -> Result<i64> {
 
 /// 反馈 CSV（审计/离线校准用；列固定，表头英文以利下游工具解析）。
 pub fn feedback_csv(rows: &[FeedbackRow]) -> String {
-    let mut out = String::from("packId,assetId,ruleId,machineResult,humanResult,misjudged,reason,ts\n");
+    let mut out =
+        String::from("packId,assetId,ruleId,machineResult,humanResult,misjudged,reason,ts\n");
     for f in rows {
         out.push_str(&format!(
             "{},{},{},{},{},{},{},{}\n",
@@ -1062,7 +1083,10 @@ pub fn record_human_review(
         ));
     }
     let rows_all = verdicts_latest(conn, pack_id)?;
-    let asset_rows: Vec<&VerdictRow> = rows_all.iter().filter(|r| r.asset_id == req.asset_id).collect();
+    let asset_rows: Vec<&VerdictRow> = rows_all
+        .iter()
+        .filter(|r| r.asset_id == req.asset_id)
+        .collect();
     if asset_rows.is_empty() {
         return Err(ReviewError::reject(
             review_code::NO_MACHINE_VERDICT,
@@ -1091,20 +1115,19 @@ pub fn record_human_review(
                         ReviewError::reject(
                             review_code::NO_MACHINE_VERDICT,
                             format!(
-                                "资产 {} 在规则 {rule_id} 下没有机器判定 —— 改判必须建立在机器结论之上",
-                                req.asset_id
-                            ),
+                            "资产 {} 在规则 {rule_id} 下没有机器判定 —— 改判必须建立在机器结论之上",
+                            req.asset_id
+                        ),
                         )
                     })?;
                 // undetermined 免 force：机器本来就没结论，改判就是补结论
                 let needs_force = row.result != core_storage::compliance::result::UNDETERMINED
-                    && row
-                        .confidence
-                        .map(|c| c >= req.threshold)
-                        .unwrap_or(false);
+                    && row.confidence.map(|c| c >= req.threshold).unwrap_or(false);
                 (
                     Some(rule_id.to_string()),
-                    row.judgement_scope.clone().unwrap_or_else(|| "per_asset".to_string()),
+                    row.judgement_scope
+                        .clone()
+                        .unwrap_or_else(|| "per_asset".to_string()),
                     row.group_key.clone().unwrap_or_default(),
                     Some(row.result.clone()),
                     row.confidence,
@@ -1156,7 +1179,8 @@ pub fn record_human_review(
     let repo = SqliteComplianceRepo::new(conn);
     // 内容版本 = 改判这一刻的资产内容（工作版本 sha256 ?? 导入 fileHash ?? ''）。
     // 资产之后换了内容，这条人审就自动失效（读侧过滤，不删行）。
-    let content_version = core_storage::compliance_sqlite::asset_content_version(conn, req.asset_id)?;
+    let content_version =
+        core_storage::compliance_sqlite::asset_content_version(conn, req.asset_id)?;
     let id = repo.save_human_review(&NewHumanReview {
         scheme_id: review_scheme(pack_id),
         asset_id: req.asset_id,
@@ -1177,10 +1201,9 @@ pub fn record_human_review(
     let mut f = HumanReviewFilter::asset(&review_scheme(pack_id), req.asset_id);
     f.rule_id = Some(rule_id);
     let saved = repo.find_human_reviews(&f)?;
-    saved
-        .into_iter()
-        .find(|r| r.id == id)
-        .ok_or_else(|| ReviewError::Store(LibraryError::Invalid(format!("改判 id {id} 落库后查不到"))))
+    saved.into_iter().find(|r| r.id == id).ok_or_else(|| {
+        ReviewError::Store(LibraryError::Invalid(format!("改判 id {id} 落库后查不到")))
+    })
 }
 
 /// 撤销生效中的人工改判（回到机器结论）。返回撤销行数（0 → `review_not_found`）。
@@ -1296,10 +1319,7 @@ pub fn list_reviews(
         by_asset.entry(r.asset_id).or_default().push(r);
     }
     if let Some(a) = q.asset_id {
-        if !by_asset.contains_key(&a) {
-            // 没有判定行的资产也要能查（前端会问「这张图有没有人工改判」）
-            by_asset.insert(a, Vec::new());
-        }
+        by_asset.entry(a).or_default();
     }
     let mut items: Vec<ReviewItem> = Vec::new();
     for (asset_id, rs) in &by_asset {
@@ -1323,7 +1343,8 @@ pub fn list_reviews(
             // 低置信度过滤对资产级行同样生效（筛选口径统一，否则「只看需要复核的」会混进
             // 高置信度资产的整图改判行）
             let asset_low = asset_low
-                || rs.iter()
+                || rs
+                    .iter()
                     .any(|r| r.result == core_storage::compliance::result::UNDETERMINED);
             if q.reviewed != Some(false) && (!q.low_confidence_only || asset_low) {
                 items.push(ReviewItem {
@@ -1489,11 +1510,32 @@ mod tests {
         }
         verdict(&c, 1, "R1", "pass", None, None);
         verdict(&c, 2, "R1", "pass", Some("upscale"), None);
-        verdict(&c, 3, "R1", "fail", None, Some(r#"{"threshold":700,"ratio":0.5}"#));
+        verdict(
+            &c,
+            3,
+            "R1",
+            "fail",
+            None,
+            Some(r#"{"threshold":700,"ratio":0.5}"#),
+        );
         // 修复后复检仍败在三态口径下就是 fail（这里用 undetermined 表示「执行过程出错」的场景）
-        verdict(&c, 4, "R1", "undetermined", None, Some(r#"{"reason":"vl_timeout"}"#));
+        verdict(
+            &c,
+            4,
+            "R1",
+            "undetermined",
+            None,
+            Some(r#"{"reason":"vl_timeout"}"#),
+        );
         verdict(&c, 4, "R2", "pass", None, None);
-        verdict(&c, 6, "R2", "fail", None, Some(r#"{"on_fail":"pass","detector":{"tags":[]}}"#));
+        verdict(
+            &c,
+            6,
+            "R2",
+            "fail",
+            None,
+            Some(r#"{"on_fail":"pass","detector":{"tags":[]}}"#),
+        );
         verdict(&c, 6, "R1", "pass", None, None);
         verdict(&c, 7, "R1", "fail", None, None);
         verdict(&c, 8, "R1", "fail", None, Some("{not json"));
@@ -1546,13 +1588,29 @@ mod tests {
             state_of_verdicts(&rs)
         };
         assert_eq!(of(1), AssetComplianceState::Pass);
-        assert_eq!(of(2), AssetComplianceState::Pass, "修复成功 = pass（不再有「修复后合格」档）");
+        assert_eq!(
+            of(2),
+            AssetComplianceState::Pass,
+            "修复成功 = pass（不再有「修复后合格」档）"
+        );
         assert_eq!(of(3), AssetComplianceState::Fail);
-        assert_eq!(of(4), AssetComplianceState::Undetermined, "同一资产 R2 pass 也压不过 undetermined");
+        assert_eq!(
+            of(4),
+            AssetComplianceState::Undetermined,
+            "同一资产 R2 pass 也压不过 undetermined"
+        );
         assert_eq!(of(5), AssetComplianceState::Unjudged);
         assert_eq!(of(6), AssetComplianceState::Pass, "软 fail 不影响合格结论");
-        assert_eq!(of(7), AssetComplianceState::Fail, "evidence NULL 仍是硬 fail");
-        assert_eq!(of(8), AssetComplianceState::Fail, "坏 json 证据按硬 fail（保守）");
+        assert_eq!(
+            of(7),
+            AssetComplianceState::Fail,
+            "evidence NULL 仍是硬 fail"
+        );
+        assert_eq!(
+            of(8),
+            AssetComplianceState::Fail,
+            "坏 json 证据按硬 fail（保守）"
+        );
         // 口径词与报告档位映射（三档）
         assert_eq!(AssetComplianceState::Pass.as_str(), "pass");
         assert_eq!(AssetComplianceState::Fail.as_str(), "fail");
@@ -1582,7 +1640,11 @@ mod tests {
             result: result.into(),
             // N5b：生效判定词由 (result, verdict) 投影而来；测试里直接把判定词当结论，
             // exec_result 只用来表达「跑成了没有」
-            exec_result: if result == SKIPPED { "skipped".into() } else { "ok".into() },
+            exec_result: if result == SKIPPED {
+                "skipped".into()
+            } else {
+                "ok".into()
+            },
             verdict: if result == SKIPPED {
                 None
             } else {
@@ -1602,43 +1664,81 @@ mod tests {
         // (名字, 行集, 期望状态, 期望资产置信度)
         let cases: Vec<(&str, Vec<VerdictRow>, S, Option<f32>)> = vec![
             ("空行集 = 未跑", vec![], S::Unjudged, None),
-            ("全 pass", vec![row(PASS, "per_asset", None, Some(0.9))], S::Pass, Some(0.9)),
-            ("修复后 pass 仍是 pass", vec![row(PASS, "per_asset", Some("smart_crop"), Some(0.8))], S::Pass, Some(0.8)),
-            ("单 fail", vec![row(FAIL, "per_asset", None, Some(0.7))], S::Fail, Some(0.7)),
-            ("单 undetermined", vec![row(UNDETERMINED, "per_asset", None, Some(0.3))], S::Undetermined, Some(0.3)),
+            (
+                "全 pass",
+                vec![row(PASS, "per_asset", None, Some(0.9))],
+                S::Pass,
+                Some(0.9),
+            ),
+            (
+                "修复后 pass 仍是 pass",
+                vec![row(PASS, "per_asset", Some("smart_crop"), Some(0.8))],
+                S::Pass,
+                Some(0.8),
+            ),
+            (
+                "单 fail",
+                vec![row(FAIL, "per_asset", None, Some(0.7))],
+                S::Fail,
+                Some(0.7),
+            ),
+            (
+                "单 undetermined",
+                vec![row(UNDETERMINED, "per_asset", None, Some(0.3))],
+                S::Undetermined,
+                Some(0.3),
+            ),
             (
                 "pass + undetermined（无 fail）→ undetermined",
-                vec![row(PASS, "per_asset", None, Some(0.9)), row(UNDETERMINED, "per_asset", None, Some(0.4))],
+                vec![
+                    row(PASS, "per_asset", None, Some(0.9)),
+                    row(UNDETERMINED, "per_asset", None, Some(0.4)),
+                ],
                 S::Undetermined,
                 Some(0.4),
             ),
             (
                 "fail 压过 undetermined（不合格是结论）",
-                vec![row(UNDETERMINED, "per_asset", None, Some(0.4)), row(FAIL, "per_asset", None, Some(0.8))],
+                vec![
+                    row(UNDETERMINED, "per_asset", None, Some(0.4)),
+                    row(FAIL, "per_asset", None, Some(0.8)),
+                ],
                 S::Fail,
                 Some(0.4),
             ),
             (
                 "组级 fail 传导到成员（per_group 行参与汇总）",
-                vec![row(PASS, "per_asset", None, Some(0.95)), row(FAIL, "per_group", None, Some(0.9))],
+                vec![
+                    row(PASS, "per_asset", None, Some(0.95)),
+                    row(FAIL, "per_group", None, Some(0.9)),
+                ],
                 S::Fail,
                 Some(0.9),
             ),
             (
                 "组级 undetermined 传导",
-                vec![row(PASS, "per_asset", None, Some(0.95)), row(UNDETERMINED, "per_group", None, Some(0.5))],
+                vec![
+                    row(PASS, "per_asset", None, Some(0.95)),
+                    row(UNDETERMINED, "per_group", None, Some(0.5)),
+                ],
                 S::Undetermined,
                 Some(0.5),
             ),
             (
                 "组级 pass 不覆盖成员 fail",
-                vec![row(FAIL, "per_asset", None, Some(0.9)), row(PASS, "per_group", None, Some(0.99))],
+                vec![
+                    row(FAIL, "per_asset", None, Some(0.9)),
+                    row(PASS, "per_group", None, Some(0.99)),
+                ],
                 S::Fail,
                 Some(0.9),
             ),
             (
                 "skipped 不参与也不污染",
-                vec![row(PASS, "per_asset", None, Some(0.9)), row(SKIPPED, "per_asset", None, None)],
+                vec![
+                    row(PASS, "per_asset", None, Some(0.9)),
+                    row(SKIPPED, "per_asset", None, None),
+                ],
                 S::Pass,
                 Some(0.9),
             ),
@@ -1646,14 +1746,19 @@ mod tests {
                 // 卡 task：全 skipped = 这张图一条结论都没有（非商品图 → 领域 gate 不适用）
                 // → 未判定。不许落 Pass（否则「没判」被算成「合格」并进合格统计）
                 "全 skipped（每条规则都不适用）= 未判定",
-                vec![row(SKIPPED, "per_asset", None, None),
-                     row(SKIPPED, "per_asset", None, None)],
+                vec![
+                    row(SKIPPED, "per_asset", None, None),
+                    row(SKIPPED, "per_asset", None, None),
+                ],
                 S::Undetermined,
                 None,
             ),
             (
                 "历史行 confidence=NULL 不参与最小值（不造数）",
-                vec![row(PASS, "per_asset", None, None), row(PASS, "per_asset", None, Some(0.6))],
+                vec![
+                    row(PASS, "per_asset", None, None),
+                    row(PASS, "per_asset", None, Some(0.6)),
+                ],
                 S::Pass,
                 Some(0.6),
             ),
@@ -1687,7 +1792,8 @@ mod tests {
                 .unwrap();
             let rust_ids = asset_ids_by_state(&c, "mini", st).unwrap();
             assert_eq!(
-                sql_ids, rust_ids,
+                sql_ids,
+                rust_ids,
                 "状态 {} SQL 口径与 Rust 口径必须一致",
                 st.as_str()
             );
@@ -1711,7 +1817,12 @@ mod tests {
         verdict(&c, 1, "R1", "fail", None, None);
         assert_eq!(
             states_summary(&c, "mini").unwrap(),
-            StatesSummary { pass: 0, fail: 1, undetermined: 0, unjudged: 0 }
+            StatesSummary {
+                pass: 0,
+                fail: 1,
+                undetermined: 0,
+                unjudged: 0
+            }
         );
         let repo = SqliteComplianceRepo::new(&c);
         repo.insert_verdict(&NewVerdict {
@@ -1730,20 +1841,41 @@ mod tests {
             group_key: None,
         })
         .unwrap();
-        assert_eq!(states_summary(&c, "mini").unwrap().pass, 1, "取最新批次结论");
-        assert!(asset_ids_by_state(&c, "mini", AssetComplianceState::Fail).unwrap().is_empty());
+        assert_eq!(
+            states_summary(&c, "mini").unwrap().pass,
+            1,
+            "取最新批次结论"
+        );
+        assert!(asset_ids_by_state(&c, "mini", AssetComplianceState::Fail)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
     fn queue_groups_by_asset_with_reason_and_resolution() {
         let c = fixture();
         let pack = pack();
-        let (total, cards) = low_confidence_queue(&c, "mini", &pack, &QueueOpts { threshold: 0.7, limit: 50, ..Default::default() }, "zh-Hans").unwrap();
+        let (total, cards) = low_confidence_queue(
+            &c,
+            "mini",
+            &pack,
+            &QueueOpts {
+                threshold: 0.7,
+                limit: 50,
+                ..Default::default()
+            },
+            "zh-Hans",
+        )
+        .unwrap();
         assert_eq!(total, 1, "只有资产 4 需要复核（undetermined）");
         let card = &cards[0];
         assert_eq!(card.assetId, 4);
         assert_eq!(card.fileName, "d.jpg");
-        assert_eq!(card.rules.len(), 1, "只列需要复核的规则（同资产 pass 的不列）");
+        assert_eq!(
+            card.rules.len(),
+            1,
+            "只列需要复核的规则（同资产 pass 的不列）"
+        );
         assert_eq!(card.rules[0].ruleId, "R1");
         assert_eq!(card.rules[0].ruleName, "尺寸达标", "规则名来自 pack");
         assert_eq!(card.rules[0].reason.as_deref(), Some("vl_timeout"));
@@ -1752,13 +1884,36 @@ mod tests {
 
         // 处置后：resolved=true；only_unresolved 过滤掉
         record_feedback(&c, "mini", &pack, 4, "R1", "fail", None).unwrap();
-        let (_, cards) = low_confidence_queue(&c, "mini", &pack, &QueueOpts { threshold: 0.7, limit: 50, ..Default::default() }, "zh-Hans").unwrap();
+        let (_, cards) = low_confidence_queue(
+            &c,
+            "mini",
+            &pack,
+            &QueueOpts {
+                threshold: 0.7,
+                limit: 50,
+                ..Default::default()
+            },
+            "zh-Hans",
+        )
+        .unwrap();
         assert!(cards[0].resolved);
         let fb = cards[0].rules[0].feedback.as_ref().unwrap();
         assert_eq!(fb.machineResult, "undetermined");
         assert_eq!(fb.humanResult, "fail");
         assert!(!fb.misjudged, "未判定的处置不算误判（机器本来没下结论）");
-        let (total, cards) = low_confidence_queue(&c, "mini", &pack, &QueueOpts { threshold: 0.7, limit: 50, only_unresolved: true, ..Default::default() }, "zh-Hans").unwrap();
+        let (total, cards) = low_confidence_queue(
+            &c,
+            "mini",
+            &pack,
+            &QueueOpts {
+                threshold: 0.7,
+                limit: 50,
+                only_unresolved: true,
+                ..Default::default()
+            },
+            "zh-Hans",
+        )
+        .unwrap();
         assert_eq!(total, 0);
         assert!(cards.is_empty());
     }
@@ -1772,7 +1927,11 @@ mod tests {
         assert_eq!(row.machine_result, "fail");
         assert_eq!(row.human_result, "pass");
         assert!(row.is_misjudged());
-        assert!(row.reason.as_deref().unwrap().contains("误判"), "{:?}", row.reason);
+        assert!(
+            row.reason.as_deref().unwrap().contains("误判"),
+            "{:?}",
+            row.reason
+        );
         // 人工给 reason → 以人工为准
         let row = record_feedback(&c, "mini", &pack, 3, "R1", "pass", Some("阈值太松")).unwrap();
         assert_eq!(row.reason.as_deref(), Some("阈值太松"));
@@ -1806,13 +1965,36 @@ mod tests {
         let csv = feedback_csv(&rows);
         let lines: Vec<&str> = csv.lines().collect();
         assert_eq!(lines.len(), 3, "表头 + 2 行");
-        assert!(lines[0].starts_with("packId,assetId,ruleId,machineResult,humanResult,misjudged,reason,ts"));
-        assert!(lines[1].contains("\"mini\",3,\"R1\",\"fail\",\"pass\",1,"), "{}", lines[1]);
-        assert!(lines[1].contains("\"阈值太松, 需重标\""), "含逗号的 reason 必须整体加引号: {}", lines[1]);
-        assert!(lines[2].contains(",0,"), "转人工处置 misjudged=0: {}", lines[2]);
+        assert!(lines[0]
+            .starts_with("packId,assetId,ruleId,machineResult,humanResult,misjudged,reason,ts"));
+        assert!(
+            lines[1].contains("\"mini\",3,\"R1\",\"fail\",\"pass\",1,"),
+            "{}",
+            lines[1]
+        );
+        assert!(
+            lines[1].contains("\"阈值太松, 需重标\""),
+            "含逗号的 reason 必须整体加引号: {}",
+            lines[1]
+        );
+        assert!(
+            lines[2].contains(",0,"),
+            "转人工处置 misjudged=0: {}",
+            lines[2]
+        );
         // 收窄查询
-        assert_eq!(list_feedback(&c, "mini", Some(3), None, None).unwrap().len(), 1);
-        assert_eq!(list_feedback(&c, "mini", None, Some("R2"), None).unwrap().len(), 0);
+        assert_eq!(
+            list_feedback(&c, "mini", Some(3), None, None)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            list_feedback(&c, "mini", None, Some("R2"), None)
+                .unwrap()
+                .len(),
+            0
+        );
     }
     // ---------- COMPLIANCE-HUMAN：人工二次审核（改判 / 撤销 / 门槛 / 口径联动） ----------
 
@@ -1885,7 +2067,11 @@ mod tests {
         let row =
             record_human_review(&c, "mini", &pack, &ReviewRequest { force: true, ..req }).unwrap();
         assert_eq!(row.human_status, "pass");
-        assert_eq!(row.machine_result.as_deref(), Some("fail"), "改判当时机器结论快照要存档");
+        assert_eq!(
+            row.machine_result.as_deref(),
+            Some("fail"),
+            "改判当时机器结论快照要存档"
+        );
         assert_eq!(row.machine_confidence, Some(0.9));
         assert_eq!(row.reviewed_by.as_deref(), Some("reviewer"));
         assert_eq!(row.human_reason, "阈值太松，人工确认尺寸达标");
@@ -1921,7 +2107,14 @@ mod tests {
         asset(&c, 1, "a.jpg");
         asset(&c, 5, "e.jpg");
         // 低置信度（undetermined）→ 免 force
-        verdict(&c, 1, "R1", "undetermined", None, Some(r#"{"reason":"vl_timeout"}"#));
+        verdict(
+            &c,
+            1,
+            "R1",
+            "undetermined",
+            None,
+            Some(r#"{"reason":"vl_timeout"}"#),
+        );
         let pack = pack();
         let base = ReviewRequest {
             asset_id: 1,
@@ -1934,20 +2127,47 @@ mod tests {
         };
         // reason 空白（含纯空格/换行）
         for blank in ["", "   ", "\n\t"] {
-            let e = record_human_review(&c, "mini", &pack, &ReviewRequest { reason: blank, ..base })
-                .unwrap_err();
-            assert_eq!(e.code(), Some(review_code::REASON_REQUIRED), "reason={blank:?}");
+            let e = record_human_review(
+                &c,
+                "mini",
+                &pack,
+                &ReviewRequest {
+                    reason: blank,
+                    ..base
+                },
+            )
+            .unwrap_err();
+            assert_eq!(
+                e.code(),
+                Some(review_code::REASON_REQUIRED),
+                "reason={blank:?}"
+            );
         }
         // humanStatus 只能是 pass|fail（undetermined 是机器结论，不是人的裁决）
         for bad in ["undetermined", "maybe", "PASS"] {
-            let e =
-                record_human_review(&c, "mini", &pack, &ReviewRequest { human_status: bad, ..base })
-                    .unwrap_err();
+            let e = record_human_review(
+                &c,
+                "mini",
+                &pack,
+                &ReviewRequest {
+                    human_status: bad,
+                    ..base
+                },
+            )
+            .unwrap_err();
             assert_eq!(e.code(), Some(review_code::BAD_STATUS), "status={bad}");
         }
         // pack 里没有的规则
-        let e = record_human_review(&c, "mini", &pack, &ReviewRequest { rule_id: Some("R9"), ..base })
-            .unwrap_err();
+        let e = record_human_review(
+            &c,
+            "mini",
+            &pack,
+            &ReviewRequest {
+                rule_id: Some("R9"),
+                ..base
+            },
+        )
+        .unwrap_err();
         assert_eq!(e.code(), Some(review_code::UNKNOWN_RULE));
         // 资产没跑过判定（ruleId 指定与资产级都拒）
         for rule in [Some("R1"), None] {
@@ -1955,14 +2175,30 @@ mod tests {
                 &c,
                 "mini",
                 &pack,
-                &ReviewRequest { asset_id: 5, rule_id: rule, ..base },
+                &ReviewRequest {
+                    asset_id: 5,
+                    rule_id: rule,
+                    ..base
+                },
             )
             .unwrap_err();
-            assert_eq!(e.code(), Some(review_code::NO_MACHINE_VERDICT), "rule={rule:?}");
+            assert_eq!(
+                e.code(),
+                Some(review_code::NO_MACHINE_VERDICT),
+                "rule={rule:?}"
+            );
         }
         // 不存在的资产
-        let e = record_human_review(&c, "mini", &pack, &ReviewRequest { asset_id: 999, ..base })
-            .unwrap_err();
+        let e = record_human_review(
+            &c,
+            "mini",
+            &pack,
+            &ReviewRequest {
+                asset_id: 999,
+                ..base
+            },
+        )
+        .unwrap_err();
         assert_eq!(e.code(), Some(review_code::NO_MACHINE_VERDICT));
         // 全部拒收 → 零落库
         assert!(review_history(&c, "mini", None, None).unwrap().is_empty());
@@ -1985,7 +2221,8 @@ mod tests {
         };
         let first = record_human_review(&c, "mini", &pack, &req("pass", "第一次：可放行")).unwrap();
         let second =
-            record_human_review(&c, "mini", &pack, &req("fail", "第二次：看到水印，不合格")).unwrap();
+            record_human_review(&c, "mini", &pack, &req("fail", "第二次：看到水印，不合格"))
+                .unwrap();
         assert!(second.id > first.id);
         // 活记录唯一（0017 的部分唯一索引 + 「覆盖 = 旧行落戳」双保险）
         let repo = SqliteComplianceRepo::new(&c);
@@ -2060,7 +2297,10 @@ mod tests {
             "zh-Hans",
         )
         .unwrap();
-        let c3 = cards.iter().find(|x| x.assetId == 3).expect("主动复核视图要含资产 3");
+        let c3 = cards
+            .iter()
+            .find(|x| x.assetId == 3)
+            .expect("主动复核视图要含资产 3");
         let r1 = c3.rules.iter().find(|r| r.ruleId == "R1").unwrap();
         assert_eq!(r1.result, "fail", "机器结论保留原样");
         assert_eq!(r1.effectiveStatus, "pass", "生效结论 = 人工改判");
@@ -2093,7 +2333,11 @@ mod tests {
             &c,
             "mini",
             &pack,
-            &ReviewQuery { threshold: 0.7, limit: 500, ..Default::default() },
+            &ReviewQuery {
+                threshold: 0.7,
+                limit: 500,
+                ..Default::default()
+            },
             "zh-Hans",
         )
         .unwrap();
@@ -2120,9 +2364,14 @@ mod tests {
         assert_eq!(a1.machineResult, "pass");
         assert_eq!(a1.effectiveStatus, "fail");
         assert_eq!(a1.machineConfidence, Some(0.9));
-        assert!(!reviewed.iter().any(|i| i.assetId == 8), "撤销后不再算已复核");
+        assert!(
+            !reviewed.iter().any(|i| i.assetId == 8),
+            "撤销后不再算已复核"
+        );
         // 资产级改判单独一行（ruleId = None）
-        assert!(reviewed.iter().any(|i| i.assetId == 4 && i.ruleId.is_none()));
+        assert!(reviewed
+            .iter()
+            .any(|i| i.assetId == 4 && i.ruleId.is_none()));
         // 检查器视角：给 assetId 时缺省列全部有结论的行
         let (_, detail) = list_reviews(
             &c,
@@ -2210,5 +2459,4 @@ mod tests {
             "扁平列表同一口径"
         );
     }
-
 }

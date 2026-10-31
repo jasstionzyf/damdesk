@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)] // vips 全局锁刻意贯穿 await：测试间串行化 libvips（非 DB 锁，无死锁面）
 //! DM-A4（卡 task，KI-2 残项）：**真导入 → 精确批次范围**端到端。
 //!
 //! 卡面验收第 1 条就是这条链路，必须用真导入跑（不是手插 `assets.batchId` 自证）：
@@ -41,7 +42,9 @@ async fn get_json(app: axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -111,12 +114,14 @@ async fn two_imports_same_dir_split_exactly_by_batch() {
         let mut stmt = conn
             .prepare("SELECT batchId, COUNT(*) FROM assets GROUP BY batchId ORDER BY batchId")
             .unwrap();
-        let rows = stmt
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
-            .unwrap();
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
         rows.collect::<Result<_, _>>().unwrap()
     };
-    assert_eq!(per_batch, vec![(Some(b1), 3), (Some(b2), 2)], "{per_batch:?}");
+    assert_eq!(
+        per_batch,
+        vec![(Some(b1), 3), (Some(b2), 2)],
+        "{per_batch:?}"
+    );
 
     let app = app_web::router_without_dist(app_web::test_support::state(work.clone(), conn));
 
@@ -124,13 +129,22 @@ async fn two_imports_same_dir_split_exactly_by_batch() {
     let (st, all) = get_json(app.clone(), "/api/dedup/groups").await;
     assert_eq!(st, 200, "{all}");
     assert_eq!(all["totalGroups"], 1, "{all}");
-    assert_eq!(all["totalAssets"], 5, "5 张纯色图 pHash 相同 → 一个组: {all}");
+    assert_eq!(
+        all["totalAssets"], 5,
+        "5 张纯色图 pHash 相同 → 一个组: {all}"
+    );
 
     // ---- 批次 1：只有第一次的 3 张 ----
     let (st, j1) = get_json(app.clone(), &format!("/api/dedup/groups?range=batch:{b1}")).await;
     assert_eq!(st, 200, "{j1}");
-    println!("\n[DM-A4] range=batch:{b1} →\n{}", serde_json::to_string_pretty(&j1).unwrap());
-    assert_eq!(j1["rangeMeta"]["approx"], false, "本批带 batchId → 精确: {j1}");
+    println!(
+        "\n[DM-A4] range=batch:{b1} →\n{}",
+        serde_json::to_string_pretty(&j1).unwrap()
+    );
+    assert_eq!(
+        j1["rangeMeta"]["approx"], false,
+        "本批带 batchId → 精确: {j1}"
+    );
     assert_eq!(j1["rangeMeta"]["batchAssets"], 3, "第一次导入 3 张: {j1}");
     assert_eq!(j1["totalAssets"], 3, "本批只返回自己导进来的 3 张: {j1}");
     assert_eq!(member_ids(&j1).len(), 3, "{j1}");
@@ -142,7 +156,10 @@ async fn two_imports_same_dir_split_exactly_by_batch() {
     // ---- 批次 2：只有第二次新增的 2 张（老口径会把 5 张全圈进来）----
     let (st, j2) = get_json(app.clone(), &format!("/api/dedup/groups?range=batch:{b2}")).await;
     assert_eq!(st, 200, "{j2}");
-    println!("\n[DM-A4] range=batch:{b2} →\n{}", serde_json::to_string_pretty(&j2).unwrap());
+    println!(
+        "\n[DM-A4] range=batch:{b2} →\n{}",
+        serde_json::to_string_pretty(&j2).unwrap()
+    );
     assert_eq!(j2["rangeMeta"]["approx"], false, "{j2}");
     assert_eq!(j2["rangeMeta"]["batchAssets"], 2, "第二次只新增 2 张: {j2}");
     assert_eq!(j2["totalAssets"], 2, "本批只返回新增的 2 张: {j2}");
@@ -179,12 +196,10 @@ async fn legacy_rows_fall_back_to_approx_flag() {
     let b = svc_import::create_batch(&conn, &root, "reference", 2).unwrap();
     svc_import::run_batch(&conn, b, None, &thumbs, |_| Ok(())).unwrap();
     // 模拟 0033 之前建出来的老库：归属列不存在 → 迁到新库后全是 NULL
-    conn.execute("UPDATE assets SET batchId = NULL", []).unwrap();
+    conn.execute("UPDATE assets SET batchId = NULL", [])
+        .unwrap();
 
-    let app = app_web::router_without_dist(app_web::test_support::state(
-        work.clone(),
-        conn,
-    ));
+    let app = app_web::router_without_dist(app_web::test_support::state(work.clone(), conn));
     let (st, j) = get_json(app, &format!("/api/dedup/groups?range=batch:{b}")).await;
     assert_eq!(st, 200, "{j}");
     assert_eq!(

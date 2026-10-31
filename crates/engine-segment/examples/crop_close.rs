@@ -77,7 +77,10 @@ fn main() {
             println!("human   r={r:.3} -> {r2:.3} {p}");
         }
     }
-    println!("\n汇总: n={} direct={direct} fixed={fixed} human={human} err={err}", args.len());
+    println!(
+        "\n汇总: n={} direct={direct} fixed={fixed} human={human} err={err}",
+        args.len()
+    );
 }
 
 #[cfg(not(feature = "local-infer"))]

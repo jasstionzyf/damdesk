@@ -124,11 +124,7 @@ impl OpenAiCompatTagProvider {
 
     /// 解析回复并按「截断 / 真错」分类，错误文案里带上**本次实际下发的**
     /// max_tokens 与来源（默认 / 设置页覆盖），UI 失败明细才能直接指向预算问题。
-    fn parse_or_tag_error(
-        &self,
-        content: &str,
-        finish: Option<String>,
-    ) -> Result<crate::TagParse> {
+    fn parse_or_tag_error(&self, content: &str, finish: Option<String>) -> Result<crate::TagParse> {
         use crate::TagParseError;
         let hit_length = finish.as_deref() == Some("length");
         match crate::parse_tagging_output_ex(content) {

@@ -25,15 +25,25 @@ fn schema() -> ParamSchema {
 fn schema_parses_and_declares_expected_params() {
     let s = schema();
     let keys: Vec<&str> = s.properties().keys().map(String::as_str).collect();
-    assert_eq!(keys, vec!["denoise", "engine", "scale", "tile"], "参数集合变了要同步卡面口径");
+    assert_eq!(
+        keys,
+        vec!["denoise", "engine", "scale", "tile"],
+        "参数集合变了要同步卡面口径"
+    );
     assert_eq!(s.required(), ["scale"]);
 }
 
 #[test]
 fn defaults_are_scale2_full_auto_no_denoise() {
     let s = schema();
-    let effective = s.resolve_json(&[("plugin", None)]).expect("默认层必须可解析");
-    assert_eq!(effective["scale"], json!("2"), "scale 是枚举（宿主必须在装包期就拒掉 3）");
+    let effective = s
+        .resolve_json(&[("plugin", None)])
+        .expect("默认层必须可解析");
+    assert_eq!(
+        effective["scale"],
+        json!("2"),
+        "scale 是枚举（宿主必须在装包期就拒掉 3）"
+    );
     assert_eq!(effective["engine"], json!("full"));
     assert_eq!(effective["tile"], json!("auto"));
     assert_eq!(effective["denoise"], json!(0));
@@ -112,5 +122,8 @@ fn unknown_key_rejected_with_layer_name() {
 fn scale_is_marked_affects_body() {
     let s = schema();
     let danger = s.danger_keys();
-    assert!(danger.contains(&"scale"), "超分改的是图片本体（只在工作版本上改）：{danger:?}");
+    assert!(
+        danger.contains(&"scale"),
+        "超分改的是图片本体（只在工作版本上改）：{danger:?}"
+    );
 }

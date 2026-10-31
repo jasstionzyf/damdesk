@@ -25,7 +25,9 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -46,7 +48,9 @@ async fn post(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_json::Va
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
@@ -154,7 +158,10 @@ async fn install_then_schema_is_stable_and_ledger_committed() {
         assert_eq!(code, 200, "第 {i} 次读 schema 必须 200：{st}");
         assert_eq!(st["pluginId"], PACK_ID, "{st}");
         assert_eq!(st["version"], "1.3.0", "{st}");
-        assert_eq!(st["declared"], true, "声明了 params 就必须 declared:true：{st}");
+        assert_eq!(
+            st["declared"], true,
+            "声明了 params 就必须 declared:true：{st}"
+        );
         assert_eq!(st["schemaFile"], "resources/params.schema.json", "{st}");
         let props = st["schema"]["properties"]
             .as_object()
@@ -214,8 +221,11 @@ async fn schema_follows_process_connection_when_db_file_is_swapped() {
     for suffix in ["", "-wal", "-shm"] {
         let from = PathBuf::from(format!("{}{suffix}", db.display()));
         if from.exists() {
-            std::fs::rename(&from, PathBuf::from(format!("{}{suffix}.swapped", db.display())))
-                .unwrap();
+            std::fs::rename(
+                &from,
+                PathBuf::from(format!("{}{suffix}.swapped", db.display())),
+            )
+            .unwrap();
         }
     }
     drop(core_storage::open(&db).unwrap()); // 新库：只有一个空的 packs 表

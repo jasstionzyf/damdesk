@@ -190,15 +190,22 @@ mod tests {
     fn deleting_asset_cascades_boxes() {
         let conn = db();
         replace(&conn, 1, &[box_of(0.1, 0.1, 0.2, 0.2, "x")]).unwrap();
-        conn.execute("DELETE FROM assets WHERE assetId = 1", []).unwrap();
+        conn.execute("DELETE FROM assets WHERE assetId = 1", [])
+            .unwrap();
         assert_eq!(count(&conn, 1).unwrap(), 0);
     }
 
     #[test]
     fn normalize_maps_pixels_and_clamps() {
-        assert_eq!(normalize_box(50, 25, 100, 75, 200, 100), [0.25, 0.25, 0.5, 0.75]);
+        assert_eq!(
+            normalize_box(50, 25, 100, 75, 200, 100),
+            [0.25, 0.25, 0.5, 0.75]
+        );
         // 越界（unclip 外扩可能出界）→ clamp 到 0..1
-        assert_eq!(normalize_box(-10, -5, 300, 120, 200, 100), [0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(
+            normalize_box(-10, -5, 300, 120, 200, 100),
+            [0.0, 0.0, 1.0, 1.0]
+        );
         // 宽高缺失（0）不炸：按整幅 1 处理
         assert_eq!(normalize_box(0, 0, 10, 10, 0, 0), [0.0, 0.0, 1.0, 1.0]);
     }

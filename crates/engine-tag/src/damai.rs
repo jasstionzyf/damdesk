@@ -26,7 +26,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use core_config::{ModelSpec, TagSettings};
 
 use crate::http::image_data_url;
-use crate::{parse_inline_value, parse_tagging_output, Result, TagError, TagProvider, TaggingOutput};
+use crate::{
+    parse_inline_value, parse_tagging_output, Result, TagError, TagProvider, TaggingOutput,
+};
 
 /// 简单 `{"type": <t>}` 节点。
 #[derive(serde::Serialize)]
@@ -225,7 +227,9 @@ impl DamaiTagProvider {
             .read_to_string()
             .map_err(|e| TagError::Http(format!("read {url}: {e}")))?;
         let parsed: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
-            TagError::Http(format!("bad json from {url} (status {status}): {e}; body={text}"))
+            TagError::Http(format!(
+                "bad json from {url} (status {status}): {e}; body={text}"
+            ))
         })?;
         if !(200..300).contains(&status) {
             let msg = parsed
@@ -233,7 +237,9 @@ impl DamaiTagProvider {
                 .and_then(|m| m.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| text.chars().take(300).collect());
-            return Err(TagError::Upstream(format!("HTTP {status} from {url}: {msg}")));
+            return Err(TagError::Upstream(format!(
+                "HTTP {status} from {url}: {msg}"
+            )));
         }
         Ok(parsed)
     }
@@ -259,7 +265,9 @@ impl DamaiTagProvider {
             .read_to_string()
             .map_err(|e| TagError::Http(format!("read {url}: {e}")))?;
         let parsed: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
-            TagError::Http(format!("bad json from {url} (status {status}): {e}; body={text}"))
+            TagError::Http(format!(
+                "bad json from {url} (status {status}): {e}; body={text}"
+            ))
         })?;
         if !(200..300).contains(&status) {
             let msg = parsed
@@ -272,7 +280,9 @@ impl DamaiTagProvider {
                         .map(|e| e.to_string())
                         .unwrap_or_else(|| text.chars().take(300).collect())
                 });
-            return Err(TagError::Upstream(format!("HTTP {status} from {url}: {msg}")));
+            return Err(TagError::Upstream(format!(
+                "HTTP {status} from {url}: {msg}"
+            )));
         }
         Ok(parsed)
     }
@@ -294,7 +304,10 @@ impl DamaiTagProvider {
             prompt,
             schema: &schema,
             model: &self.cfg.model,
-            inputs: [TaggingInput { id: "1", image_url: img_str }],
+            inputs: [TaggingInput {
+                id: "1",
+                image_url: img_str,
+            }],
             params: TaggingParams {
                 temperature: 0.1,
                 max_tokens,
@@ -313,7 +326,11 @@ impl DamaiTagProvider {
             let msg = item
                 .get("error")
                 .and_then(|e| e.as_str())
-                .or_else(|| item.get("error").and_then(|e| e.get("message")).and_then(|m| m.as_str()))
+                .or_else(|| {
+                    item.get("error")
+                        .and_then(|e| e.get("message"))
+                        .and_then(|m| m.as_str())
+                })
                 .unwrap_or("unknown tagging error")
                 .to_string();
             // guided decoding 出不了合法 JSON = 生成被预算砍断（C8/C9 实测口径）。
@@ -333,10 +350,9 @@ impl DamaiTagProvider {
             }
             return Err(TagError::Upstream(msg));
         }
-        Ok(item
-            .get("output")
+        item.get("output")
             .cloned()
-            .ok_or_else(|| TagError::Parse(format!("results[0].output missing in {resp}")))?)
+            .ok_or_else(|| TagError::Parse(format!("results[0].output missing in {resp}")))
     }
 }
 
@@ -482,7 +498,10 @@ mod tests {
         // 打头）会让模型在 title 缺位时无限刷空白直到 max_tokens 截断
         // （W4 验收根因，2026-10-15）——此测试钉死回归。
         let s = serde_json::to_string(&three_in_one_schema()).unwrap();
-        let pos = |k: &str| s.find(&format!("\"{k}\":")).unwrap_or_else(|| panic!("missing {k} in {s}"));
+        let pos = |k: &str| {
+            s.find(&format!("\"{k}\":"))
+                .unwrap_or_else(|| panic!("missing {k} in {s}"))
+        };
         assert!(pos("title_ch") < pos("title_en"), "wire order: {s}");
         assert!(pos("title_en") < pos("description"), "wire order: {s}");
         assert!(pos("description") < pos("tags"), "wire order: {s}");
@@ -500,12 +519,24 @@ mod tests {
             prompt: "P",
             schema: &InlineSchema::ThreeInOne(three_in_one_schema()),
             model: "qwen3.5-4b",
-            inputs: [TaggingInput { id: "1", image_url: "data:image/jpeg;base64,xx" }],
-            params: TaggingParams { temperature: 0.1, max_tokens: 1024 },
+            inputs: [TaggingInput {
+                id: "1",
+                image_url: "data:image/jpeg;base64,xx",
+            }],
+            params: TaggingParams {
+                temperature: 0.1,
+                max_tokens: 1024,
+            },
         };
         let s = serde_json::to_string(&req).unwrap();
-        assert!(s.contains("\"params\":{\"temperature\":0.1,\"max_tokens\":1024}"), "wire: {s}");
-        assert!(s.contains("\"required\":[\"title_ch\",\"title_en\",\"description\",\"tags\"]"), "wire: {s}");
+        assert!(
+            s.contains("\"params\":{\"temperature\":0.1,\"max_tokens\":1024}"),
+            "wire: {s}"
+        );
+        assert!(
+            s.contains("\"required\":[\"title_ch\",\"title_en\",\"description\",\"tags\"]"),
+            "wire: {s}"
+        );
     }
 
     #[test]
@@ -528,7 +559,9 @@ mod tests {
     #[test]
     fn tag_image_not_loaded_errors() {
         let p = DamaiTagProvider::new(spec(), cfg());
-        let err = p.tag_image(std::path::Path::new("/nonexistent.jpg")).unwrap_err();
+        let err = p
+            .tag_image(std::path::Path::new("/nonexistent.jpg"))
+            .unwrap_err();
         assert!(matches!(err, TagError::NotLoaded(_)), "got: {err}");
     }
 
@@ -536,7 +569,10 @@ mod tests {
     fn inline_output_object_maps_to_value() {
         // 服务端 schema 校验后的 output 形态 → tag_inline 的归一化路径
         let out = serde_json::json!({ "value": "海边日落" });
-        let v = out.get("value").and_then(|x| x.as_str()).unwrap_or_default();
+        let v = out
+            .get("value")
+            .and_then(|x| x.as_str())
+            .unwrap_or_default();
         assert_eq!(parse_inline_value(v), "海边日落");
     }
 }

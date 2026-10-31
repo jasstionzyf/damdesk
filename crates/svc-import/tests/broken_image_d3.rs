@@ -119,11 +119,9 @@ fn junk_jpg_fails_import_and_leaves_no_asset_row() {
         .unwrap();
     assert_eq!(assets, 2, "坏图不得产生资产：{assets}");
     let leaked: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM resource WHERE width <= 0",
-            [],
-            |r| r.get(0),
-        )
+        .query_row("SELECT COUNT(*) FROM resource WHERE width <= 0", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(leaked, 0, "不得留下 width=0 的假资源");
 }
@@ -243,7 +241,11 @@ fn verify_flags_unparseable_and_repairs_fixed_files() {
     for (aid, should_exist) in [(a_repaired, true), (a_broken, false)] {
         for size in core_media::THUMB_SIZES {
             let tp = thumb_path(&thumbs, aid, *size);
-            assert_eq!(tp.is_file(), should_exist, "asset {aid} size {size}: {tp:?}");
+            assert_eq!(
+                tp.is_file(),
+                should_exist,
+                "asset {aid} size {size}: {tp:?}"
+            );
         }
     }
 

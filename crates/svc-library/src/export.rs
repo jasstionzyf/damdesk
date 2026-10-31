@@ -59,6 +59,8 @@ pub enum ExportTarget {
 }
 
 /// 导出来源（二选一）。
+// ImportFilter 体量大是领域形态使然（查询全量条件）；装箱会波及 app-web 构造点，不动。
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ExportSource {
     /// 批量选择集
@@ -170,7 +172,7 @@ pub fn resolve_items(conn: &Connection, source: &ExportSource) -> Result<Vec<Exp
             rejected: v.asset.approvalStatus == "rejected",
         })
         .collect();
-    items.sort_by(|a, b| a.asset_id.cmp(&b.asset_id)); // 稳定输出顺序
+    items.sort_by_key(|a| a.asset_id); // 稳定输出顺序
     load_tags(conn, &mut items)?;
     Ok(items)
 }
@@ -358,11 +360,14 @@ pub fn verdict_report_csv(
         s
     };
     for col in columns {
-        let base = col.strip_suffix("_score").or_else(|| col.strip_suffix("_fix"))
-            .or_else(|| col.strip_suffix("_recheck")).or_else(|| col.strip_suffix("_tags"))
+        let base = col
+            .strip_suffix("_score")
+            .or_else(|| col.strip_suffix("_fix"))
+            .or_else(|| col.strip_suffix("_recheck"))
+            .or_else(|| col.strip_suffix("_tags"))
             .or_else(|| col.strip_suffix("_confidence"))
             .unwrap_or(col);
-        if col != &"imageSN" && !known.contains(base) {
+        if col != "imageSN" && !known.contains(base) {
             return Err(format!(
                 "未知报告列 '{col}'（合法: imageSN 或 {:?}/{:?} 之一）",
                 known, SUMMARY_CANON
@@ -392,7 +397,13 @@ pub fn verdict_report_csv(
 
     // 明细行（KI-15：交付项 + 拒选项合并按 assetId 稳定排序；拒选项尾列标「已拒选」）
     let mut out = String::new();
-    out.push_str(&columns.iter().map(|c| csv_field(c)).collect::<Vec<_>>().join(","));
+    out.push_str(
+        &columns
+            .iter()
+            .map(|c| csv_field(c))
+            .collect::<Vec<_>>()
+            .join(","),
+    );
     out.push(',');
     out.push_str(&csv_field(REJECTED_COL));
     out.push('\n');
@@ -426,9 +437,14 @@ pub fn verdict_report_csv(
         }
     }
     let cells: Vec<String> = std::iter::once(csv_field("summary"))
-        .chain(pack.report.summary.iter().zip(counts).take(4).flat_map(|(label, n)| {
-            [csv_field(label), csv_field(&n.to_string())]
-        }))
+        .chain(
+            pack.report
+                .summary
+                .iter()
+                .zip(counts)
+                .take(4)
+                .flat_map(|(label, n)| [csv_field(label), csv_field(&n.to_string())]),
+        )
         .chain([
             csv_field("total"),
             csv_field(&items.len().to_string()),
@@ -572,7 +588,9 @@ fn copy_atomic_maybe_strip(src: &Path, dest: &Path, strip_gps: bool) -> Result<(
             .map_err(|e| LibraryError::export(format!("GPS 剥离失败: {e}")))?;
         let tmp = dest.with_file_name(format!(
             ".{}.part",
-            dest.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+            dest.file_name()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default()
         ));
         let r = std::fs::write(&tmp, &stripped).and_then(|_| std::fs::rename(&tmp, dest));
         if r.is_err() {
@@ -742,8 +760,11 @@ pub fn run_export(
                     current: Some("manifest.csv".into()),
                 });
                 let dest_file = dest.join("manifest.csv");
-                std::fs::write(&dest_file, manifest_text(conn, spec, &manifest_rows, &excluded)?)
-                    .map_err(|e| LibraryError::export(format!("写 manifest.csv: {e}")))?;
+                std::fs::write(
+                    &dest_file,
+                    manifest_text(conn, spec, &manifest_rows, &excluded)?,
+                )
+                .map_err(|e| LibraryError::export(format!("写 manifest.csv: {e}")))?;
                 report.manifest_written = true;
             }
         }
@@ -788,18 +809,22 @@ pub fn run_export(
                                 .unwrap_or("")
                                 .to_ascii_lowercase();
                             if spec.strip_gps && matches!(src_ext.as_str(), "jpg" | "jpeg") {
-                                let bytes =
-                                    std::fs::read(&src).map_err(|e| format!("asset {} 读取: {e}", p.item.asset_id))?;
-                                let stripped = core_media::strip_gps_jpeg(&bytes)
-                                    .map_err(|e| format!("asset {} GPS 剥离: {e}", p.item.asset_id))?;
+                                let bytes = std::fs::read(&src)
+                                    .map_err(|e| format!("asset {} 读取: {e}", p.item.asset_id))?;
+                                let stripped = core_media::strip_gps_jpeg(&bytes).map_err(|e| {
+                                    format!("asset {} GPS 剥离: {e}", p.item.asset_id)
+                                })?;
                                 std::io::copy(&mut std::io::Cursor::new(stripped), &mut zw)
-                                    .map_err(|e| format!("asset {} 写 zip: {e}", p.item.asset_id))?;
+                                    .map_err(|e| {
+                                        format!("asset {} 写 zip: {e}", p.item.asset_id)
+                                    })?;
                             } else {
                                 let mut f = std::fs::File::open(&src).map_err(|e| {
                                     format!("asset {} 打开源文件: {e}", p.item.asset_id)
                                 })?;
-                                std::io::copy(&mut f, &mut zw)
-                                    .map_err(|e| format!("asset {} 写 zip: {e}", p.item.asset_id))?;
+                                std::io::copy(&mut f, &mut zw).map_err(|e| {
+                                    format!("asset {} 写 zip: {e}", p.item.asset_id)
+                                })?;
                             }
                             Ok(())
                         })();
@@ -877,8 +902,8 @@ mod tests {
 
     /// 报告列模板 = 插件自带的 `resources/rules.json`（生产同源，不再有内置 YAML 包）。
     fn ec_pack() -> core_config::Pack {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../packs/plugins/ecommerce");
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packs/plugins/ecommerce");
         core_config::Pack::from_plugin_dir(&dir).expect("电商插件元数据装载")
     }
 
@@ -1050,8 +1075,10 @@ mod tests {
         ))
         .unwrap();
         let missing_of = |id: i64| -> i64 {
-            conn.query_row("SELECT missing FROM assets WHERE assetId=?1", [id], |r| r.get(0))
-                .unwrap()
+            conn.query_row("SELECT missing FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap()
         };
 
         // 外部删除（模拟改名/移走/拔盘）：DB 里 missing 仍是 0 —— 正是线上「数字骗人」的形态
@@ -1462,15 +1489,13 @@ mod tests {
             .unwrap();
         }
         // 标签命中 1、2；3 无标签；2 又带 missing（跳过 → missing 清单）
-        conn.execute_batch(&format!(
-            "INSERT INTO tag (assetId, value, origin, score, createdAt) VALUES
+        conn.execute_batch("INSERT INTO tag (assetId, value, origin, score, createdAt) VALUES
                 (1, '海', 'manual', 1.0, 1), (2, '海', 'auto', 0.9, 1);
              UPDATE assets SET missing=1, absPath='/gone/f2.jpg' WHERE assetId=2;
              UPDATE assets SET deleted=1 WHERE assetId=3;
              INSERT INTO assets (assetId, absPath, missing, fileName, fileExt, fileSz, mtime, importedAt)
              VALUES (9, '/x/deleted.jpg', 0, 'deleted.jpg', 'jpg', 1, 1, 1);
-             UPDATE assets SET deleted=1 WHERE assetId=9;"
-        ))
+             UPDATE assets SET deleted=1 WHERE assetId=9;")
         .unwrap();
         // count 与 resolve 同一 WHERE
         let f = ImportFilter {
@@ -1544,14 +1569,22 @@ mod tests {
             group_key: None,
         };
         // 1 = 合格（全 pass + 一条不影响结论的软 fail）
-        for r in ["R1_size", "R2_white_bg", "R3_no_watermark", "R4_subject_ratio"] {
+        for r in [
+            "R1_size",
+            "R2_white_bg",
+            "R3_no_watermark",
+            "R4_subject_ratio",
+        ] {
             repo.insert_verdict(&v(1, r, "pass", plain())).unwrap();
         }
         repo.insert_verdict(&v(
             1,
             "R5_attribute",
             "fail",
-            NewVerdictPatch { evidence: Some(r#"{"on_fail":"pass"}"#.into()), ..plain() },
+            NewVerdictPatch {
+                evidence: Some(r#"{"on_fail":"pass"}"#.into()),
+                ..plain()
+            },
         ))
         .unwrap();
         // 2 = 修复后合格（R2 fail → replace_bg 修复 → 复检 pass）
@@ -1576,7 +1609,10 @@ mod tests {
             3,
             "R1_size",
             "undetermined",
-            NewVerdictPatch { evidence: Some(r#"{"reason":"vl_timeout"}"#.into()), ..plain() },
+            NewVerdictPatch {
+                evidence: Some(r#"{"reason":"vl_timeout"}"#.into()),
+                ..plain()
+            },
         ))
         .unwrap();
 
@@ -1586,12 +1622,22 @@ mod tests {
             content: ExportContent::Original,
             target: ExportTarget::Dir(dest.clone()),
             manifest: true,
-            report: Some(VerdictReportSpec { pack: ec_pack(), job_id: Some(77), run_id: None }),
+            report: Some(VerdictReportSpec {
+                pack: ec_pack(),
+                job_id: Some(77),
+                run_id: None,
+            }),
             strip_gps: false,
         };
         let cancel = AtomicBool::new(false);
-        let r = run_export(&conn, &spec, Path::new("/nonexistent-thumbs"), &cancel, &mut |_| {})
-            .unwrap();
+        let r = run_export(
+            &conn,
+            &spec,
+            Path::new("/nonexistent-thumbs"),
+            &cancel,
+            &mut |_| {},
+        )
+        .unwrap();
         assert_eq!(r.exported, 4);
         assert!(r.manifest_written);
         let csv = std::fs::read_to_string(dest.join("manifest.csv")).unwrap();
@@ -1612,7 +1658,10 @@ mod tests {
         assert!(s.contains("\"summary\",\"合格\",\"2\""), "{s}");
         assert!(s.contains("\"不合格\",\"0\""), "{s}");
         assert!(s.contains("\"未判定\",\"1\""), "{s}");
-        assert!(s.contains("\"total\",\"4\"") && s.contains("\"unjudged\",\"1\""), "{s}");
+        assert!(
+            s.contains("\"total\",\"4\"") && s.contains("\"unjudged\",\"1\""),
+            "{s}"
+        );
         assert!(s.contains("\"excludedRejected\",\"0\""), "{s}");
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -1638,14 +1687,23 @@ mod tests {
             )
             .unwrap();
             // 每资产 4 条 classic 判定；i%3==1 → R1 转人工
-            for r in ["R1_size", "R2_white_bg", "R3_no_watermark", "R4_subject_ratio"] {
+            for r in [
+                "R1_size",
+                "R2_white_bg",
+                "R3_no_watermark",
+                "R4_subject_ratio",
+            ] {
                 let human = i % 3 == 1 && r == "R1_size";
                 repo.insert_verdict(&NewVerdict {
                     pack_id: PACK_ID.into(),
                     asset_id: i,
                     job_id: 7,
                     rule_id: r.into(),
-                    result: if human { "undetermined".into() } else { "pass".into() },
+                    result: if human {
+                        "undetermined".into()
+                    } else {
+                        "pass".into()
+                    },
                     confidence: 0.9,
                     score: Some(1.0),
                     evidence: None,
@@ -1669,7 +1727,11 @@ mod tests {
             .collect();
         let csv = verdict_report_csv(
             &conn,
-            &VerdictReportSpec { pack: ec_pack(), job_id: Some(7), run_id: None },
+            &VerdictReportSpec {
+                pack: ec_pack(),
+                job_id: Some(7),
+                run_id: None,
+            },
             &rows,
             &[],
         )
@@ -1681,7 +1743,10 @@ mod tests {
         assert!(s.contains("\"未判定\",\"167\""), "{s}");
         assert!(s.contains("\"合格\",\"333\""), "{s}");
         assert!(s.contains("\"不合格\",\"0\""), "{s}");
-        assert!(s.contains("\"total\",\"500\"") && s.contains("\"unjudged\",\"0\""), "{s}");
+        assert!(
+            s.contains("\"total\",\"500\"") && s.contains("\"unjudged\",\"0\""),
+            "{s}"
+        );
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
@@ -1691,14 +1756,32 @@ mod tests {
         let conn = setup();
         let mut pack = ec_pack();
         pack.report.detail_columns.clear();
-        let err = verdict_report_csv(&conn, &VerdictReportSpec { pack, job_id: None, run_id: None }, &[], &[])
-            .unwrap_err();
+        let err = verdict_report_csv(
+            &conn,
+            &VerdictReportSpec {
+                pack,
+                job_id: None,
+                run_id: None,
+            },
+            &[],
+            &[],
+        )
+        .unwrap_err();
         assert!(err.contains("detail_columns 为空"), "{err}");
         // 未知列同样硬拒（插件包写错列名 = 报告作者错，不许出空单元格糊过去）
         let mut pack = ec_pack();
         pack.report.detail_columns.push("R9_not_a_rule".into());
-        let err = verdict_report_csv(&conn, &VerdictReportSpec { pack, job_id: None, run_id: None }, &[], &[])
-            .unwrap_err();
+        let err = verdict_report_csv(
+            &conn,
+            &VerdictReportSpec {
+                pack,
+                job_id: None,
+                run_id: None,
+            },
+            &[],
+            &[],
+        )
+        .unwrap_err();
         assert!(err.contains("未知报告列"), "{err}");
     }
 
@@ -1711,7 +1794,13 @@ mod tests {
     }
 
     fn plain() -> NewVerdictPatch {
-        NewVerdictPatch { score: Some(1.0), evidence: None, fix: None, tier: None, recheck: None }
+        NewVerdictPatch {
+            score: Some(1.0),
+            evidence: None,
+            fix: None,
+            tier: None,
+            recheck: None,
+        }
     }
 
     /// COMPLIANCE-HUMAN：报告汇总/明细都取**生效结论**（humanStatus ?? result）——
@@ -1793,7 +1882,11 @@ mod tests {
             .collect();
         let csv = verdict_report_csv(
             &conn,
-            &VerdictReportSpec { pack: ec_pack(), job_id: Some(9), run_id: None },
+            &VerdictReportSpec {
+                pack: ec_pack(),
+                job_id: Some(9),
+                run_id: None,
+            },
             &rows,
             &[],
         )
@@ -1820,7 +1913,10 @@ mod tests {
         assert!(s.contains("\"合格\",\"2\""), "{s}");
         assert!(s.contains("\"不合格\",\"1\""), "{s}");
         assert!(s.contains("\"未判定\",\"0\""), "{s}");
-        assert!(s.contains("\"total\",\"3\"") && s.contains("\"unjudged\",\"0\""), "{s}");
+        assert!(
+            s.contains("\"total\",\"3\"") && s.contains("\"unjudged\",\"0\""),
+            "{s}"
+        );
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
@@ -1868,18 +1964,29 @@ mod tests {
         assert_eq!(report.total, 3, "total = 选择集命中数（含拒选）");
         assert_eq!(report.exported, 1, "拒选不交付：只导出 1 个文件");
         assert_eq!(report.excluded_rejected, 2);
-        assert!(report.skipped.is_empty(), "拒选不算 missing 跳过：{:?}", report.skipped);
+        assert!(
+            report.skipped.is_empty(),
+            "拒选不算 missing 跳过：{:?}",
+            report.skipped
+        );
         // 文件不含拒选资产
         assert!(dest.join("a.jpg").exists());
         assert!(!dest.join("b.jpg").exists());
         assert!(!dest.join("c.jpg").exists());
         // manifest 末行记排除数
         let csv = std::fs::read_to_string(dest.join("manifest.csv")).unwrap();
-        assert_eq!(csv.lines().last().unwrap(), "excludedRejected,\"2\"", "{csv}");
+        assert_eq!(
+            csv.lines().last().unwrap(),
+            "excludedRejected,\"2\"",
+            "{csv}"
+        );
         assert!(!csv.contains("b.jpg") && !csv.contains("c.jpg"));
         // 报告回执 JSON（原始形态，与前端 api.ts ExportReport 同形）
         let j = serde_json::to_value(&report).unwrap();
-        println!("KI15-验收1 报告回执: {}", serde_json::to_string_pretty(&j).unwrap());
+        println!(
+            "KI15-验收1 报告回执: {}",
+            serde_json::to_string_pretty(&j).unwrap()
+        );
         assert_eq!(j["excludedRejected"], serde_json::json!(2), "{j}");
         assert_eq!(j["total"], serde_json::json!(3), "{j}");
         assert_eq!(j["exported"], serde_json::json!(1), "{j}");
@@ -1932,7 +2039,11 @@ mod tests {
             content: ExportContent::Original,
             target: ExportTarget::Dir(dest.clone()),
             manifest: true,
-            report: Some(VerdictReportSpec { pack: ec_pack(), job_id: Some(77), run_id: None }),
+            report: Some(VerdictReportSpec {
+                pack: ec_pack(),
+                job_id: Some(77),
+                run_id: None,
+            }),
             strip_gps: false,
         };
         let report = run_export(
@@ -1954,12 +2065,25 @@ mod tests {
         assert!(lines[0].ends_with("\"拒选\""), "{}", lines[0]);
         let mark_col = |line: &str| line.rsplit(',').next().unwrap().to_string();
         assert_eq!(mark_col(lines[1]), "\"\"", "交付行尾列为空：{}", lines[1]);
-        assert_eq!(mark_col(lines[2]), "\"已拒选\"", "拒选行带「已拒选」标：{}", lines[2]);
-        assert_eq!(mark_col(lines[3]), "\"已拒选\"", "拒选行带「已拒选」标：{}", lines[3]);
+        assert_eq!(
+            mark_col(lines[2]),
+            "\"已拒选\"",
+            "拒选行带「已拒选」标：{}",
+            lines[2]
+        );
+        assert_eq!(
+            mark_col(lines[3]),
+            "\"已拒选\"",
+            "拒选行带「已拒选」标：{}",
+            lines[3]
+        );
         // 汇总：只数交付项——合格 1（不是 3）、total 1、excludedRejected 2
         let s = lines[4];
         assert!(s.contains("\"合格\",\"1\""), "拒选不进汇总：{s}");
-        assert!(s.contains("\"total\",\"1\"") && s.contains("\"unjudged\",\"0\""), "{s}");
+        assert!(
+            s.contains("\"total\",\"1\"") && s.contains("\"unjudged\",\"0\""),
+            "{s}"
+        );
         assert!(s.contains("\"excludedRejected\",\"2\""), "{s}");
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -1991,7 +2115,10 @@ mod tests {
 
         let dest = tmp.join("out");
         let spec = ExportSpec {
-            source: ExportSource::Filter(ImportFilter { tag: Some("海".into()), ..Default::default() }),
+            source: ExportSource::Filter(ImportFilter {
+                tag: Some("海".into()),
+                ..Default::default()
+            }),
             content: ExportContent::Original,
             target: ExportTarget::Dir(dest.clone()),
             manifest: true,
@@ -2014,5 +2141,4 @@ mod tests {
         assert!(csv.lines().any(|l| l == "excludedRejected,\"1\""), "{csv}");
         let _ = std::fs::remove_dir_all(&tmp);
     }
-
 }

@@ -11,9 +11,11 @@
 //!   - 中文/混合：子串出现（如「发票号」出现在「发票号 A-001」里）
 //!   - 英文：大小写无关的**整词**出现；但子串型查询（`anage`）按子串判真假，
 //!     用来暴露「新口径是词级、旧口径是子串级」这一**有意的口径取舍**（表里标 `口径取舍`）
+//!
 //! 指标：
-//!   召回率 = |新命中 ∩ 真值| / |真值|；误召回 = |命中 \ 真值|；
-//!   top-10 精确率 = 按分数排序前 10 条里真值占比（衡量误召回是否被部分命中折扣压到后排）。
+//!
+//! 召回率 = |新命中 ∩ 真值| / |真值|；误召回 = |命中 \ 真值|；
+//! top-10 精确率 = 按分数排序前 10 条里真值占比（衡量误召回是否被部分命中折扣压到后排）。
 //!
 //! 断言（任一失败退出码非 0）：旧命中集 ⊆ 新命中集；新召回率 ≥ 旧召回率；
 //! 真值非空的查询新召回率 = 100%；中文单字查询旧 0% → 新 100%。
@@ -90,10 +92,10 @@ const QUERIES: &[(&str, bool)] = &[
     ("肖像授权", false),
     ("数字资产", false),
     ("降价", false),
-    ("发", false),   // 单字
-    ("票", false),   // 单字
-    ("编", false),   // 单字
-    ("销", false),   // 单字
+    ("发", false), // 单字
+    ("票", false), // 单字
+    ("编", false), // 单字
+    ("销", false), // 单字
     ("Model Release", false),
     ("Invoice", false),
     ("Management", false),
@@ -124,10 +126,7 @@ fn truth_contains(text: &str, word: &str) -> bool {
 /// 查询的真值集：多词查询 = 所有词都出现（与融合的「全命中」口径一致）；
 /// 单字/单词查询 = 该词出现。英文子串型查询按子串判（口径取舍样本）。
 fn ground_truth(query: &str, substring_mode: bool) -> Vec<i64> {
-    let words: Vec<String> = query
-        .split_whitespace()
-        .map(|w| w.to_lowercase())
-        .collect();
+    let words: Vec<String> = query.split_whitespace().map(|w| w.to_lowercase()).collect();
     CORPUS
         .iter()
         .enumerate()
@@ -164,7 +163,10 @@ fn old_hits(conn: &Connection, query: &str) -> Vec<i64> {
         .filter_map(|row| {
             let (id, text) = row.unwrap();
             let t = text.to_lowercase();
-            tokens.iter().all(|tok| t.contains(tok.as_str())).then_some(id)
+            tokens
+                .iter()
+                .all(|tok| t.contains(tok.as_str()))
+                .then_some(id)
         })
         .collect();
     out.sort_unstable();
@@ -177,20 +179,29 @@ fn new_hits(conn: &Connection, query: &str, k: usize) -> Vec<(i64, usize)> {
     if terms.is_empty() {
         return Vec::new();
     }
-    core_storage::ocr_index::match_counts(&conn, &terms, core_storage::ocr_index::term_candidate_cap(k))
-        .unwrap()
+    core_storage::ocr_index::match_counts(
+        conn,
+        &terms,
+        core_storage::ocr_index::term_candidate_cap(k),
+    )
+    .unwrap()
 }
 
 fn recall(hits: &[i64], truth: &[i64]) -> f64 {
     if truth.is_empty() {
         return 1.0;
     }
-    let hit = truth.iter().filter(|t| hits.binary_search(t).is_ok()).count();
+    let hit = truth
+        .iter()
+        .filter(|t| hits.binary_search(t).is_ok())
+        .count();
     hit as f64 / truth.len() as f64
 }
 
 fn false_positives(hits: &[i64], truth: &[i64]) -> usize {
-    hits.iter().filter(|h| truth.binary_search(h).is_err()).count()
+    hits.iter()
+        .filter(|h| truth.binary_search(h).is_err())
+        .count()
 }
 
 fn ms(f: impl Fn() -> Vec<i64>, reps: usize) -> f64 {
@@ -237,7 +248,11 @@ fn main() {
         indexed,
         dirty
     );
-    assert_eq!(indexed as usize, CORPUS.len(), "直写 SQL 的语料也必须被索引覆盖");
+    assert_eq!(
+        indexed as usize,
+        CORPUS.len(),
+        "直写 SQL 的语料也必须被索引覆盖"
+    );
     assert_eq!(dirty, 0, "open() 自愈后 dirty 必须收敛");
 
     // 单字/2 字查询的**索引命中证据**（卡面要求：EXPLAIN QUERY PLAN）
@@ -252,7 +267,11 @@ fn main() {
             terms,
             hits.len(),
             plan.join(" ; "),
-            if q == "发" { "   ← 旧口径（token <2 字符直接丢弃）恒 0 条" } else { "" }
+            if q == "发" {
+                "   ← 旧口径（token <2 字符直接丢弃）恒 0 条"
+            } else {
+                ""
+            }
         );
         assert!(
             plan.iter().any(|l| l.contains("VIRTUAL TABLE INDEX")),
@@ -264,7 +283,17 @@ fn main() {
     println!("\n== 评测表（真值 = 图上文本真的出现该查询的词）");
     println!(
         "{:<16} {:>6} | {:>6} {:>8} {:>8} | {:>6} {:>8} {:>8} {:>9} | {:>7} {:>7}",
-        "查询", "真值", "旧命中", "旧召回", "旧误召", "新命中", "新召回", "新误召", "新top10精", "旧ms", "新ms"
+        "查询",
+        "真值",
+        "旧命中",
+        "旧召回",
+        "旧误召",
+        "新命中",
+        "新召回",
+        "新误召",
+        "新top10精",
+        "旧ms",
+        "新ms"
     );
     let mut sum_old_recall = 0.0;
     let mut sum_new_recall = 0.0;
@@ -304,16 +333,31 @@ fn main() {
             assert!(nr >= or_ - 1e-9, "「{q}」新召回率不得低于旧：{or_} → {nr}");
         }
         let old_ms = ms(|| old_hits(&conn, q), 5);
-        let new_ms = ms(|| new_hits(&conn, q, 24).iter().map(|(i, _)| *i).collect(), 5);
+        let new_ms = ms(
+            || new_hits(&conn, q, 24).iter().map(|(i, _)| *i).collect(),
+            5,
+        );
         println!(
             "{:<16} {:>6} | {:>6} {:>8} {:>8} | {:>6} {:>8} {:>8} {:>9} | {:>7.2} {:>7.2}{}",
             q,
             truth.len(),
             old.len(),
-            if truth.is_empty() { "—".into() } else { format!("{:.0}%", or_ * 100.0) },
-            if truth.is_empty() { "—".into() } else { false_positives(&old, &truth).to_string() },
+            if truth.is_empty() {
+                "—".into()
+            } else {
+                format!("{:.0}%", or_ * 100.0)
+            },
+            if truth.is_empty() {
+                "—".into()
+            } else {
+                false_positives(&old, &truth).to_string()
+            },
             new_ids.len(),
-            if truth.is_empty() { "—".into() } else { format!("{:.0}%", nr * 100.0) },
+            if truth.is_empty() {
+                "—".into()
+            } else {
+                format!("{:.0}%", nr * 100.0)
+            },
             false_positives(&new_ids, &truth),
             match top10_prec {
                 Some(p) => format!("{:.0}%", p * 100.0),
@@ -321,13 +365,20 @@ fn main() {
             },
             old_ms,
             new_ms,
-            if *substring_mode { "   ← 口径取舍（英文子串）" } else { "" }
+            if *substring_mode {
+                "   ← 口径取舍（英文子串）"
+            } else {
+                ""
+            }
         );
         if *substring_mode {
             tradeoff_queries.push((*q, old.clone(), new_ids.clone(), truth.clone()));
         }
         if has_truth {
-            assert!((nr - 1.0).abs() < 1e-9, "真值非空时新召回率必须 100%：「{q}」{nr}");
+            assert!(
+                (nr - 1.0).abs() < 1e-9,
+                "真值非空时新召回率必须 100%：「{q}」{nr}"
+            );
             checked += 1;
             sum_old_recall += or_;
             sum_new_recall += nr;
@@ -348,11 +399,20 @@ fn main() {
     let mut single_reported = 0;
     for q in ["发", "票", "编", "销"] {
         let truth = ground_truth(q, false);
-        assert!(!truth.is_empty(), "单字「{q}」真值集不该为空（语料设计问题）");
+        assert!(
+            !truth.is_empty(),
+            "单字「{q}」真值集不该为空（语料设计问题）"
+        );
         let old = old_hits(&conn, q);
-        assert!(old.is_empty(), "单字「{q}」旧口径应恒 0 命中（token <2 被丢弃）");
+        assert!(
+            old.is_empty(),
+            "单字「{q}」旧口径应恒 0 命中（token <2 被丢弃）"
+        );
         let new = new_hits(&conn, q, 24);
-        assert_eq!(recall(&new.iter().map(|(i, _)| *i).collect::<Vec<_>>(), &truth), 1.0);
+        assert_eq!(
+            recall(&new.iter().map(|(i, _)| *i).collect::<Vec<_>>(), &truth),
+            1.0
+        );
         single_reported += 1;
     }
     println!("中文单字查询：{single_reported} 条，旧口径 0 命中 → 新口径召回 100%（走倒排索引）");

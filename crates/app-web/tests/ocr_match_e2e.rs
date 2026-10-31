@@ -213,7 +213,10 @@ async fn fixture() -> Fixture {
     }
     drop(conn);
 
-    let state = app_web::test_support::state(dir.clone(), core_storage::open(&dir.join("dam.db")).unwrap());
+    let state = app_web::test_support::state(
+        dir.clone(),
+        core_storage::open(&dir.join("dam.db")).unwrap(),
+    );
     let app = app_web::router_without_dist(state);
     let mock = Mock::start();
 
@@ -230,7 +233,12 @@ async fn fixture() -> Fixture {
     assert_eq!(st, StatusCode::OK, "{body}");
     let (st, body) = post_json(&app, "/api/settings/embed/test", serde_json::json!({})).await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    let (st, body) = post_json(&app, "/api/embed/start", serde_json::json!({"mode":"pending"})).await;
+    let (st, body) = post_json(
+        &app,
+        "/api/embed/start",
+        serde_json::json!({"mode":"pending"}),
+    )
+    .await;
     assert_eq!(st, StatusCode::OK, "{body}");
     let mut done = false;
     for _ in 0..200 {
@@ -293,7 +301,11 @@ impl Fixture {
         }
         let (st, v) = post_json(&self.app, "/api/search/text", body).await;
         assert_eq!(st, StatusCode::OK, "search {query}: {v}");
-        println!("---- query {:?} → {}", query, serde_json::to_string(&v).unwrap());
+        println!(
+            "---- query {:?} → {}",
+            query,
+            serde_json::to_string(&v).unwrap()
+        );
         v
     }
 }
@@ -314,7 +326,10 @@ fn hits_of(v: &serde_json::Value) -> Vec<(i64, f64, bool, Option<String>)> {
         .collect()
 }
 
-fn find(hits: &[(i64, f64, bool, Option<String>)], id: i64) -> Option<&(i64, f64, bool, Option<String>)> {
+fn find(
+    hits: &[(i64, f64, bool, Option<String>)],
+    id: i64,
+) -> Option<&(i64, f64, bool, Option<String>)> {
     hits.iter().find(|h| h.0 == id)
 }
 
@@ -325,11 +340,20 @@ async fn get_json(app: &Router, uri: &str) -> (StatusCode, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
-async fn post_json(app: &Router, uri: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+async fn post_json(
+    app: &Router,
+    uri: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
     let res = app
         .clone()
         .oneshot(
@@ -343,11 +367,20 @@ async fn post_json(app: &Router, uri: &str, body: serde_json::Value) -> (StatusC
         .await
         .unwrap();
     let status = res.status();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
-async fn put_json(app: &Router, uri: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+async fn put_json(
+    app: &Router,
+    uri: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
     let res = app
         .clone()
         .oneshot(
@@ -361,8 +394,13 @@ async fn put_json(app: &Router, uri: &str, body: serde_json::Value) -> (StatusCo
         .await
         .unwrap();
     let status = res.status();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 // ---------- 用例 ----------
@@ -393,7 +431,7 @@ async fn semantic_only_literal_only_and_boost_are_distinguished() {
 async fn literal_only_hit_survives_semantic_threshold() {
     let fx = fixture().await;
     fx.mock.map_text("报销", DIMS - 1); // 语义指向与所有资产正交的方向 → 语义分全 0
-    // 默认 minScore（0.08）：语义噪声被滤掉，字面命中仍必须返回
+                                        // 默认 minScore（0.08）：语义噪声被滤掉，字面命中仍必须返回
     let v = fx.search("报销", 10, None).await;
     let hits = hits_of(&v);
     assert_eq!(hits.len(), 1, "只应有字面独有命中：{hits:?}");
@@ -419,9 +457,17 @@ async fn cjk_single_char_matches_and_latin_is_word_level() {
     assert!(find(&hits, 4).unwrap().1 > 0.9, "语义命中资产 4");
     assert!(!find(&hits, 4).unwrap().2, "资产 4 无「票」字 → 不标字面");
     // 资产 1/5 含「票」（发票）→ 单字必须命中
-    assert!(find(&hits, 1).expect("资产 1").2, "「票」应字面命中资产 1：{hits:?}");
+    assert!(
+        find(&hits, 1).expect("资产 1").2,
+        "「票」应字面命中资产 1：{hits:?}"
+    );
     assert!(find(&hits, 5).expect("资产 5").2, "「票」应字面命中资产 5");
-    assert!(find(&hits, 1).unwrap().3.as_deref().unwrap().contains("发票"));
+    assert!(find(&hits, 1)
+        .unwrap()
+        .3
+        .as_deref()
+        .unwrap()
+        .contains("发票"));
 
     // 英文整词命中
     fx.mock.map_text("Management", DIMS - 1);
@@ -442,11 +488,18 @@ async fn partial_multiterm_discount_and_k_truncation() {
     fx.mock.map_text("发票 报销", DIMS - 1);
     let v = fx.search("发票 报销", 10, None).await;
     let hits = hits_of(&v);
-    assert_eq!(hits.len(), 2, "只有资产 1（含发票）与 5（含发票+报销）命中：{hits:?}");
+    assert_eq!(
+        hits.len(),
+        2,
+        "只有资产 1（含发票）与 5（含发票+报销）命中：{hits:?}"
+    );
     let h5 = find(&hits, 5).expect("两词全命中");
     let h1 = find(&hits, 1).expect("只命中「发票」");
     assert!((h5.1 - 0.35).abs() < 1e-5, "全命中 = 融合分：{h5:?}");
-    assert!((h1.1 - 0.35 * 0.6 * 0.5).abs() < 1e-5, "部分命中折扣：{h1:?}");
+    assert!(
+        (h1.1 - 0.35 * 0.6 * 0.5).abs() < 1e-5,
+        "部分命中折扣：{h1:?}"
+    );
     assert_eq!(hits[0].0, 5, "全命中排最前");
 
     // k=1：只留最高分
@@ -486,7 +539,10 @@ async fn external_sql_rewrite_has_no_stale_index_and_self_heals() {
     fx.mock.map_text("降价", DIMS - 1);
     // 改写：SKU-8891降价促销 → 发票 增值税（绕过应用写路径）
     fx.conn()
-        .execute("UPDATE assets SET ocr_text = '发票 增值税' WHERE assetId = 4", [])
+        .execute(
+            "UPDATE assets SET ocr_text = '发票 增值税' WHERE assetId = 4",
+            [],
+        )
         .unwrap();
 
     // 旧词不再命中资产 4（触发器已撤旧索引行）
@@ -507,7 +563,12 @@ async fn external_sql_rewrite_has_no_stale_index_and_self_heals() {
 #[tokio::test]
 async fn empty_query_rejected_and_textless_asset_not_literal_matched() {
     let fx = fixture().await;
-    let (st, body) = post_json(&fx.app, "/api/search/text", serde_json::json!({"query":"   "})).await;
+    let (st, body) = post_json(
+        &fx.app,
+        "/api/search/text",
+        serde_json::json!({"query":"   "}),
+    )
+    .await;
     assert_eq!(st, StatusCode::BAD_REQUEST);
     assert_eq!(body["code"], serde_json::json!("empty_query"));
 
@@ -515,6 +576,9 @@ async fn empty_query_rejected_and_textless_asset_not_literal_matched() {
     fx.mock.map_text("管理", idx3);
     let v = fx.search("管理", 10, Some(0.0)).await;
     let hits = hits_of(&v);
-    assert!(!find(&hits, 3).unwrap().2, "无 ocr_text 的资产不得标字面命中");
+    assert!(
+        !find(&hits, 3).unwrap().2,
+        "无 ocr_text 的资产不得标字面命中"
+    );
     assert!(find(&hits, 3).unwrap().3.is_none());
 }

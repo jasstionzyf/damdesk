@@ -48,8 +48,12 @@ fn start_gateway(work_dir: &Path) -> Gateway {
 
 fn start_gateway_with_vl(work_dir: &Path, vl: std::sync::Arc<dyn VlJudge>) -> Gateway {
     use_empty_models_root();
-    Gateway::start(GatewayConfig::new(caps(), work_dir).with_token("test-token").with_vl(vl))
-        .expect("网关启动失败")
+    Gateway::start(
+        GatewayConfig::new(caps(), work_dir)
+            .with_token("test-token")
+            .with_vl(vl),
+    )
+    .expect("网关启动失败")
 }
 
 struct Response {
@@ -86,8 +90,8 @@ fn parse_response(raw: &[u8]) -> Response {
         .and_then(|l| l.split_whitespace().nth(1))
         .and_then(|s| s.parse().ok())
         .unwrap_or_else(|| panic!("应答状态行不合法：{head:?}"));
-    let body: Value = serde_json::from_str(body)
-        .unwrap_or_else(|e| panic!("应答体不是 JSON（{e}）：{body:?}"));
+    let body: Value =
+        serde_json::from_str(body).unwrap_or_else(|e| panic!("应答体不是 JSON（{e}）：{body:?}"));
     Response { status, body }
 }
 
@@ -175,11 +179,14 @@ fn auth_routing_and_capability_whitelist() {
     assert_eq!(r.body["error"], "no_such_endpoint");
 
     // 未声明能力 → 403 capability_missing，且点名缺哪项
-    let narrow = Gateway::start(
-        GatewayConfig::new(vec!["io.read".into()], &work).with_token("test-token"),
-    )
-    .unwrap();
-    let r = post(&narrow, "/vl/judge", json!({ "path": "/tmp/x.png", "prompt": "p" }));
+    let narrow =
+        Gateway::start(GatewayConfig::new(vec!["io.read".into()], &work).with_token("test-token"))
+            .unwrap();
+    let r = post(
+        &narrow,
+        "/vl/judge",
+        json!({ "path": "/tmp/x.png", "prompt": "p" }),
+    );
     assert_eq!(r.status, 403, "{}", r.body);
     assert_eq!(r.body["error"], "capability_missing");
     assert_eq!(r.body["capability"], "vl.judge");
@@ -371,7 +378,10 @@ fn geometric_ops_write_inside_workroot_only() {
                 "background": "#ffffff", "out": out.to_string_lossy() }),
     );
     assert_eq!(r.status, 200, "{}", r.body);
-    assert_eq!((r.body["width"].clone(), r.body["height"].clone()), (json!(2000), json!(1000)));
+    assert_eq!(
+        (r.body["width"].clone(), r.body["height"].clone()),
+        (json!(2000), json!(1000))
+    );
     assert_eq!(r.body["op"], "letterbox");
     let (w, h) = core_media::image_size(&out).unwrap();
     assert_eq!((w, h), (2000, 1000));
@@ -385,7 +395,10 @@ fn geometric_ops_write_inside_workroot_only() {
         json!({ "path": wide.to_string_lossy(), "target_ratio": 1.0, "out": out.to_string_lossy() }),
     );
     assert_eq!(r.status, 200, "{}", r.body);
-    assert_eq!((r.body["width"].clone(), r.body["height"].clone()), (json!(2000), json!(2000)));
+    assert_eq!(
+        (r.body["width"].clone(), r.body["height"].clone()),
+        (json!(2000), json!(2000))
+    );
 
     // upscale：无 x4v3（模型根为空）→ Lanczos 重采样，尺寸严格 ×scale
     let small = make_png(tmp.path(), "small_200x100.png", 200, 100);
@@ -396,7 +409,10 @@ fn geometric_ops_write_inside_workroot_only() {
         json!({ "path": small.to_string_lossy(), "scale": 2.0, "out": out.to_string_lossy() }),
     );
     assert_eq!(r.status, 200, "{}", r.body);
-    assert_eq!((r.body["width"].clone(), r.body["height"].clone()), (json!(400), json!(200)));
+    assert_eq!(
+        (r.body["width"].clone(), r.body["height"].clone()),
+        (json!(400), json!(200))
+    );
     assert_eq!(r.body["op"], "upscale.resample");
     assert_eq!(core_media::image_size(&out).unwrap(), (400, 200));
 
@@ -487,7 +503,10 @@ fn resize_endpoint_only_shrinks_and_rejects_bad_budget() {
         json!({ "path": img.to_string_lossy(), "max_side": 4000, "out": keep.to_string_lossy() }),
     );
     assert_eq!(r.status, 200, "{}", r.body);
-    assert_eq!((r.body["width"].as_i64(), r.body["height"].as_i64()), (Some(1000), Some(500)));
+    assert_eq!(
+        (r.body["width"].as_i64(), r.body["height"].as_i64()),
+        (Some(1000), Some(500))
+    );
     assert_eq!(r.body["scaled"], false);
 
     // max_side 缺省 / 0 / 越界 → 400（「不想缩就别调这个端点」，不猜默认值）
@@ -540,7 +559,11 @@ fn model_backed_endpoints_report_capability_missing_without_models() {
         ("/detect/ocr", "detect.ocr"),
         ("/op/replace_bg", "op.generative"),
     ] {
-        let r = post(&gw, path, json!({ "path": p, "out": work.join("o.png").to_string_lossy() }));
+        let r = post(
+            &gw,
+            path,
+            json!({ "path": p, "out": work.join("o.png").to_string_lossy() }),
+        );
         assert_eq!(r.status, 403, "{path} → {}", r.body);
         assert_eq!(r.body["error"], "capability_missing", "{path}");
         assert_eq!(r.body["capability"], cap, "{path}");
@@ -567,8 +590,14 @@ fn model_backed_endpoints_report_capability_missing_without_models() {
 // ---------------------------------------------------------------------------
 
 /// 生成一张「边框 = border、内部 = inner」的真 PNG（白边统计要可控的边缘带像素）。
-fn make_border_png(dir: &Path, name: &str, side: i32, border: [u8; 3], inner: [u8; 3],
-                   band: i32) -> PathBuf {
+fn make_border_png(
+    dir: &Path,
+    name: &str,
+    side: i32,
+    border: [u8; 3],
+    inner: [u8; 3],
+    band: i32,
+) -> PathBuf {
     let mut rgb = vec![0u8; (side as usize) * (side as usize) * 3];
     for y in 0..side {
         for x in 0..side {
@@ -589,8 +618,19 @@ fn detect_white_edge_measures_edge_band_without_models() {
     let gw = start_gateway(&work);
 
     // 纯白边框（band=8）+ 深灰中心：边缘带偏差 0 → pass，中心不参与统计
-    let pure = make_border_png(tmp.path(), "pure_400x400.png", 400, [255, 255, 255], [40, 40, 40], 8);
-    let r = post(&gw, "/detect/white_stats", json!({ "path": pure.to_string_lossy(), "band": 8 }));
+    let pure = make_border_png(
+        tmp.path(),
+        "pure_400x400.png",
+        400,
+        [255, 255, 255],
+        [40, 40, 40],
+        8,
+    );
+    let r = post(
+        &gw,
+        "/detect/white_stats",
+        json!({ "path": pure.to_string_lossy(), "band": 8 }),
+    );
     assert_eq!(r.status, 200, "{}", r.body);
     assert_eq!(r.body["mean_dev"], 0.0);
     assert_eq!(r.body["worst_dev"], 0.0);
@@ -600,38 +640,81 @@ fn detect_white_edge_measures_edge_band_without_models() {
     assert_eq!(r.body["engine"], "classic-white-edge");
 
     // 偏白边框 240：偏差 = 255-240 = 15 → mean_dev 15，默认阈值 8 判不合格
-    let off = make_border_png(tmp.path(), "off_400x400.png", 400, [240, 240, 240], [40, 40, 40], 8);
-    let r = post(&gw, "/detect/white_stats", json!({ "path": off.to_string_lossy(), "band": 8 }));
+    let off = make_border_png(
+        tmp.path(),
+        "off_400x400.png",
+        400,
+        [240, 240, 240],
+        [40, 40, 40],
+        8,
+    );
+    let r = post(
+        &gw,
+        "/detect/white_stats",
+        json!({ "path": off.to_string_lossy(), "band": 8 }),
+    );
     assert_eq!(r.status, 200, "{}", r.body);
-    assert!((r.body["mean_dev"].as_f64().unwrap() - 15.0).abs() < 1e-9, "{}", r.body);
+    assert!(
+        (r.body["mean_dev"].as_f64().unwrap() - 15.0).abs() < 1e-9,
+        "{}",
+        r.body
+    );
     assert_eq!(r.body["pass"], false);
     // 阈值放宽到 20 → 同一张图同一统计变合格（判定阈值不由宿主编死）
-    let r = post(&gw, "/detect/white_stats",
-                 json!({ "path": off.to_string_lossy(), "band": 8, "max_dev": 20 }));
+    let r = post(
+        &gw,
+        "/detect/white_stats",
+        json!({ "path": off.to_string_lossy(), "band": 8, "max_dev": 20 }),
+    );
     assert_eq!(r.body["pass"], true, "{}", r.body);
 
     // 色偏比单通道均值敏感：纯蓝边框 (0,0,255) → 偏差 = 255-0 = 255
-    let blue = make_border_png(tmp.path(), "blue_400x400.png", 400, [0, 0, 255], [255, 255, 255], 8);
-    let r = post(&gw, "/detect/white_stats", json!({ "path": blue.to_string_lossy(), "band": 8 }));
+    let blue = make_border_png(
+        tmp.path(),
+        "blue_400x400.png",
+        400,
+        [0, 0, 255],
+        [255, 255, 255],
+        8,
+    );
+    let r = post(
+        &gw,
+        "/detect/white_stats",
+        json!({ "path": blue.to_string_lossy(), "band": 8 }),
+    );
     assert_eq!(r.body["mean_dev"], 255.0, "{}", r.body);
     assert_eq!(r.body["worst_dev"], 255.0);
 
     // 确定性：同图同参数两次调用逐值相等（协议 §7 铁律 2）
-    let a = post(&gw, "/detect/white_stats", json!({ "path": off.to_string_lossy() }));
-    let b = post(&gw, "/detect/white_stats", json!({ "path": off.to_string_lossy() }));
+    let a = post(
+        &gw,
+        "/detect/white_stats",
+        json!({ "path": off.to_string_lossy() }),
+    );
+    let b = post(
+        &gw,
+        "/detect/white_stats",
+        json!({ "path": off.to_string_lossy() }),
+    );
     assert_eq!(a.body, b.body);
 
     // band 越界 / 非整数 → 400；缺 path → 400；文件不存在 → 404
-    for bad in [json!({ "path": off.to_string_lossy(), "band": 0 }),
-                json!({ "path": off.to_string_lossy(), "band": "8" }),
-                json!({ "path": off.to_string_lossy(), "max_dev": 300 })] {
+    for bad in [
+        json!({ "path": off.to_string_lossy(), "band": 0 }),
+        json!({ "path": off.to_string_lossy(), "band": "8" }),
+        json!({ "path": off.to_string_lossy(), "max_dev": 300 }),
+    ] {
         let r = post(&gw, "/detect/white_stats", bad.clone());
         assert_eq!(r.status, 400, "{bad} → {}", r.body);
         assert_eq!(r.body["error"], "invalid_params");
     }
     let r = post(&gw, "/detect/white_stats", json!({}));
     assert_eq!(r.status, 400, "{}", r.body);
-    let r = post(&gw, "/detect/white_stats", json!({ "path": "/nonexistent/none.png" }));
+    let r = post(
+        &gw,
+        "/detect/white_stats",
+        json!({ "path": "/nonexistent/none.png" }),
+    );
     assert_eq!(r.status, 404, "{}", r.body);
     assert_eq!(r.body["error"], "asset_unreadable");
 }
@@ -641,16 +724,31 @@ fn detect_white_edge_needs_only_detect_white_capability() {
     let (tmp, work) = tmp_workdir("white-cap");
     use_empty_models_root();
     // 只授权 detect.white：白边可用，模型类端点仍 403（子集授权语义）
-    let gw = Gateway::start(
-        GatewayConfig::new(vec!["detect.white".into()], &work).with_token("t"),
-    )
-    .unwrap();
-    let img = make_border_png(tmp.path(), "pure_200x200.png", 200, [255, 255, 255], [0, 0, 0], 4);
-    let r = send(&gw, "POST", "/detect/white_stats", Some("t"),
-                 &json!({ "path": img.to_string_lossy() }).to_string());
+    let gw = Gateway::start(GatewayConfig::new(vec!["detect.white".into()], &work).with_token("t"))
+        .unwrap();
+    let img = make_border_png(
+        tmp.path(),
+        "pure_200x200.png",
+        200,
+        [255, 255, 255],
+        [0, 0, 0],
+        4,
+    );
+    let r = send(
+        &gw,
+        "POST",
+        "/detect/white_stats",
+        Some("t"),
+        &json!({ "path": img.to_string_lossy() }).to_string(),
+    );
     assert_eq!(r.status, 200, "{}", r.body);
-    let r = send(&gw, "POST", "/detect/bbox", Some("t"),
-                 &json!({ "path": img.to_string_lossy() }).to_string());
+    let r = send(
+        &gw,
+        "POST",
+        "/detect/bbox",
+        Some("t"),
+        &json!({ "path": img.to_string_lossy() }).to_string(),
+    );
     assert_eq!(r.status, 403, "{}", r.body);
     assert_eq!(r.body["capability"], "detect.u2net");
 }
@@ -663,15 +761,22 @@ fn detect_bbox_validates_params_before_model() {
 
     // target_ratio 越界/非数字 → 400（参数层，与模型是否可装无关）
     for bad in [json!(0), json!(1.5), json!("0.75"), json!(-0.2)] {
-        let r = post(&gw, "/detect/bbox",
-                     json!({ "path": img.to_string_lossy(), "target_ratio": bad }));
+        let r = post(
+            &gw,
+            "/detect/bbox",
+            json!({ "path": img.to_string_lossy(), "target_ratio": bad }),
+        );
         assert_eq!(r.status, 400, "{bad} → {}", r.body);
         assert_eq!(r.body["error"], "invalid_params");
     }
     // 缺 path → 400；文件不存在 → 404
     let r = post(&gw, "/detect/bbox", json!({}));
     assert_eq!(r.status, 400, "{}", r.body);
-    let r = post(&gw, "/detect/bbox", json!({ "path": "/nonexistent/none.png" }));
+    let r = post(
+        &gw,
+        "/detect/bbox",
+        json!({ "path": "/nonexistent/none.png" }),
+    );
     assert_eq!(r.status, 404, "{}", r.body);
 }
 
@@ -708,12 +813,19 @@ fn report_emit_is_accounted_per_job() {
     assert_eq!(b.len(), 1, "job-B 应收到 1 条");
     assert_eq!(a[0]["asset_id"], "a0");
     assert_eq!(b[0]["asset_id"], "b0");
-    assert_eq!(gw.emit_jobs(), vec!["job-A".to_string(), "job-B".to_string()]);
+    assert_eq!(
+        gw.emit_jobs(),
+        vec!["job-A".to_string(), "job-B".to_string()]
+    );
 
     // 参数非法 → 400
     let r = post(&gw, "/report/emit", json!({ "job_id": "", "entry": {} }));
     assert_eq!(r.status, 400);
-    let r = post(&gw, "/report/emit", json!({ "job_id": "job-C", "entry": "not-an-object" }));
+    let r = post(
+        &gw,
+        "/report/emit",
+        json!({ "job_id": "job-C", "entry": "not-an-object" }),
+    );
     assert_eq!(r.status, 400, "{}", r.body);
     // 失败的 emit 不能污染账本
     assert!(gw.emits("job-C").is_empty());
@@ -770,7 +882,9 @@ fn vl_judge_maps_backend_states_to_protocol() {
     assert_eq!(r.status, 403, "{}", r.body);
     assert_eq!(r.body["capability"], "vl.judge");
 
-    let stub = std::sync::Arc::new(StubVl { seen: Default::default() });
+    let stub = std::sync::Arc::new(StubVl {
+        seen: Default::default(),
+    });
     let gw = start_gateway_with_vl(&work, stub.clone());
 
     // 正常判定 → 200 + rules
@@ -784,7 +898,11 @@ fn vl_judge_maps_backend_states_to_protocol() {
     assert_eq!(r.body["rules"][0]["status"], "pass");
     assert_eq!(r.body["rules"][0]["label"], "apparel");
     assert_eq!(r.body["raw"], "{\"status\":\"pass\"}");
-    assert_eq!(stub.seen.lock().unwrap()[0].1, 512, "max_tokens 必须原样透传给后端");
+    assert_eq!(
+        stub.seen.lock().unwrap()[0].1,
+        512,
+        "max_tokens 必须原样透传给后端"
+    );
 
     // 后端说不可判 → 200 undetermined:true + reason（插件据此落 undetermined）
     let r = post(
@@ -796,7 +914,10 @@ fn vl_judge_maps_backend_states_to_protocol() {
     assert_eq!(r.body["undetermined"], true);
     assert_eq!(r.body["reason"], "vl_parse_failed");
     // 未给 max_tokens → 用协议上限
-    assert_eq!(stub.seen.lock().unwrap().last().unwrap().1, VL_MAX_TOKENS_CAP);
+    assert_eq!(
+        stub.seen.lock().unwrap().last().unwrap().1,
+        VL_MAX_TOKENS_CAP
+    );
 
     // 后端端点挂了（401/超时）→ 也是 undetermined，绝不冒充 pass/fail
     let r = post(
@@ -807,7 +928,10 @@ fn vl_judge_maps_backend_states_to_protocol() {
     assert_eq!(r.status, 200, "{}", r.body);
     assert_eq!(r.body["undetermined"], true);
     assert!(
-        r.body["reason"].as_str().unwrap_or("").starts_with("vl_unavailable"),
+        r.body["reason"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("vl_unavailable"),
         "{}",
         r.body
     );
@@ -828,10 +952,18 @@ fn vl_judge_maps_backend_states_to_protocol() {
     );
     assert_eq!(r.status, 400);
     // prompt 空 → 400
-    let r = post(&gw, "/vl/judge", json!({ "path": img.to_string_lossy(), "prompt": "" }));
+    let r = post(
+        &gw,
+        "/vl/judge",
+        json!({ "path": img.to_string_lossy(), "prompt": "" }),
+    );
     assert_eq!(r.status, 400);
     // 图不在盘 → 404
-    let r = post(&gw, "/vl/judge", json!({ "path": "/nope/x.png", "prompt": "p" }));
+    let r = post(
+        &gw,
+        "/vl/judge",
+        json!({ "path": "/nope/x.png", "prompt": "p" }),
+    );
     assert_eq!(r.status, 404);
 }
 
@@ -883,11 +1015,8 @@ fn undeclared_capability_is_denied_without_side_effects() {
     use_empty_models_root();
     // manifest 只声明 io.read + op.geometric（**没有** op.generative）
     let gw = Gateway::start(
-        GatewayConfig::new(
-            vec!["io.read".into(), "op.geometric".into()],
-            &work,
-        )
-        .with_token("test-token"),
+        GatewayConfig::new(vec!["io.read".into(), "op.geometric".into()], &work)
+            .with_token("test-token"),
     )
     .unwrap();
     let img = make_png(tmp.path(), "asset_400x300.png", 400, 300);
@@ -909,7 +1038,10 @@ fn undeclared_capability_is_denied_without_side_effects() {
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
         .filter(|n| n != "inpaint-out.png")
         .collect();
-    assert!(leftovers.is_empty(), "被拒的请求不允许留下任何中间文件：{leftovers:?}");
+    assert!(
+        leftovers.is_empty(),
+        "被拒的请求不允许留下任何中间文件：{leftovers:?}"
+    );
 
     // 同一包声明了 op.geometric → crop 放行（白名单是按能力放，不是一刀切拒）
     let ok = work.join("crop-ok.png");
@@ -940,7 +1072,13 @@ fn token_is_one_shot_per_gateway_instance() {
     // 第二代：新实例、新令牌；旧令牌立即失效（网关随包进程生命周期重建）
     let second = Gateway::start(GatewayConfig::new(caps(), &work)).unwrap();
     assert_ne!(second.token(), old_token, "每次启动必须换令牌");
-    let r = send(&second, "POST", "/io/read", Some(&old_token), &body.to_string());
+    let r = send(
+        &second,
+        "POST",
+        "/io/read",
+        Some(&old_token),
+        &body.to_string(),
+    );
     assert_eq!(r.status, 401, "旧令牌打新网关必须 401：{}", r.body);
     let r = post(&second, "/io/read", body);
     assert_eq!(r.status, 200, "新令牌必须可用：{}", r.body);

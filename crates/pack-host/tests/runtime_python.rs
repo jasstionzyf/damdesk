@@ -34,10 +34,7 @@ fn fixture_pack() -> PathBuf {
 
 /// 独立临时目录（不共享，避免并行用例互相踩）。
 fn work(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "dam-pack-runtime-{tag}-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("dam-pack-runtime-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("建临时目录");
     dir
@@ -150,7 +147,7 @@ fn fake_bundled_runtime_is_actually_spawned() {
         "被拉起的解释器不是内置 runtime：{recorded}"
     );
     assert!(
-        lines.iter().any(|l| *l == "-m") && lines.iter().any(|l| *l == "dampack_launcher"),
+        lines.contains(&"-m") && lines.contains(&"dampack_launcher"),
         "启动器装配参数不对：{recorded}"
     );
 

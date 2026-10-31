@@ -133,6 +133,7 @@ pub fn seed_defaults_if_absent(conn: &rusqlite::Connection) -> Result<bool, Stri
 /// 带调用方默认值的 seeding 变体（W7：桌面壳传本地 onnx，容器走 web 默认远程；
 /// WIN-PRE2：tag 默认 provider 同样按形态分支——桌面 deepseek 公网 / 容器 dam-ai）。
 /// 优先级：env DAM_WEB_EMBEDDER > default_embedder 参数 > web 默认（openai-compat-embedding）。
+#[allow(clippy::field_reassign_with_default)] // env 覆盖链式装配（条件默认值穿插其间），结构化初始化反而绕
 pub fn seed_defaults_opts(
     conn: &rusqlite::Connection,
     default_embedder: Option<&str>,
@@ -179,10 +180,7 @@ pub fn seed_defaults_opts(
             "deepseek-flash",
         )
     } else {
-        (
-            "http://host.docker.internal:8091/v1",
-            "qwen3.5-4b",
-        )
+        ("http://host.docker.internal:8091/v1", "qwen3.5-4b")
     };
     s.tag.base_url = env_or("DAM_WEB_TAG_BASE_URL", tag_url_default);
     s.tag.model = env_or("DAM_WEB_TAG_MODEL", tag_model_default);
@@ -288,7 +286,11 @@ impl ProviderCache {
     }
 
     /// 取当前嵌入器（缓存命中即复用；指纹 = active_embedder|base_url|model|dims|api_key）。
-    pub fn get(&self, conn: &rusqlite::Connection, models_root: &Path) -> Result<WebEmbedder, String> {
+    pub fn get(
+        &self,
+        conn: &rusqlite::Connection,
+        models_root: &Path,
+    ) -> Result<WebEmbedder, String> {
         let s = load_settings(conn);
         let key = format!(
             "{}|{}|{}|{}|{}",
@@ -410,9 +412,14 @@ mod tests {
     fn embeddings_test_route_key_prefix_matches_spec_name() {
         let r = reg();
         let remote = r.by_name("openai-compat-embedding").unwrap().clone();
-        let mut s = InferenceSettings::default();
-        s.active_embedder = "openai-compat-embedding".into();
-        s.embedding.model = "qwen3-vl-embedding-2b".into();
+        let s = InferenceSettings {
+            active_embedder: "openai-compat-embedding".into(),
+            embedding: core_config::RemoteEmbedSettings {
+                model: "qwen3-vl-embedding-2b".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let key = vector_model_key(&remote, &s);
         assert_eq!(key, "openai-compat-embedding:qwen3-vl-embedding-2b");
         assert_eq!(key.split(':').next().unwrap(), remote.name);

@@ -80,11 +80,9 @@ async fn smart_folder_count_matches_gallery_total() {
         app.clone(),
         "POST",
         "/api/smart-folders",
-        Some(
-            format!(
-                r#"{{"name":"精选雪山","query":{{"dirPrefix":"{PICKED}","tag":"雪山"}}}}"#
-            ),
-        ),
+        Some(format!(
+            r#"{{"name":"精选雪山","query":{{"dirPrefix":"{PICKED}","tag":"雪山"}}}}"#
+        )),
     )
     .await;
     assert_eq!(s, axum::http::StatusCode::OK, "{v}");
@@ -107,7 +105,10 @@ async fn smart_folder_count_matches_gallery_total() {
     let applied_total = applied["total"].as_i64().unwrap();
 
     println!("保存时 count = {saved_count}；应用后 total = {applied_total}（文件夹 id={fid}）");
-    assert_eq!(saved_count, 2, "目录 + 标签条件应命中 2 张（别的目录的同名标签不算）");
+    assert_eq!(
+        saved_count, 2,
+        "目录 + 标签条件应命中 2 张（别的目录的同名标签不算）"
+    );
     assert_eq!(
         saved_count, applied_total,
         "同一条件两次查询必须同口径 —— 否则图库会假报「条件已变」"

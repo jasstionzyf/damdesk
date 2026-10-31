@@ -26,7 +26,7 @@
 
 use std::collections::HashMap;
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 use crate::{Result, StorageError};
 
@@ -273,9 +273,11 @@ pub fn needs_sync(conn: &Connection) -> Result<bool> {
     if v.as_deref() != Some(SEGMENT_VERSION) {
         return Ok(true);
     }
-    let exists: i64 = conn.query_row("SELECT EXISTS(SELECT 1 FROM ocr_fts_dirty LIMIT 1)", [], |r| {
-        r.get(0)
-    })?;
+    let exists: i64 = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM ocr_fts_dirty LIMIT 1)",
+        [],
+        |r| r.get(0),
+    )?;
     Ok(exists != 0)
 }
 
@@ -361,7 +363,9 @@ pub fn explain_query_plan(conn: &Connection, terms: &[String], cap: usize) -> Re
         "EXPLAIN QUERY PLAN SELECT rowid FROM ocr_fts WHERE ocr_fts MATCH ?1 LIMIT ?2"
     };
     let mut stmt = conn.prepare(sql)?;
-    let rows = stmt.query_map(params![match_query(&term), cap as i64], |r| r.get::<_, String>(3))?;
+    let rows = stmt.query_map(params![match_query(&term), cap as i64], |r| {
+        r.get::<_, String>(3)
+    })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
@@ -405,7 +409,9 @@ mod tests {
         // 4 个单字 + 3 个 2-gram
         assert_eq!(
             t,
-            vec!["数", "字", "资", "产", "管", "理", "数字", "字资", "资产", "产管", "管理"]
+            vec![
+                "数", "字", "资", "产", "管", "理", "数字", "字资", "资产", "产管", "管理"
+            ]
         );
     }
 
@@ -475,9 +481,15 @@ mod tests {
         assert_eq!(term_hits(&c, "资产", 10).unwrap(), vec![1]);
 
         // 绕过应用的 SQL 改写（陈旧命中必须当场消失，而不是等 sync）
-        c.execute("UPDATE assets SET ocr_text = '无关内容' WHERE assetId = 1", [])
-            .unwrap();
-        assert!(term_hits(&c, "资产", 10).unwrap().is_empty(), "旧索引行已由触发器撤掉");
+        c.execute(
+            "UPDATE assets SET ocr_text = '无关内容' WHERE assetId = 1",
+            [],
+        )
+        .unwrap();
+        assert!(
+            term_hits(&c, "资产", 10).unwrap().is_empty(),
+            "旧索引行已由触发器撤掉"
+        );
         assert_eq!(dirty_count(&c).unwrap(), 1);
         // 下一次 open 式探测自愈
         assert!(needs_sync(&c).unwrap());
@@ -495,26 +507,40 @@ mod tests {
         assert_eq!(match_counts(&c, &terms, 10).unwrap().len(), 2);
 
         // 软删除：索引行由触发器撤掉（索引只保留「未删且带文本」的资产），并标 dirty
-        c.execute("UPDATE assets SET deleted = 1 WHERE assetId = 1", []).unwrap();
+        c.execute("UPDATE assets SET deleted = 1 WHERE assetId = 1", [])
+            .unwrap();
         assert_eq!(
             match_counts(&c, &terms, 10).unwrap(),
             vec![(2, terms.len())]
         );
-        assert_eq!(dirty_count(&c).unwrap(), 1, "软删除 → 待建标记（sync 会按 deleted 收敛）");
+        assert_eq!(
+            dirty_count(&c).unwrap(),
+            1,
+            "软删除 → 待建标记（sync 会按 deleted 收敛）"
+        );
         assert_eq!(sync_if_dirty(&c).unwrap(), 1);
         assert_eq!(dirty_count(&c).unwrap(), 0);
         assert!(
-            match_counts(&c, &terms, 10).unwrap().iter().all(|(id, _)| *id != 1),
+            match_counts(&c, &terms, 10)
+                .unwrap()
+                .iter()
+                .all(|(id, _)| *id != 1),
             "已删资产不得因 sync 回到索引"
         );
 
         // 恢复：deleted 0 → 重新标 dirty → sync 重建索引行
-        c.execute("UPDATE assets SET deleted = 0 WHERE assetId = 1", []).unwrap();
+        c.execute("UPDATE assets SET deleted = 0 WHERE assetId = 1", [])
+            .unwrap();
         assert_eq!(sync_if_dirty(&c).unwrap(), 1);
-        assert_eq!(match_counts(&c, &terms, 10).unwrap().len(), 2, "恢复后重新可搜");
+        assert_eq!(
+            match_counts(&c, &terms, 10).unwrap().len(),
+            2,
+            "恢复后重新可搜"
+        );
 
         // 硬删除：索引行与待建标记都由触发器清掉
-        c.execute("DELETE FROM assets WHERE assetId = 2", []).unwrap();
+        c.execute("DELETE FROM assets WHERE assetId = 2", [])
+            .unwrap();
         assert_eq!(match_counts(&c, &terms, 10).unwrap().len(), 1);
         assert_eq!(dirty_count(&c).unwrap(), 0, "物理删除不需要重建");
     }
@@ -535,7 +561,11 @@ mod tests {
         assert!(term_match_count(&c, "发票").unwrap() > RANK_BUDGET as i64);
         let got = match_counts(&c, &terms, 10).unwrap();
         let ids: Vec<i64> = got.iter().map(|(i, _)| *i).collect();
-        assert_eq!(ids, (1..=10).collect::<Vec<i64>>(), "大命中面 → rowid 序头部");
+        assert_eq!(
+            ids,
+            (1..=10).collect::<Vec<i64>>(),
+            "大命中面 → rowid 序头部"
+        );
     }
 
     #[test]
@@ -555,7 +585,10 @@ mod tests {
         // 候选上限：每个 term 只取 rank 头部 cap 条
         let capped = match_counts(&c, &terms, 1).unwrap();
         assert!(capped.iter().all(|(_, n)| *n <= 2));
-        assert!(capped.len() <= 2, "两 term 各 1 条 → 至多 2 个候选：{capped:?}");
+        assert!(
+            capped.len() <= 2,
+            "两 term 各 1 条 → 至多 2 个候选：{capped:?}"
+        );
     }
 
     #[test]
@@ -607,7 +640,8 @@ mod tests {
         let c = setup();
         insert_asset(&c, 1, "发票号 8891");
         insert_asset(&c, 2, "已删除");
-        c.execute("UPDATE assets SET deleted = 1 WHERE assetId = 2", []).unwrap();
+        c.execute("UPDATE assets SET deleted = 1 WHERE assetId = 2", [])
+            .unwrap();
         let got = texts(&c, &[1, 2, 999]).unwrap();
         assert_eq!(got, vec![(1, "发票号 8891".to_string())]);
     }

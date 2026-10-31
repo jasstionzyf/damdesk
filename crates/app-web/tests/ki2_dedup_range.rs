@@ -71,10 +71,7 @@ fn seed_db(path: &PathBuf) -> Connection {
 }
 
 fn state(conn: Connection) -> app_web::AppState {
-    app_web::test_support::state(
-        PathBuf::from(std::env::temp_dir().join("ki2-dedup-data")),
-        conn,
-    )
+    app_web::test_support::state(std::env::temp_dir().join("ki2-dedup-data"), conn)
 }
 
 async fn get_raw(app: axum::Router, uri: &str) -> (u16, String, String) {
@@ -88,7 +85,9 @@ async fn get_raw(app: axum::Router, uri: &str) -> (u16, String, String) {
         .get("content-type")
         .map(|v| v.to_str().unwrap_or("").to_string())
         .unwrap_or_default();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, ctype, String::from_utf8_lossy(&body).to_string())
 }
 
@@ -113,7 +112,9 @@ async fn post_json(app: axum::Router, uri: &str, body: &str) -> (u16, serde_json
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
@@ -182,11 +183,7 @@ async fn groups_range_all_dir_ids_batch() {
     assert_eq!(j["kindCounts"]["variant"], 1);
 
     // 文件夹范围（dirA 里有 1、2、4、5）：只剩 exact{1,2}（其余组在 dirA 内不足 2 张）
-    let (st, j) = get_json(
-        app.clone(),
-        "/api/dedup/groups?range=dir:%2Flib%2FdirA",
-    )
-    .await;
+    let (st, j) = get_json(app.clone(), "/api/dedup/groups?range=dir:%2Flib%2FdirA").await;
     assert_eq!(st, 200, "dir 范围失败: {j}");
     assert_eq!(j["rangeMeta"]["kind"], "dir");
     assert_eq!(j["totalGroups"], 1, "dirA 内应只剩精确重复组: {j}");
@@ -255,7 +252,10 @@ async fn ignore_hides_group_and_unignore_restores_it() {
 
     // 忽略与否和「当前看的范围」无关：dir 范围下也必须还是 1 组（exact）
     let (_, dirj) = get_json(app.clone(), "/api/dedup/groups?range=dir:%2Flib%2FdirA").await;
-    assert_eq!(dirj["totalGroups"], 1, "dir 范围不应让已忽略的组复活: {dirj}");
+    assert_eq!(
+        dirj["totalGroups"], 1,
+        "dir 范围不应让已忽略的组复活: {dirj}"
+    );
 
     // 撤销忽略 → 复现
     let body = format!(r#"{{"signatures":["{sig}"]}}"#);
@@ -281,7 +281,10 @@ async fn export_has_algorithm_metadata_and_rows() {
 
     let (st, ctype, csv) = get_raw(app.clone(), "/api/dedup/export?format=csv").await;
     assert_eq!(st, 200, "导出失败: {csv}");
-    assert!(ctype.starts_with("text/csv"), "content-type 应为 text/csv: {ctype}");
+    assert!(
+        ctype.starts_with("text/csv"),
+        "content-type 应为 text/csv: {ctype}"
+    );
     // 元数据：算法 + 阈值 + 视觉塔模型（KI-6：只进报告，不进界面）
     assert!(csv.contains("# algorithm="), "缺算法元数据: {csv}");
     assert!(
@@ -289,8 +292,14 @@ async fn export_has_algorithm_metadata_and_rows() {
         "缺视觉塔模型元数据: {csv}"
     );
     assert!(csv.contains("phashThreshold=8"), "缺 pHash 阈值: {csv}");
-    assert!(csv.contains("variantThreshold=0.9"), "缺 variant 阈值: {csv}");
-    assert!(csv.contains("groupId,kind,size,keepAssetId"), "缺表头: {csv}");
+    assert!(
+        csv.contains("variantThreshold=0.9"),
+        "缺 variant 阈值: {csv}"
+    );
+    assert!(
+        csv.contains("groupId,kind,size,keepAssetId"),
+        "缺表头: {csv}"
+    );
     assert!(csv.contains("/lib/dirA/1.jpg"), "缺成员行: {csv}");
     assert!(csv.contains("variant"), "variant 组要进报告: {csv}");
 
@@ -333,7 +342,10 @@ async fn scan_capability_matches_form() {
         "容器形态不得承诺读本机库外路径（UI 要隐藏入口，不灰置）"
     );
     let desk_feats = svc_library::capabilities::evaluate_features(true, &[]);
-    assert!(desk_feats.scan_external_path, "桌面形态必须可用（否则库外扫描永远进不去）");
+    assert!(
+        desk_feats.scan_external_path,
+        "桌面形态必须可用（否则库外扫描永远进不去）"
+    );
 
     // ② HTTP 层：能力位必须与进程形态同源（不出现「接口说能、UI 不敢显示」这种错位）
     let desktop = app_web::is_desktop_form();

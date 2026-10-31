@@ -248,8 +248,9 @@ struct RawSpec {
 impl ParamSchema {
     /// 从字节解析 + 校验（安装期与读取 schema 接口共用这一条）。
     pub fn parse(raw: &[u8]) -> Result<Self, ParamError> {
-        let raw: RawSchema = serde_json::from_slice(raw)
-            .map_err(|e| ParamError::Schema(format!("JSON 解析失败（未知键/缺字段/类型错即拒）：{e}")))?;
+        let raw: RawSchema = serde_json::from_slice(raw).map_err(|e| {
+            ParamError::Schema(format!("JSON 解析失败（未知键/缺字段/类型错即拒）：{e}"))
+        })?;
         Self::from_raw(raw)
     }
 
@@ -420,8 +421,7 @@ impl ParamSchema {
             let map = layer_map(name, *value)?;
             typed.push((*name, map));
         }
-        let refs: Vec<(&str, &Map<String, Value>)> =
-            typed.iter().map(|(n, m)| (*n, m)).collect();
+        let refs: Vec<(&str, &Map<String, Value>)> = typed.iter().map(|(n, m)| (*n, m)).collect();
         self.resolve(&refs)
     }
 
@@ -475,11 +475,7 @@ impl ParamSchema {
 impl RawSchema {}
 
 impl RawSpec {
-    fn into_spec(
-        self,
-        key: &str,
-        groups: &[&str],
-    ) -> Result<ParamSpec, ParamError> {
+    fn into_spec(self, key: &str, groups: &[&str]) -> Result<ParamSpec, ParamError> {
         if RESERVED_KEYS.contains(&key) {
             return Err(ParamError::Schema(format!(
                 "参数键 {key} 是宿主保留键（{}），插件不许声明",
@@ -560,9 +556,8 @@ impl RawSpec {
             affects_body: self.affects_body,
         };
         if let Some(default) = &spec.default {
-            validate_value(&spec, default).map_err(|e| {
-                ParamError::Schema(format!("参数 {key} 的默认值不合法：{e}"))
-            })?;
+            validate_value(&spec, default)
+                .map_err(|e| ParamError::Schema(format!("参数 {key} 的默认值不合法：{e}")))?;
         }
         Ok(spec)
     }
@@ -748,9 +743,7 @@ pub fn layer_map(name: &str, value: Option<&Value>) -> Result<Map<String, Value>
 ///
 /// 协议 v1.1 的 `options` 语义不变（由包解释）；宿主只保证「后层覆盖前层」，
 /// 与有 schema 时的层序一致，插件换到 v2 声明时行为连续。
-pub fn merge_layers(
-    layers: &[(&str, Option<&Value>)],
-) -> Result<Map<String, Value>, ParamError> {
+pub fn merge_layers(layers: &[(&str, Option<&Value>)]) -> Result<Map<String, Value>, ParamError> {
     let mut out = Map::new();
     for (name, value) in layers {
         for (k, v) in layer_map(name, *value)? {
@@ -956,7 +949,9 @@ mod tests {
         v["properties"]["watermark"] = json!({"type": "asset_ref", "title": "水印"});
         v["required"] = json!(["format", "watermark"]);
         let s = ParamSchema::parse(v.to_string().as_bytes()).unwrap();
-        let err = s.resolve_json(&[("任务", Some(&empty_value()))]).unwrap_err();
+        let err = s
+            .resolve_json(&[("任务", Some(&empty_value()))])
+            .unwrap_err();
         assert_eq!(err.code(), "params_required");
         assert!(err.to_string().contains("watermark"), "{err}");
         // 给了就过

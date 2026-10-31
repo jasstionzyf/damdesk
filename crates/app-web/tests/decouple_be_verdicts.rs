@@ -17,7 +17,7 @@ use rusqlite::Connection;
 use std::path::PathBuf;
 use tower::ServiceExt;
 
-fn seed(dir: &PathBuf) -> Connection {
+fn seed(dir: &std::path::Path) -> Connection {
     let _ = std::fs::remove_file(dir.join("dam.db"));
     let conn = core_storage::open(&dir.join("dam.db")).unwrap();
     // 三张真实文件（导出要用真路径；内容不重要，Original 模式只拷贝字节）
@@ -94,8 +94,13 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null))
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 async fn post(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_json::Value) {
@@ -107,8 +112,13 @@ async fn post(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_json::Va
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null))
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 fn tmpdir(tag: &str) -> PathBuf {
@@ -147,7 +157,10 @@ async fn gallery_domain_has_no_judgement_surface() {
     }
     // 顶层也不该出现判定汇总
     for key in ["states", "compliance", "verdicts"] {
-        assert!(body.get(key).is_none(), "图库列表不得带判定汇总 {key}: {body}");
+        assert!(
+            body.get(key).is_none(),
+            "图库列表不得带判定汇总 {key}: {body}"
+        );
     }
 
     // 判定维度过滤已迁走：400 + 稳定错误码 + 指路
@@ -288,7 +301,10 @@ async fn job_scoped_composition_and_content_version_invalidation() {
     let a1 = by_id(&body, 1);
     assert_eq!(a1["effectiveStatus"], "fail", "内容变了，人审失效: {body}");
     assert_eq!(a1["override"], serde_json::Value::Null, "{body}");
-    assert_eq!(a1["overrideStale"], true, "界面要能看到「为什么失效」: {body}");
+    assert_eq!(
+        a1["overrideStale"], true,
+        "界面要能看到「为什么失效」: {body}"
+    );
     assert_eq!(body["staleOverrides"], 1, "{body}");
 
     // 新内容上重新改判 → 再次生效（旧行仍在历史里，标 contentStale）

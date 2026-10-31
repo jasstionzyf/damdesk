@@ -162,7 +162,7 @@ async fn e3_folder_results_are_dynamic_with_color_and_combinations() {
         ),
     )
     .await;
-    let fid = v["id"].as_i64().unwrap();
+    let _fid = v["id"].as_i64().unwrap();
 
     // 库里有 1 张命中（绿狗5星）+ 2 张不命中
     {

@@ -41,7 +41,8 @@ fn install_models_root() -> Option<PathBuf> {
             if !src.join("u2net").is_dir() {
                 return None;
             }
-            let root = std::env::temp_dir().join(format!("segment-e2e-models-{}", std::process::id()));
+            let root =
+                std::env::temp_dir().join(format!("segment-e2e-models-{}", std::process::id()));
             std::fs::create_dir_all(root.join("models")).ok()?;
             let link = root.join("models").join("u2net");
             if !link.exists() {
@@ -110,7 +111,9 @@ fn start() -> Option<Harness> {
     install_models_root()?;
     let work = tempfile::tempdir().expect("临时工作目录");
     let pack_dir = repo_root().join(PACK);
-    let manifest = pack_host::load_pack(&pack_dir).expect("抠图包 manifest 必须合法").0;
+    let manifest = pack_host::load_pack(&pack_dir)
+        .expect("抠图包 manifest 必须合法")
+        .0;
     let gw = Gateway::start(
         GatewayConfig::from_manifest(&manifest, work.path()).with_token("segment-e2e"),
     )
@@ -118,7 +121,11 @@ fn start() -> Option<Harness> {
     let mut cfg = PackHostConfig::new(gw.base_url(), gw.token(), work.path());
     cfg.runtime_python = Some(PathBuf::from("python3"));
     let host = PackHost::open(&pack_dir, cfg).expect("抠图包打不开（health 握手失败？）");
-    Some(Harness { gw, host, _work: work })
+    Some(Harness {
+        gw,
+        host,
+        _work: work,
+    })
 }
 
 impl Harness {
@@ -132,7 +139,10 @@ impl Harness {
             "options": opts,
         });
         let reply = self.host.call("judge", params).expect("judge 调用失败");
-        let rows = reply.get("rows").and_then(Value::as_array).expect("缺 rows");
+        let rows = reply
+            .get("rows")
+            .and_then(Value::as_array)
+            .expect("缺 rows");
         assert_eq!(rows.len(), 1, "一个资产一次调用只应回一行");
         rows[0].clone()
     }
@@ -153,7 +163,10 @@ impl Harness {
             img.as_raw(),
             w,
             h,
-            &engine_classic::detectors::WhiteEdgeParams { max_dev: 3.0, band: 4 },
+            &engine_classic::detectors::WhiteEdgeParams {
+                max_dev: 3.0,
+                band: 4,
+            },
         )
         .expect("white_edge 计算失败");
         (report.mean_dev, report.max_dev, report.band as i64)
@@ -170,8 +183,12 @@ fn sha256_file(path: &str) -> String {
 
 /// 主体完整度用**直接像素对账**（不用「重跑一次 u2net」，见测试内注释）。
 /// 返回 `(掩码主体像素数, 与源图差 > tol 的像素数)`。
-fn damage_count(mask: &image::GrayImage, out: &image::RgbImage, src: &image::RgbImage,
-                tol: i32) -> (usize, usize) {
+fn damage_count(
+    mask: &image::GrayImage,
+    out: &image::RgbImage,
+    src: &image::RgbImage,
+    tol: i32,
+) -> (usize, usize) {
     let (w, hgt) = src.dimensions();
     assert_eq!(mask.dimensions(), src.dimensions(), "掩码必须与源图同尺寸");
     assert_eq!(out.dimensions(), src.dimensions(), "产物必须与源图同尺寸");
@@ -203,9 +220,13 @@ fn baseline_jpeg(h: &Harness, src_path: &str, tag: &str) -> String {
     let dir = h._work.path().join("baseline");
     std::fs::create_dir_all(&dir).unwrap();
     let out = dir.join(format!("{tag}.jpg"));
-    let (status, body) = http_post(&h.gw, "/op/crop", json!({
-        "path": src_path, "box": [0, 0, w, hgt], "out": out.to_string_lossy(),
-    }));
+    let (status, body) = http_post(
+        &h.gw,
+        "/op/crop",
+        json!({
+            "path": src_path, "box": [0, 0, w, hgt], "out": out.to_string_lossy(),
+        }),
+    );
     assert_eq!(status, 200, "基线重编码失败：{body}");
     out.to_string_lossy().to_string()
 }
@@ -254,12 +275,18 @@ fn white_bg_fill_corpus_all_pass_and_idempotent() {
                 failures.push(format!("{name}: 意外的 skipReason={reason}"));
                 continue;
             }
-            if !row.get("artifacts").and_then(Value::as_array).map(|a| a.is_empty()).unwrap_or(true) {
+            if !row
+                .get("artifacts")
+                .and_then(Value::as_array)
+                .map(|a| a.is_empty())
+                .unwrap_or(true)
+            {
                 failures.push(format!("{name}: 跳过却带产物（跳过 = 不产生新工作版本）"));
             }
             if label_in > 3.0 || in_worst > 3.0 {
                 failures.push(format!(
-                    "{name}: 输入不是白底却跳过（label in_bg_dev_max={label_in}, 实测 {in_worst}）"));
+                    "{name}: 输入不是白底却跳过（label in_bg_dev_max={label_in}, 实测 {in_worst}）"
+                ));
             }
             let again = h.judge(&name, &path, json!({ "bgMode": "white", "feather": 2 }));
             if again.get("skipReason").and_then(Value::as_str) != Some("already_white") {
@@ -297,10 +324,14 @@ fn white_bg_fill_corpus_all_pass_and_idempotent() {
         //   产物里多出来的差异才是本包刷白刷掉的像素。
         let (status, body) = http_post(&h.gw, "/detect/u2net", json!({ "path": path }));
         assert_eq!(status, 200, "u2net 失败：{body}");
-        let mask = image::open(body["mask_path"].as_str().unwrap()).expect("解宿主掩码").to_luma8();
+        let mask = image::open(body["mask_path"].as_str().unwrap())
+            .expect("解宿主掩码")
+            .to_luma8();
         let src_img = image::open(&path).expect("解原图").to_rgb8();
         let out_img = image::open(&out_path).expect("解产物").to_rgb8();
-        let base = image::open(baseline_jpeg(&h, &path, &name)).expect("解基线").to_rgb8();
+        let base = image::open(baseline_jpeg(&h, &path, &name))
+            .expect("解基线")
+            .to_rgb8();
         let (subject_px, damaged_px) = damage_count(&mask, &out_img, &src_img, 12);
         let (_base_subject, base_damaged) = damage_count(&mask, &base, &src_img, 12);
         let extra_damaged = damaged_px.saturating_sub(base_damaged);
@@ -312,7 +343,10 @@ fn white_bg_fill_corpus_all_pass_and_idempotent() {
 
         // 幂等：同参数重跑 → 同字节
         let again = h.judge(&name, &path, json!({ "bgMode": "white", "feather": 2 }));
-        let sha2 = again["artifacts"][0]["sha256"].as_str().unwrap_or("").to_string();
+        let sha2 = again["artifacts"][0]["sha256"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
         let idempotent = sha == sha2;
 
         if worst_dev > out_dev_max {
@@ -342,7 +376,11 @@ fn white_bg_fill_corpus_all_pass_and_idempotent() {
         println!("SEG_METRIC {}", serde_json::to_string(&entry).unwrap());
         table.insert(name, entry);
     }
-    assert!(failures.is_empty(), "white_bg_fill 有 FAIL：\n{}", failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "white_bg_fill 有 FAIL：\n{}",
+        failures.join("\n")
+    );
     let expected_skips = items
         .iter()
         .filter(|i| i["expect"]["in_bg_dev_max"].as_f64().unwrap_or(255.0) <= 3.0)
@@ -359,12 +397,22 @@ fn white_bg_fill_corpus_all_pass_and_idempotent() {
         .unwrap()
         .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().to_string()))
         .collect();
-    assert_eq!(files.len(), produced, "out 目录里的产物数应等于「真的刷了」的张数，实得 {files:?}");
-    assert!(files.iter().all(|f| f.ends_with(".jpg")), "白底模式产物应为 jpg：{files:?}");
-    println!("SEG_SUMMARY {}", json!({
-        "need": "white_bg_fill", "pass": produced + skipped, "fail": 0,
-        "produced": produced, "skippedAlreadyWhite": skipped,
-    }));
+    assert_eq!(
+        files.len(),
+        produced,
+        "out 目录里的产物数应等于「真的刷了」的张数，实得 {files:?}"
+    );
+    assert!(
+        files.iter().all(|f| f.ends_with(".jpg")),
+        "白底模式产物应为 jpg：{files:?}"
+    );
+    println!(
+        "SEG_SUMMARY {}",
+        json!({
+            "need": "white_bg_fill", "pass": produced + skipped, "fail": 0,
+            "produced": produced, "skippedAlreadyWhite": skipped,
+        })
+    );
 }
 
 #[test]
@@ -381,31 +429,48 @@ fn second_application_on_own_output_is_skipped() {
     let path = file.to_string_lossy().to_string();
     let first = h.judge("wbf_07", &path, json!({ "bgMode": "white", "feather": 2 }));
     assert_eq!(first["result"], "ok", "{first}");
-    assert!(first.get("skipReason").is_none(),
-            "输入是「白底图贴到有色背景」的派生图，第一次必须真刷，不许跳过：{first}");
-    let out_path = first["artifacts"][0]["path"].as_str().expect("artifact path").to_string();
+    assert!(
+        first.get("skipReason").is_none(),
+        "输入是「白底图贴到有色背景」的派生图，第一次必须真刷，不许跳过：{first}"
+    );
+    let out_path = first["artifacts"][0]["path"]
+        .as_str()
+        .expect("artifact path")
+        .to_string();
     let sha_before = sha256_file(&out_path);
 
-    let second = h.judge("wbf_07-again", &out_path, json!({ "bgMode": "white", "feather": 2 }));
+    let second = h.judge(
+        "wbf_07-again",
+        &out_path,
+        json!({ "bgMode": "white", "feather": 2 }),
+    );
     assert_eq!(second["result"], "ok", "{second}");
-    assert_eq!(second["skipReason"], "already_white",
-               "白底化对白底产物必须是 no-op（旧行为会重刷、吃掉主体）：{second}");
-    let empty = second.get("artifacts").and_then(Value::as_array)
-        .map(|a| a.is_empty()).unwrap_or(true);
+    assert_eq!(
+        second["skipReason"], "already_white",
+        "白底化对白底产物必须是 no-op（旧行为会重刷、吃掉主体）：{second}"
+    );
+    let empty = second
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .map(|a| a.is_empty())
+        .unwrap_or(true);
     assert!(empty, "跳过 = 不产生新工作版本：{second}");
     assert_eq!(sha256_file(&out_path), sha_before, "原产物一个字节都不许动");
     let ev = &second["evidence"];
     assert_eq!(ev["inputBorderDev"], 0.0, "产物边框带必须实测为纯白：{ev}");
-    println!("SEG_METRIC {}", json!({
-        "case": "second_application_on_own_output",
-        "file": "wbf_07",
-        "firstSha256": sha_before,
-        "secondSkipReason": second["skipReason"],
-        "secondArtifacts": second.get("artifacts").cloned().unwrap_or(json!([])),
-        "inputBorderDev": ev["inputBorderDev"],
-        "bgBlockMeanDev": ev["bgBlockMeanDev"],
-        "bandPx": ev["inputBorderBandPx"],
-    }));
+    println!(
+        "SEG_METRIC {}",
+        json!({
+            "case": "second_application_on_own_output",
+            "file": "wbf_07",
+            "firstSha256": sha_before,
+            "secondSkipReason": second["skipReason"],
+            "secondArtifacts": second.get("artifacts").cloned().unwrap_or(json!([])),
+            "inputBorderDev": ev["inputBorderDev"],
+            "bgBlockMeanDev": ev["bgBlockMeanDev"],
+            "bandPx": ev["inputBorderBandPx"],
+        })
+    );
 }
 
 #[test]
@@ -418,15 +483,20 @@ fn transparent_output_has_alpha_and_no_white_halo() {
     // 取三张不同尺寸/背景色的真实图（不是合成图）。
     // 注意：wbf_09 / wbf_10 是**原生白底图**（label in_bg_dev_max=0）——它们在白底模式下会被
     // 守卫②跳过，这里出透明 PNG 仍然必须真跑：守卫② 只作用于「目标底色是纯白」的那件事。
-    let picks = ["process/white_bg_fill/wbf_09.jpg",
-                 "process/white_bg_fill/wbf_10.jpg",
-                 "process/white_bg_fill/wbf_01.jpg"];
+    let picks = [
+        "process/white_bg_fill/wbf_09.jpg",
+        "process/white_bg_fill/wbf_10.jpg",
+        "process/white_bg_fill/wbf_01.jpg",
+    ];
     let mut checked = 0usize;
     for rel in picks {
         let file = corpus.join(rel);
         let path = file.to_string_lossy().to_string();
-        let row = h.judge(file.file_name().unwrap().to_str().unwrap(), &path,
-                          json!({ "bgMode": "transparent", "feather": 4 }));
+        let row = h.judge(
+            file.file_name().unwrap().to_str().unwrap(),
+            &path,
+            json!({ "bgMode": "transparent", "feather": 4 }),
+        );
         assert_eq!(row["result"], "ok", "{rel}: {row}");
         let out_path = row["artifacts"][0]["path"].as_str().unwrap().to_string();
         assert!(out_path.ends_with(".png"), "透明输出必须是 PNG：{out_path}");
@@ -438,9 +508,9 @@ fn transparent_output_has_alpha_and_no_white_halo() {
         let mut partial = 0usize;
         let mut opaque = 0usize;
         let mut transparent = 0usize;
-        let mut whitened = 0usize;   // 半透明像素的 RGB 被背景「漂白」的个数
+        let mut whitened = 0usize; // 半透明像素的 RGB 被背景「漂白」的个数
         let mut max_channel_diff = 0u32;
-        let mut halo = 0usize;       // 原图自身边缘就偏白的个数（上传图自带，不是本包造的）
+        let mut halo = 0usize; // 原图自身边缘就偏白的个数（上传图自带，不是本包造的）
         for y in 0..hh {
             for x in 0..w {
                 let p = img.get_pixel(x, y);
@@ -457,8 +527,11 @@ fn transparent_output_has_alpha_and_no_white_halo() {
                     if (0..3).all(|i| p[i] as i32 > s[i] as i32 + 1) {
                         whitened += 1;
                         if whitened <= 5 {
-                            eprintln!("WHITEN {rel} ({x},{y}) out={:?} src={:?} a={a}",
-                                      (p[0], p[1], p[2]), (s[0], s[1], s[2]));
+                            eprintln!(
+                                "WHITEN {rel} ({x},{y}) out={:?} src={:?} a={a}",
+                                (p[0], p[1], p[2]),
+                                (s[0], s[1], s[2])
+                            );
                         }
                     }
                     let dmax = (0..3)
@@ -475,16 +548,23 @@ fn transparent_output_has_alpha_and_no_white_halo() {
         assert!(transparent > 0, "{rel}: 背景必须透明");
         assert!(opaque > 0, "{rel}: 主体必须不透明");
         assert!(partial > 0, "{rel}: 边缘必须有 alpha 斜坡（抗锯齿）");
-        assert_eq!(whitened, 0,
-                   "{rel}: {whitened} 个半透明像素被背景刷亮（白边根因）");
-        assert!(max_channel_diff <= 3,
-                "{rel}: 半透明像素与源图最大通道差 {max_channel_diff} > 3（RGB 被污染）");
-        println!("SEG_METRIC {}", json!({
-            "file": rel, "mode": "transparent", "width": w, "height": hh,
-            "opaque": opaque, "partial": partial, "transparent": transparent,
-            "whitenedPixels": whitened, "maxChannelDiff": max_channel_diff,
-            "sourceSideNearWhiteEdge": halo,
-        }));
+        assert_eq!(
+            whitened, 0,
+            "{rel}: {whitened} 个半透明像素被背景刷亮（白边根因）"
+        );
+        assert!(
+            max_channel_diff <= 3,
+            "{rel}: 半透明像素与源图最大通道差 {max_channel_diff} > 3（RGB 被污染）"
+        );
+        println!(
+            "SEG_METRIC {}",
+            json!({
+                "file": rel, "mode": "transparent", "width": w, "height": hh,
+                "opaque": opaque, "partial": partial, "transparent": transparent,
+                "whitenedPixels": whitened, "maxChannelDiff": max_channel_diff,
+                "sourceSideNearWhiteEdge": halo,
+            })
+        );
         checked += 1;
     }
     assert_eq!(checked, 3, "必须验满 3 张透明输出");
@@ -494,15 +574,27 @@ fn transparent_output_has_alpha_and_no_white_halo() {
 fn bad_params_are_rejected_not_silently_ignored() {
     let Some(h) = start() else { return };
     let Some(corpus) = corpus_root() else { return };
-    let path = corpus.join("process/white_bg_fill/wbf_10.jpg").to_string_lossy().to_string();
+    let path = corpus
+        .join("process/white_bg_fill/wbf_10.jpg")
+        .to_string_lossy()
+        .to_string();
     let workdir = h._work.path().join("out");
     let params = json!({
         "job_id": "job-n7-bad",
         "asset": {"id": "bad", "path": path},
         "options": {"bgMode": "purple", "workdir": workdir.to_string_lossy()},
     });
-    let err = h.host.call("judge", params).expect_err("非法 bgMode 必须报错");
+    let err = h
+        .host
+        .call("judge", params)
+        .expect_err("非法 bgMode 必须报错");
     let text = format!("{err}");
-    assert!(text.contains("-32003") || text.contains("参数非法"), "错误码应为 -32003：{text}");
-    println!("SEG_METRIC {}", json!({"case": "bad_bg_mode", "error": text}));
+    assert!(
+        text.contains("-32003") || text.contains("参数非法"),
+        "错误码应为 -32003：{text}"
+    );
+    println!(
+        "SEG_METRIC {}",
+        json!({"case": "bad_bg_mode", "error": text})
+    );
 }

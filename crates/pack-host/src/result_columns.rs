@@ -113,7 +113,11 @@ pub fn parse_result_columns(v: &serde_json::Value, locale: &str) -> ParsedColumn
 
     let mut out: Vec<ResultColumn> = Vec::new();
     for (i, item) in arr.iter().enumerate() {
-        let key = item.get("key").and_then(|x| x.as_str()).unwrap_or("").trim();
+        let key = item
+            .get("key")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .trim();
         if key.is_empty() {
             warnings.push(format!("第 {} 项缺 key，已忽略", i + 1));
             continue;
@@ -145,7 +149,10 @@ pub fn parse_result_columns(v: &serde_json::Value, locale: &str) -> ParsedColumn
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(str::to_string),
-            order: item.get("order").and_then(serde_json::Value::as_i64).unwrap_or(0),
+            order: item
+                .get("order")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(0),
         });
     }
 
@@ -189,10 +196,13 @@ mod tests {
 
     #[test]
     fn bare_array_is_parsed_and_sorted_by_order() {
-        let p = parse_result_columns(&json!([
-            {"key": "dev", "label": "白底偏差", "type": "number", "unit": "%", "order": 2},
-            {"key": "bg", "label": "背景", "type": "enum", "order": 1},
-        ]), "zh-Hans");
+        let p = parse_result_columns(
+            &json!([
+                {"key": "dev", "label": "白底偏差", "type": "number", "unit": "%", "order": 2},
+                {"key": "bg", "label": "背景", "type": "enum", "order": 1},
+            ]),
+            "zh-Hans",
+        );
         let cols = p.columns.unwrap();
         assert_eq!(cols.len(), 2);
         assert_eq!(cols[0].key, "bg", "order 小的排前面");
@@ -204,20 +214,26 @@ mod tests {
 
     #[test]
     fn wrapped_object_form_is_accepted() {
-        let p = parse_result_columns(&json!({
-            "result_columns": [{"key": "ratio", "label": "占比", "type": "number"}]
-        }), "zh-Hans");
+        let p = parse_result_columns(
+            &json!({
+                "result_columns": [{"key": "ratio", "label": "占比", "type": "number"}]
+            }),
+            "zh-Hans",
+        );
         assert_eq!(p.columns.unwrap()[0].key, "ratio");
     }
 
     #[test]
     fn invalid_entries_are_dropped_with_reasons_not_fatal() {
-        let p = parse_result_columns(&json!([
-            {"label": "没 key", "type": "number"},
-            {"key": "selfmade", "type": "score"},          // 自造类型
-            {"key": "ok_col", "type": "text"},
-            {"key": "ok_col", "type": "number"},           // 重复 key
-        ]), "zh-Hans");
+        let p = parse_result_columns(
+            &json!([
+                {"label": "没 key", "type": "number"},
+                {"key": "selfmade", "type": "score"},          // 自造类型
+                {"key": "ok_col", "type": "text"},
+                {"key": "ok_col", "type": "number"},           // 重复 key
+            ]),
+            "zh-Hans",
+        );
         let cols = p.columns.unwrap();
         assert_eq!(cols.len(), 1, "只留合法的那一列");
         assert_eq!(cols[0].key, "ok_col");
@@ -227,7 +243,11 @@ mod tests {
 
     #[test]
     fn all_invalid_or_empty_falls_back_to_default_columns() {
-        for v in [json!([]), json!([{"key": "x", "type": "wrong"}]), json!({"nope": 1})] {
+        for v in [
+            json!([]),
+            json!([{"key": "x", "type": "wrong"}]),
+            json!({"nope": 1}),
+        ] {
             let p = parse_result_columns(&v, "zh-Hans");
             assert!(p.columns.is_none(), "必须回落默认列（不许报错）：{v}");
             assert!(!p.warnings.is_empty());
@@ -283,10 +303,7 @@ mod tests {
         let cols = p_zh.columns.unwrap();
         assert_eq!(cols[0].label, "白底偏差", "缺 en → 回退 zh-Hans，不崩");
         // label 缺失/空 → 回退 key（老行为）
-        let p_key = parse_result_columns(
-            &json!([{"key": "ratio", "type": "number"}]),
-            "en-US",
-        );
+        let p_key = parse_result_columns(&json!([{"key": "ratio", "type": "number"}]), "en-US");
         assert_eq!(p_key.columns.unwrap()[0].label, "ratio");
     }
 }

@@ -147,7 +147,7 @@ impl PackRepo for SqlitePackRepo<'_> {
         let mut stmt = self
             .conn
             .prepare(&format!("SELECT {COLS} FROM packs ORDER BY id, version"))?;
-        let rows = stmt.query_map([], |r| row_to_record(r))?;
+        let rows = stmt.query_map([], row_to_record)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
@@ -155,7 +155,7 @@ impl PackRepo for SqlitePackRepo<'_> {
         let mut stmt = self.conn.prepare(&format!(
             "SELECT {COLS} FROM packs WHERE id = ?1 AND current = 1"
         ))?;
-        let mut rows = stmt.query_map([id], |r| row_to_record(r))?;
+        let mut rows = stmt.query_map([id], row_to_record)?;
         Ok(match rows.next() {
             Some(r) => Some(r?),
             None => None,
@@ -192,7 +192,9 @@ mod tests {
     fn upsert_is_idempotent_and_keeps_first_installed_at() {
         let c = conn();
         let repo = SqlitePackRepo::new(&c);
-        assert!(repo.upsert(&rec("com.soujpg.pack.ecommerce", "1.0.0", true)).unwrap());
+        assert!(repo
+            .upsert(&rec("com.soujpg.pack.ecommerce", "1.0.0", true))
+            .unwrap());
         let mut again = rec("com.soujpg.pack.ecommerce", "1.0.0", true);
         again.installed_at = 999; // 重复登记不得覆盖首次时间
         assert!(!repo.upsert(&again).unwrap(), "第二次必须是更新而非新建");
@@ -207,12 +209,20 @@ mod tests {
         let repo = SqlitePackRepo::new(&c);
         repo.upsert(&rec("p", "1.0.0", true)).unwrap();
         repo.upsert(&rec("p", "1.1.0", false)).unwrap();
-        assert_eq!(repo.list().unwrap().len(), 2, "多版本必须并存（回滚=切指针）");
+        assert_eq!(
+            repo.list().unwrap().len(),
+            2,
+            "多版本必须并存（回滚=切指针）"
+        );
         assert_eq!(repo.current("p").unwrap().unwrap().version, "1.0.0");
         assert_eq!(repo.set_current("p", "1.1.0").unwrap(), 1);
         assert_eq!(repo.current("p").unwrap().unwrap().version, "1.1.0");
         let flags: Vec<bool> = repo.list().unwrap().iter().map(|r| r.current).collect();
-        assert_eq!(flags.iter().filter(|c| **c).count(), 1, "一个 id 只能有一个 current");
+        assert_eq!(
+            flags.iter().filter(|c| **c).count(),
+            1,
+            "一个 id 只能有一个 current"
+        );
     }
 
     #[test]

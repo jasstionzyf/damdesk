@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)] // gateway 协议错误枚举本就 ≥128B，装箱会改热路径与错误形状
 //! 能力网关 —— 协议 §6 的十二个端点（插件唯一的算力入口）。
 //!
 //! 宿主在拉起插件子进程前启这个网关：`127.0.0.1:<随机端口>` + 一次性 Bearer 令牌，
@@ -223,9 +224,7 @@ pub trait VlJudge: Send + Sync {
                 // 第 1 份就不可用 → 整体不可用；后续某份不可用 → 该份记 undetermined
                 // （让插件的「一致才算」判据看见抖动，而不是被静默吞掉）
                 Err(VlError::BadParams(m)) => return Err(VlError::BadParams(m)),
-                Err(VlError::Unavailable(m)) if i == 0 => {
-                    return Err(VlError::Unavailable(m))
-                }
+                Err(VlError::Unavailable(m)) if i == 0 => return Err(VlError::Unavailable(m)),
                 Err(VlError::Unavailable(m)) => out.push(VlReply::undetermined(m)),
             }
         }
@@ -552,8 +551,9 @@ impl Inner {
         let parent = path
             .parent()
             .ok_or_else(|| GatewayError::invalid(format!("out 没有父目录：{raw}")))?;
-        std::fs::create_dir_all(parent)
-            .map_err(|e| GatewayError::internal(format!("建产物目录失败 {}：{e}", parent.display())))?;
+        std::fs::create_dir_all(parent).map_err(|e| {
+            GatewayError::internal(format!("建产物目录失败 {}：{e}", parent.display()))
+        })?;
         let parent_canon = parent
             .canonicalize()
             .map_err(|e| GatewayError::invalid(format!("out 父目录不可解析 {raw}：{e}")))?;
@@ -613,13 +613,13 @@ impl Gateway {
                 source,
             })?;
 
-        let work_dir = cfg
-            .work_dir
-            .canonicalize()
-            .map_err(|source| GatewayStartError::WorkDir {
-                path: cfg.work_dir.clone(),
-                source,
-            })?;
+        let work_dir =
+            cfg.work_dir
+                .canonicalize()
+                .map_err(|source| GatewayStartError::WorkDir {
+                    path: cfg.work_dir.clone(),
+                    source,
+                })?;
         let mut roots = vec![work_dir];
         for extra in &cfg.extra_write_roots {
             if let Ok(canon) = extra.canonicalize() {
@@ -647,10 +647,7 @@ impl Gateway {
         let join = thread::Builder::new()
             .name("pack-gateway".to_string())
             .spawn(move || accept_loop(listener, accept_inner))
-            .map_err(|source| GatewayStartError::Bind {
-                bind: addr,
-                source,
-            })?;
+            .map_err(|source| GatewayStartError::Bind { bind: addr, source })?;
 
         Ok(Self {
             inner,
@@ -948,7 +945,7 @@ impl Inner {
         }
         let guard = self.stats.lock().expect("stats lock");
         let mut rows: Vec<(&String, &(u64, u64))> = guard.iter().collect();
-        rows.sort_by(|a, b| b.1 .1.cmp(&a.1 .1));
+        rows.sort_by_key(|r| std::cmp::Reverse(r.1 .1));
         let mut parts = Vec::new();
         for (path, (n, ms)) in rows {
             parts.push(format!("{path} n={n} ms={ms}"));
@@ -1027,7 +1024,9 @@ fn read_request(stream: &mut TcpStream) -> Result<Request, HttpParseError> {
         if buf.len() > 16 * 1024 {
             return Err(HttpParseError::TooLarge("请求头超过 16 KiB".into()));
         }
-        let n = stream.read(&mut chunk).map_err(|e| read_err("读请求头失败", e))?;
+        let n = stream
+            .read(&mut chunk)
+            .map_err(|e| read_err("读请求头失败", e))?;
         if n == 0 {
             return Err(HttpParseError::Eof);
         }
@@ -1422,9 +1421,11 @@ fn io_read(body: &Value) -> Result<Value, GatewayError> {
 /// 之外的老写法 `measure:true`）。
 fn wants_white_measure(body: &Value) -> bool {
     match body.get("measure") {
-        Some(Value::Array(items)) => items
-            .iter()
-            .any(|v| v.as_str().map(|s| s.eq_ignore_ascii_case("white")).unwrap_or(false)),
+        Some(Value::Array(items)) => items.iter().any(|v| {
+            v.as_str()
+                .map(|s| s.eq_ignore_ascii_case("white"))
+                .unwrap_or(false)
+        }),
         _ => false,
     }
 }
@@ -1466,8 +1467,8 @@ fn detect_u2net(inner: &Inner, body: &Value) -> Result<Value, GatewayError> {
 fn detect_bbox(inner: &Inner, body: &Value) -> Result<Value, GatewayError> {
     let path = req_file(body, "path")?;
     let target = req_optional_ratio(body, "target_ratio")?;
-    let min_instance = req_optional_ratio(body, "min_instance_ratio")?
-        .unwrap_or(DEFAULT_MIN_INSTANCE_RATIO);
+    let min_instance =
+        req_optional_ratio(body, "min_instance_ratio")?.unwrap_or(DEFAULT_MIN_INSTANCE_RATIO);
     let (w, h, px) = core_media::rgb8(&path)
         .map_err(|e| GatewayError::unreadable(format!("解码失败 {}：{e}", path.display())))?;
     let (w, h) = (w as u32, h as u32);
@@ -1521,7 +1522,9 @@ fn detect_white_stats(body: &Value) -> Result<Value, GatewayError> {
         Some(v) => v
             .as_f64()
             .filter(|t| t.is_finite() && (0.0..=255.0).contains(t))
-            .ok_or_else(|| GatewayError::invalid("max_dev 必须是 0..=255 的数字（均值偏差上限）"))?,
+            .ok_or_else(|| {
+                GatewayError::invalid("max_dev 必须是 0..=255 的数字（均值偏差上限）")
+            })?,
     };
     let (w, h, px) = core_media::rgb8(&path)
         .map_err(|e| GatewayError::unreadable(format!("解码失败 {}：{e}", path.display())))?;
@@ -1557,8 +1560,11 @@ fn grid_box_to_pixels(b: [usize; 4], w: u32, h: u32) -> [u32; 4] {
     let (w64, h64) = (w as u64, h as u64);
     let span = |lo: usize, hi: usize, full: u64| -> (u32, u32) {
         let start = (lo as u64 * full / side) as u32;
-        let end = (((hi as u64 + 1) * full + side - 1) / side).min(full) as u32;
-        (start.min(end.saturating_sub(1)), end.max(start + 1).min(full as u32))
+        let end = ((hi as u64 + 1) * full).div_ceil(side).min(full) as u32;
+        (
+            start.min(end.saturating_sub(1)),
+            end.max(start + 1).min(full as u32),
+        )
     };
     let (x1, x2) = span(b[0], b[2], w64);
     let (y1, y2) = span(b[1], b[3], h64);
@@ -2054,10 +2060,9 @@ fn op_encode(inner: &Inner, body: &Value) -> Result<Value, GatewayError> {
     let src = req_path(body)?;
     let out_raw = req_str(body, "out")?;
     let out = inner.accept_out(out_raw)?;
-    let out_ext = out
-        .extension()
-        .and_then(|e| e.to_str())
-        .ok_or_else(|| GatewayError::invalid(format!("out 无扩展名，无法判定目标格式：{out_raw}")))?;
+    let out_ext = out.extension().and_then(|e| e.to_str()).ok_or_else(|| {
+        GatewayError::invalid(format!("out 无扩展名，无法判定目标格式：{out_raw}"))
+    })?;
     let out_format = core_media::OutFormat::from_ext(out_ext).map_err(|e| {
         GatewayError::invalid(format!(
             "out 扩展名 .{out_ext} 不是可编码格式（jpg/png/webp/avif）：{e}"
@@ -2237,17 +2242,14 @@ fn op_watermark(inner: &Inner, body: &Value) -> Result<Value, GatewayError> {
     }
     let margin = opt_int(body, "margin", 16)?;
     if margin < 0 {
-        return Err(GatewayError::invalid(format!(
-            "margin={margin} 不能为负"
-        )));
+        return Err(GatewayError::invalid(format!("margin={margin} 不能为负")));
     }
     let color = match body.get("color").and_then(Value::as_str) {
         Some(raw) => parse_color(raw)?,
         None => [255, 255, 255],
     };
-    let (w, h) = core_media::image_size(&src).map_err(|e| {
-        GatewayError::unreadable(format!("解码失败 {}：{e}", src.display()))
-    })?;
+    let (w, h) = core_media::image_size(&src)
+        .map_err(|e| GatewayError::unreadable(format!("解码失败 {}：{e}", src.display())))?;
     if (margin as i64) * 2 >= i64::from(w.min(h)) {
         return Err(GatewayError::invalid(format!(
             "margin={margin} 过大（图 {w}x{h}，要求 2×margin < 短边）"
@@ -2352,7 +2354,10 @@ fn op_upscale(inner: &Inner, body: &Value) -> Result<Value, GatewayError> {
         .and_then(|s| s.to_str())
         .unwrap_or("upscale")
         .to_string();
-    let dir = out.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
+    let dir = out
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
     let mut cur = src.clone();
     let mut steps: Vec<Value> = Vec::new();
     let mut last_mode = "resample";
@@ -2370,7 +2375,9 @@ fn op_upscale(inner: &Inner, body: &Value) -> Result<Value, GatewayError> {
         let mut mode = "resample";
         let mut dims: Option<(i32, i32)> = None;
         // 单趟恰为 4× 且输入 ≤ 模型护栏 → 走 x4v3（与旧行为逐值一致）
-        if (factor - 4.0).abs() < 1e-6 && (cur_w as u64) * (cur_h as u64) <= upscale_model_input_cap() {
+        if (factor - 4.0).abs() < 1e-6
+            && (cur_w as u64) * (cur_h as u64) <= upscale_model_input_cap()
+        {
             if let Some((ow, oh)) = upscale_by_model(&cur, &dest, factor)? {
                 mode = "realesr-x4v3";
                 dims = Some((ow, oh));
@@ -2434,12 +2441,13 @@ fn upscale_by_model(
     scale: f64,
 ) -> Result<Option<(i32, i32)>, GatewayError> {
     // x4v3 是固定 4 倍的权重；`scale` ≠ 4 时用重采样，避免「要 2 倍却出 4 倍」的静默偏差
-    if (scale - 4.0).abs() > 1e-9 || !engine_restore::model_ready(engine_restore::REALESR_GENERAL_X4V3) {
+    if (scale - 4.0).abs() > 1e-9
+        || !engine_restore::model_ready(engine_restore::REALESR_GENERAL_X4V3)
+    {
         return Ok(None);
     }
-    let up = engine_restore::upscale::upscaler(engine_restore::REALESR_GENERAL_X4V3).map_err(|e| {
-        GatewayError::internal(format!("加载超分模型失败：{e}"))
-    })?;
+    let up = engine_restore::upscale::upscaler(engine_restore::REALESR_GENERAL_X4V3)
+        .map_err(|e| GatewayError::internal(format!("加载超分模型失败：{e}")))?;
     let (w, h, px) = core_media::rgb8(src)
         .map_err(|e| GatewayError::unreadable(format!("解码失败 {}：{e}", src.display())))?;
     let (ow, oh, buf) = up
@@ -2451,7 +2459,11 @@ fn upscale_by_model(
 }
 
 #[cfg(not(feature = "local-infer"))]
-fn upscale_by_model(_src: &Path, _out: &Path, _scale: f64) -> Result<Option<(i32, i32)>, GatewayError> {
+fn upscale_by_model(
+    _src: &Path,
+    _out: &Path,
+    _scale: f64,
+) -> Result<Option<(i32, i32)>, GatewayError> {
     Ok(None)
 }
 
@@ -2509,18 +2521,16 @@ fn inpaint_run(
     h: u32,
 ) -> Result<Value, GatewayError> {
     let expect = (w as usize) * (h as usize);
-    let mask = engine_restore::inpaint::load_mask_path(mask_path, expect).map_err(|e| {
-        GatewayError::invalid(format!("掩码不合法 {}：{e}", mask_path.display()))
-    })?;
-    let painter = engine_restore::inpaint::inpainter(engine_restore::LAMA_FP32).map_err(|e| {
-        match e {
+    let mask = engine_restore::inpaint::load_mask_path(mask_path, expect)
+        .map_err(|e| GatewayError::invalid(format!("掩码不合法 {}：{e}", mask_path.display())))?;
+    let painter =
+        engine_restore::inpaint::inpainter(engine_restore::LAMA_FP32).map_err(|e| match e {
             engine_restore::RestoreError::ModelMissing(m) => GatewayError::capability_missing(
                 "op.generative",
                 format!("lama-fp32 模型未安装：{m}"),
             ),
             other => GatewayError::internal(format!("加载 lama 失败：{other}")),
-        }
-    })?;
+        })?;
     let (iw, ih, px) = core_media::rgb8(src)
         .map_err(|e| GatewayError::unreadable(format!("解码失败 {}：{e}", src.display())))?;
     let buf = painter
@@ -2581,18 +2591,25 @@ pub const MAX_INSTANCES: usize = 8;
 /// `area_ratio` 是该连通域前景 cell 数占画面的比例（与 `fg_ratio` 同网格口径，可加总核对）；
 /// 按面积降序、只留 `min_ratio` 以上的、最多 [`MAX_INSTANCES`] 个 —— 顺序稳定（同面积按扫描序），
 /// 所以同图同参数同结果（确定性口径，插件据此判文字归属）。
-fn mask_instances(mask: &engine_segment::Mask, w: u32, h: u32,
-                  min_ratio: f64, cap: usize) -> Value {
+fn mask_instances(
+    mask: &engine_segment::Mask,
+    w: u32,
+    h: u32,
+    min_ratio: f64,
+    cap: usize,
+) -> Value {
     let cells = (mask.side * mask.side) as f64;
     let items: Vec<Value> = mask
         .components()
         .into_iter()
         .filter(|c| (c.area as f64) / cells >= min_ratio)
         .take(cap)
-        .map(|c| json!({
-            "bbox": grid_box_to_pixels(c.bbox, w, h),
-            "area_ratio": (c.area as f64) / cells,
-        }))
+        .map(|c| {
+            json!({
+                "bbox": grid_box_to_pixels(c.bbox, w, h),
+                "area_ratio": (c.area as f64) / cells,
+            })
+        })
         .collect();
     Value::Array(items)
 }
@@ -2634,7 +2651,10 @@ mod bbox_tests {
         let inst = mask_instances(&mask, 640, 480, DEFAULT_MIN_INSTANCE_RATIO, MAX_INSTANCES);
         let arr = inst.as_array().expect("数组");
         assert_eq!(arr.len(), 2, "噪声域必须被 min_ratio 滤掉：{inst}");
-        assert_eq!(arr[0]["bbox"], json!(grid_box_to_pixels([10, 10, 109, 109], 640, 480)));
+        assert_eq!(
+            arr[0]["bbox"],
+            json!(grid_box_to_pixels([10, 10, 109, 109], 640, 480))
+        );
         let r0 = arr[0]["area_ratio"].as_f64().unwrap();
         let r1 = arr[1]["area_ratio"].as_f64().unwrap();
         assert!((r0 - 10000.0 / 102400.0).abs() < 1e-12, "{r0}");
@@ -2643,10 +2663,19 @@ mod bbox_tests {
         // 上限截断（cap=1 → 只回主主体，且与 dominant_bbox 一致）
         let one = mask_instances(&mask, 640, 480, DEFAULT_MIN_INSTANCE_RATIO, 1);
         assert_eq!(one.as_array().unwrap().len(), 1);
-        assert_eq!(one[0]["bbox"], json!(grid_box_to_pixels(*mask.dominant_bbox().as_ref().unwrap(), 640, 480)));
+        assert_eq!(
+            one[0]["bbox"],
+            json!(grid_box_to_pixels(
+                *mask.dominant_bbox().as_ref().unwrap(),
+                640,
+                480
+            ))
+        );
         // 空掩码 → 空数组（不是 null：插件对 `[]` 与缺字段同样退回单主体口径）
-        assert_eq!(mask_instances(&mask_with(|_, _| 0), 640, 480, 0.01, 8),
-                   json!([]));
+        assert_eq!(
+            mask_instances(&mask_with(|_, _| 0), 640, 480, 0.01, 8),
+            json!([])
+        );
     }
 
     /// 空掩码：三个框都必须 `null`（不编造 (0,0,0,0) 这种看起来像真的值）。
@@ -2690,9 +2719,16 @@ mod bbox_tests {
     /// 网格 → 像素的映射口径：cell g 覆盖 [g*W/side, (g+1)*W/side)，右/下向上取整。
     #[test]
     fn grid_box_maps_to_pixels_within_canvas() {
-        assert_eq!(grid_box_to_pixels([0, 0, SIDE - 1, SIDE - 1], 100, 50), [0, 0, 100, 50]);
+        assert_eq!(
+            grid_box_to_pixels([0, 0, SIDE - 1, SIDE - 1], 100, 50),
+            [0, 0, 100, 50]
+        );
         let b = grid_box_to_pixels([SIDE / 2, SIDE / 2, SIDE / 2, SIDE / 2], 640, 480);
-        assert_eq!(b, [320, 240, 322, 242], "单个网格 cell 至少占 1 像素：{b:?}");
+        assert_eq!(
+            b,
+            [320, 240, 322, 242],
+            "单个网格 cell 至少占 1 像素：{b:?}"
+        );
         // 极小图也不会退化出零宽框
         let b = grid_box_to_pixels([10, 10, 12, 12], 7, 5);
         assert!(b[2] > b[0] && b[3] > b[1], "{b:?}");
@@ -2862,10 +2898,7 @@ mod conn_semantics_tests {
     /// 读失败归类：超时/非阻塞残留 ≠ 请求不合法（KI-29 复盘：语义错标会把真机定位带偏）。
     #[test]
     fn read_err_maps_timeout_like_errors_to_eof() {
-        for kind in [
-            std::io::ErrorKind::WouldBlock,
-            std::io::ErrorKind::TimedOut,
-        ] {
+        for kind in [std::io::ErrorKind::WouldBlock, std::io::ErrorKind::TimedOut] {
             match read_err("读请求头失败", std::io::Error::new(kind, "probe")) {
                 HttpParseError::Eof => {}
                 other => panic!("{kind:?} 应归为 Eof（对端放弃），实际 {other:?}"),
@@ -2904,7 +2937,10 @@ mod conn_semantics_tests {
             thread::sleep(Duration::from_millis(50));
         }
         let after = WRITE_ERRORS.load(Ordering::Relaxed);
-        assert!(after > before, "对端已 RST，写失败必须计数（write_json 不许吞错）");
+        assert!(
+            after > before,
+            "对端已 RST，写失败必须计数（write_json 不许吞错）"
+        );
         client.join().expect("client join");
     }
 }

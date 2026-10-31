@@ -120,7 +120,7 @@ fn read_request(stream: &mut TcpStream) -> Option<(String, String, String)> {
 fn write_response(stream: &mut TcpStream, status: u16, body: &str) -> std::io::Result<()> {
     let resp = format!(
         "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.as_bytes().len()
+        body.len()
     );
     stream.write_all(resp.as_bytes())?;
     stream.flush()

@@ -16,5 +16,6 @@
       "esbuild",
       "@tauri-apps/cli"
     ]
-  }
+  },
+  "packageManager": "pnpm@12.11.2"
 }

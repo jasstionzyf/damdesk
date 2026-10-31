@@ -99,7 +99,10 @@ fn real_model_embeds_image_and_text_normalized_768() {
 fn same_image_similarity_above_099() {
     let p = loaded_provider();
     let dog = fixture("dog.jpg");
-    let v1 = p.embed_images(&[dog.clone()]).unwrap().remove(0);
+    let v1 = p
+        .embed_images(std::slice::from_ref(&dog))
+        .unwrap()
+        .remove(0);
 
     // 重编码副本：证明阈值不是「同字节退化成同一张量」的假象
     let img = image::open(&dog).expect("decode fixture");
@@ -107,7 +110,7 @@ fn same_image_similarity_above_099() {
     img.to_rgb8()
         .save_with_format(&re, image::ImageFormat::Jpeg)
         .expect("write re-encoded copy");
-    let v2 = p.embed_images(&[re.clone()]).unwrap().remove(0);
+    let v2 = p.embed_images(std::slice::from_ref(&re)).unwrap().remove(0);
     let _ = std::fs::remove_file(&re);
 
     let self_cos = cosine(&v1, &v1);

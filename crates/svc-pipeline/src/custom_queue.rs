@@ -181,12 +181,7 @@ pub fn run_custom_queue_with_limit(
                 }
                 // 结果表存数组快照（name=维度名）+ 统一扇出 tag（normalize + key-val 拍平）
                 tasks::upsert_custom_tag_values(
-                    conn,
-                    *asset_id,
-                    task.id,
-                    &task.name,
-                    &values,
-                    &model,
+                    conn, *asset_id, task.id, &task.name, &values, &model,
                 )?;
                 Ok(())
             })();

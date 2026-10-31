@@ -17,7 +17,11 @@ fn main() {
 
     let t0 = Instant::now();
     let engine = engine_ocr::infer::engine().expect("load OCR engine (det+rec+dict)");
-    println!("engine loaded in {:.1?} (models root = {:?})", t0.elapsed(), engine_ocr::models_root());
+    println!(
+        "engine loaded in {:.1?} (models root = {:?})",
+        t0.elapsed(),
+        engine_ocr::models_root()
+    );
 
     let mut paths: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("read_dir {dir}: {e}"))
@@ -59,10 +63,13 @@ fn main() {
             ms
         );
         for l in lines.iter().take(5) {
-            println!("    [{},{} {},{}] box={:.2} ctc={:.2} {}", l.x0, l.y0, l.x1, l.y1, l.box_score, l.text_score, l.text);
+            println!(
+                "    [{},{} {},{}] box={:.2} ctc={:.2} {}",
+                l.x0, l.y0, l.x1, l.y1, l.box_score, l.text_score, l.text
+            );
         }
     }
-    times.sort_by(|a, b| a.partial_cmp(&b).unwrap());
+    times.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let avg = times.iter().sum::<f64>() / times.len() as f64;
     let p50 = times[times.len() / 2];
     let max = times[times.len() - 1];

@@ -81,7 +81,9 @@ async fn post(app: &axum::Router, uri: &str, body: Value) -> (u16, Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -137,7 +139,12 @@ async fn outside_whitelist_is_rejected_even_in_desktop_form() {
     let a = app(app_web::test_support::state(data.clone(), conn));
 
     for outside in ["/etc", "/etc/passwd"] {
-        let (status, body) = post(&a, "/api/os/reveal", json!({ "path": outside, "mode": "reveal" })).await;
+        let (status, body) = post(
+            &a,
+            "/api/os/reveal",
+            json!({ "path": outside, "mode": "reveal" }),
+        )
+        .await;
         assert_eq!(status, 400, "库外路径必须拒绝：{outside} → {body}");
         assert_eq!(body["code"], json!("path_not_allowed"));
         assert!(plans_for(outside).is_empty(), "被拒的请求不得触发系统调用");
@@ -145,8 +152,16 @@ async fn outside_whitelist_is_rejected_even_in_desktop_form() {
     // Windows 专有路径在非 Windows 主机上连「绝对路径」都不是 → 同样 400（bad_path）。
     // 两端 400 都是拒绝；具体 code 取决于宿主平台，这里断言的是「不放过」。
     for win in ["C:\\Windows", "C:\\Windows\\System32"] {
-        let (status, body) = post(&a, "/api/os/reveal", json!({ "path": win, "mode": "reveal" })).await;
-        assert_eq!(status, 400, "Windows 路径在 Linux 主机必须被拒：{win} → {body}");
+        let (status, body) = post(
+            &a,
+            "/api/os/reveal",
+            json!({ "path": win, "mode": "reveal" }),
+        )
+        .await;
+        assert_eq!(
+            status, 400,
+            "Windows 路径在 Linux 主机必须被拒：{win} → {body}"
+        );
         #[cfg(target_os = "windows")]
         assert_eq!(body["code"], json!("path_not_allowed"));
         #[cfg(not(target_os = "windows"))]
@@ -188,15 +203,30 @@ async fn bad_mode_and_relative_path_are_400_bad_path() {
     let conn = seed(&data, &lib);
     let a = app(app_web::test_support::state(data.clone(), conn));
 
-    let (status, body) = post(&a, "/api/os/reveal", json!({ "path": lib.join("x.png"), "mode": "explode" })).await;
+    let (status, body) = post(
+        &a,
+        "/api/os/reveal",
+        json!({ "path": lib.join("x.png"), "mode": "explode" }),
+    )
+    .await;
     assert_eq!(status, 400);
     assert_eq!(body["code"], json!("bad_mode"));
 
-    let (status, body) = post(&a, "/api/os/reveal", json!({ "path": "relative/x.png", "mode": "open" })).await;
+    let (status, body) = post(
+        &a,
+        "/api/os/reveal",
+        json!({ "path": "relative/x.png", "mode": "open" }),
+    )
+    .await;
     assert_eq!(status, 400);
     assert_eq!(body["code"], json!("bad_path"));
 
-    let (status, body) = post(&a, "/api/os/reveal", json!({ "path": "/data/../etc", "mode": "open" })).await;
+    let (status, body) = post(
+        &a,
+        "/api/os/reveal",
+        json!({ "path": "/data/../etc", "mode": "open" }),
+    )
+    .await;
     assert_eq!(status, 400);
     assert_eq!(body["code"], json!("bad_path"));
 

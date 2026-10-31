@@ -192,12 +192,7 @@ fn import_batch_enqueues_both_towers_for_new_assets_only() {
     // 存量：root 下但早于批次 → 不算本批
     let old = insert_asset(&conn, &root.join("old.png"), "local", started - 100);
     // 批外：别的目录同时间导入 → 不算本批
-    let outside = insert_asset(
-        &conn,
-        &dir.path().join("other.png"),
-        "local",
-        started + 5,
-    );
+    let outside = insert_asset(&conn, &dir.path().join("other.png"), "local", started + 5);
     let batch_id = insert_batch(&conn, &root, started);
 
     let q = enq_import_batch(&conn, "fake-semantic", "fake-dedup", batch_id).unwrap();
@@ -250,12 +245,25 @@ fn dedup_failure_does_not_touch_semantic_tower() {
 
     // 两塔状态列各算各的：失败那张 emb_status 仍是 done
     let failed_id: i64 = conn
-        .query_row("SELECT assetId FROM assets WHERE fileName = 'img2.png'", [], |r| r.get(0))
+        .query_row(
+            "SELECT assetId FROM assets WHERE fileName = 'img2.png'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
-    assert_eq!(col(&conn, "dedup_status", failed_id).as_deref(), Some("failed"));
+    assert_eq!(
+        col(&conn, "dedup_status", failed_id).as_deref(),
+        Some("failed")
+    );
     assert_eq!(col(&conn, "emb_status", failed_id).as_deref(), Some("done"));
-    assert_eq!(col(&conn, "emb_model", failed_id).as_deref(), Some("fake-semantic"));
-    assert_eq!(col(&conn, "dedup_model", failed_id).as_deref(), Some("fake-dedup"));
+    assert_eq!(
+        col(&conn, "emb_model", failed_id).as_deref(),
+        Some("fake-semantic")
+    );
+    assert_eq!(
+        col(&conn, "dedup_model", failed_id).as_deref(),
+        Some("fake-dedup")
+    );
 
     // 计数不混算（语义塔走 embed_stats；判重塔计数在测试里按状态列直查，
     // 因为 embed_stats 的 dedup 槽固定取 DEDUP_EMBEDDER 生产常量）
@@ -281,9 +289,19 @@ fn dedup_failure_does_not_touch_semantic_tower() {
 
     // 修复后续跑：判重塔补齐那张，语义塔不动
     let ded_fixed = FakeProvider::new("fake-dedup", DIMS_DED);
-    let rep = run_embed_queue(&conn, &ded_fixed, EmbedScope::Dedup, &cancel, &mut noprogress).unwrap();
+    let rep = run_embed_queue(
+        &conn,
+        &ded_fixed,
+        EmbedScope::Dedup,
+        &cancel,
+        &mut noprogress,
+    )
+    .unwrap();
     assert_eq!(rep.done, 1);
-    assert_eq!(col(&conn, "dedup_status", failed_id).as_deref(), Some("done"));
+    assert_eq!(
+        col(&conn, "dedup_status", failed_id).as_deref(),
+        Some("done")
+    );
     assert_eq!(
         core_storage::vecstore::count(&conn, "fake-dedup").unwrap(),
         6
@@ -325,9 +343,16 @@ fn backfill_never_embedded_is_idempotent() {
     );
     // failed 那条没被 backfill 拿走（仍 failed，等显式 retry）
     let failed_id: i64 = conn
-        .query_row("SELECT assetId FROM assets WHERE fileName = 'img1.png'", [], |r| r.get(0))
+        .query_row(
+            "SELECT assetId FROM assets WHERE fileName = 'img1.png'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
-    assert_eq!(col(&conn, "dedup_status", failed_id).as_deref(), Some("failed"));
+    assert_eq!(
+        col(&conn, "dedup_status", failed_id).as_deref(),
+        Some("failed")
+    );
 }
 
 #[test]
@@ -356,8 +381,12 @@ fn batch_enqueue_retries_failed_but_skips_done() {
     let names: Vec<String> = job_ids(&conn, "fake-dedup")
         .iter()
         .map(|id| {
-            conn.query_row("SELECT fileName FROM assets WHERE assetId = ?1", [id], |r| r.get(0))
-                .unwrap()
+            conn.query_row(
+                "SELECT fileName FROM assets WHERE assetId = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap()
         })
         .collect();
     assert!(!names.contains(&"img0.png".to_string()));
@@ -399,7 +428,8 @@ fn dual_tower_vectors_land_in_separate_tables() {
     assert_eq!(
         enq_import_batch(&conn, "fake-semantic", "fake-dedup", {
             let root = dir.path().join("lib");
-            conn.execute("UPDATE assets SET importedAt = 1", []).unwrap();
+            conn.execute("UPDATE assets SET importedAt = 1", [])
+                .unwrap();
             insert_batch(&conn, &root, 1)
         })
         .unwrap()
@@ -429,6 +459,16 @@ fn dual_tower_vectors_land_in_separate_tables() {
     // 两塔向量不共表：各自的 knn 只命中自己的维度
     let q_sem = FakeProvider::vec_of("x", DIMS_SEM);
     let q_ded = FakeProvider::vec_of("x", DIMS_DED);
-    assert_eq!(core_storage::vecstore::knn(&conn, "fake-semantic", &q_sem, 5).unwrap().len(), 5);
-    assert_eq!(core_storage::vecstore::knn(&conn, "fake-dedup", &q_ded, 5).unwrap().len(), 5);
+    assert_eq!(
+        core_storage::vecstore::knn(&conn, "fake-semantic", &q_sem, 5)
+            .unwrap()
+            .len(),
+        5
+    );
+    assert_eq!(
+        core_storage::vecstore::knn(&conn, "fake-dedup", &q_ded, 5)
+            .unwrap()
+            .len(),
+        5
+    );
 }

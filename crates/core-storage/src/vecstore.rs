@@ -20,9 +20,15 @@ use crate::{Result, StorageError};
 pub fn init_vec_ext() {
     static INIT: Once = Once::new();
     INIT.call_once(|| unsafe {
-        rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
-            sqlite_vec::sqlite3_vec_init as *const (),
-        )));
+        // SAFETY: `sqlite3_vec_init` 是 sqlite-vec 扩展的 C ABI 入口
+        // （`fn(*mut sqlite3_api_routines) -> c_int`），与 `sqlite3_auto_extension`
+        // 期望的注册函数指针签名一致；sqlite-vec 官方接线方式即如此 transmute。
+        let entrypoint: unsafe extern "C" fn(
+            *mut rusqlite::ffi::sqlite3,
+            *mut *mut std::os::raw::c_char,
+            *const rusqlite::ffi::sqlite3_api_routines,
+        ) -> std::os::raw::c_int = std::mem::transmute(sqlite_vec::sqlite3_vec_init as *const ());
+        rusqlite::ffi::sqlite3_auto_extension(Some(entrypoint));
     });
 }
 
@@ -168,8 +174,10 @@ pub fn fetch_vectors(conn: &Connection, model: &str, ids: &[i64]) -> Result<Vec<
 }
 
 fn blob_to_vec(b: &[u8]) -> Vec<f32> {
-    b.chunks_exact(4)
-        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+    b.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
         .collect()
 }
 

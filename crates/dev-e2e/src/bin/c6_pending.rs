@@ -21,7 +21,10 @@ use core_storage::compliance_sqlite::SqliteComplianceRepo;
 use svc_pipeline::compliance_queue::{compliance_enq, run_compliance_queue};
 
 fn env_or(k: &str, d: &str) -> String {
-    std::env::var(k).ok().filter(|s| !s.is_empty()).unwrap_or_else(|| d.to_string())
+    std::env::var(k)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| d.to_string())
 }
 
 fn main() {
@@ -32,7 +35,10 @@ fn main() {
     let pack = match core_config::Pack::from_dir(&pack_dir) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("C6_PENDING_RESULT FAIL pack={} reason={e}", pack_dir.display());
+            eprintln!(
+                "C6_PENDING_RESULT FAIL pack={} reason={e}",
+                pack_dir.display()
+            );
             std::process::exit(1);
         }
     };
@@ -47,8 +53,13 @@ fn main() {
     // SQLITE_BUSY（core_storage::open 未设 busy_timeout），这里给工具侧一个等待窗口。
     let _ = conn.busy_timeout(std::time::Duration::from_secs(15));
     let mut ids: Vec<i64> = {
-        let mut stmt = conn.prepare("SELECT assetId FROM assets WHERE deleted = 0 ORDER BY assetId").unwrap();
-        stmt.query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect()
+        let mut stmt = conn
+            .prepare("SELECT assetId FROM assets WHERE deleted = 0 ORDER BY assetId")
+            .unwrap();
+        stmt.query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
     };
     if limit > 0 {
         ids.truncate(limit);

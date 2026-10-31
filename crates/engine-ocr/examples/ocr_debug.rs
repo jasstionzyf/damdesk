@@ -28,7 +28,13 @@ fn main() {
     println!("det map {mw}x{mh}");
     let mut probs: Vec<f32> = map.clone();
     probs.sort_by(|a, b| b.partial_cmp(a).unwrap());
-    println!("p max={:.3} p99={:.3} p90={:.3} p50={:.3}", probs[0], probs[probs.len() / 100], probs[probs.len() / 10], probs[probs.len() / 2]);
+    println!(
+        "p max={:.3} p99={:.3} p90={:.3} p50={:.3}",
+        probs[0],
+        probs[probs.len() / 100],
+        probs[probs.len() / 10],
+        probs[probs.len() / 2]
+    );
     for t in [0.1f32, 0.2, 0.3, 0.45, 0.5] {
         let n = map.iter().filter(|&&p| p > t).count();
         println!(">{t:.2}: {n} px");
@@ -45,6 +51,14 @@ fn main() {
             println!("map rows {:3}-{:3}: >0.2={}", b * 20, b * 20 + 19, n);
         }
     }
-    let boxes = engine_ocr::db_boxes(&map, mw, mh, w as u32, h as u32, engine_ocr::DB_MAX_CANDIDATES).unwrap();
+    let boxes = engine_ocr::db_boxes(
+        &map,
+        mw,
+        mh,
+        w as u32,
+        h as u32,
+        engine_ocr::DB_MAX_CANDIDATES,
+    )
+    .unwrap();
     println!("boxes: {boxes:?}");
 }

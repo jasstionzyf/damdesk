@@ -1091,6 +1091,7 @@ dependencies = [
  "engine-segment",
  "engine-tag",
  "image",
+ "pack-host",
  "rusqlite",
  "serde",
  "serde_json",

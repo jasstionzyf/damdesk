@@ -221,7 +221,7 @@ pub fn rgba_to_rgb_with_background(rgba: &[u8], bg: [u8; 3]) -> Vec<u8> {
 
 /// alpha 通道是否真的被用过（全 255 = 不透明）；`/op/encode` 用它回 `alpha` 字段。
 pub fn has_transparency(rgba: &[u8]) -> bool {
-    rgba.chunks_exact(4).any(|px| px[3] != 255)
+    rgba.as_chunks::<4>().0.iter().any(|px| px[3] != 255)
 }
 
 /// 按 EXIF Orientation（1..=8）把 RGBA8 缓冲摆正（纯函数，双后端同语义）。
@@ -254,13 +254,13 @@ pub fn orient_rgba(w: i32, h: i32, rgba: &[u8], orientation: u32) -> Result<(i32
         for x in 0..ow {
             // 目标 (x,y) ← 源 (sx,sy)，按 EXIF 定义逐个反解
             let (sx, sy) = match orientation {
-                2 => (w - 1 - x, y),                       // 水平镜像
-                3 => (w - 1 - x, h - 1 - y),               // 180°
-                4 => (x, h - 1 - y),                       // 垂直镜像
-                5 => (y, x),                               // transpose（主对角）
-                6 => (y, h - 1 - x),                       // 90° CW
-                7 => (w - 1 - y, h - 1 - x),               // transverse（副对角）
-                _ => (w - 1 - y, x),                       // 8 = 90° CCW
+                2 => (w - 1 - x, y),         // 水平镜像
+                3 => (w - 1 - x, h - 1 - y), // 180°
+                4 => (x, h - 1 - y),         // 垂直镜像
+                5 => (y, x),                 // transpose（主对角）
+                6 => (y, h - 1 - x),         // 90° CW
+                7 => (w - 1 - y, h - 1 - x), // transverse（副对角）
+                _ => (w - 1 - y, x),         // 8 = 90° CCW
             };
             let src = pixel(sx, sy);
             let d = ((y as usize) * (ow as usize) + x as usize) * 4;
@@ -276,9 +276,7 @@ mod tests {
     use crate::image_size;
 
     fn gradient(w: u32, h: u32) -> Vec<u8> {
-        (0..w * h * 3)
-            .map(|i| (i % 251) as u8)
-            .collect()
+        (0..w * h * 3).map(|i| (i % 251) as u8).collect()
     }
 
     #[test]
@@ -318,14 +316,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("dam-enc3-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("out.tif");
-        assert!(encode_rgb_to(8, 8, &vec![0u8; 64 * 3], &p, None).is_err());
+        assert!(encode_rgb_to(8, 8, &[0u8; 64 * 3], &p, None).is_err());
         let p = dir.join("out.jpg");
         // 缓冲长度不符
-        assert!(encode_rgb_to(8, 8, &vec![0u8; 8 * 8], &p, None).is_err());
+        assert!(encode_rgb_to(8, 8, &[0u8; 8 * 8], &p, None).is_err());
         // 非法尺寸
         assert!(encode_rgb_to(0, 8, &[], &p, None).is_err());
         // 非法 quality
-        assert!(encode_rgb_to(8, 8, &vec![0u8; 64 * 3], &p, Some(0)).is_err());
+        assert!(encode_rgb_to(8, 8, &[0u8; 64 * 3], &p, Some(0)).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -354,16 +352,20 @@ mod tests {
         let src = quad();
         // 目标 (0,0) 取哪个源像素，按 EXIF 定义逐个写死（= 真值表，不是实现镜像）
         for (o, expect_00, swap) in [
-            (2u32, [0, 20, 0, 128], false),    // 水平镜像：左上 ← 右上
-            (3, [40, 40, 40, 255], false),     // 180°：左上 ← 右下
-            (4, [0, 0, 30, 0], false),         // 垂直镜像：左上 ← 左下
-            (5, [10, 0, 0, 255], true),        // transpose：左上不变
-            (6, [0, 0, 30, 0], true),          // 90° CW：左上 ← 左下
-            (7, [40, 40, 40, 255], true),      // transverse：左上 ← 右下
-            (8, [0, 20, 0, 128], true),        // 90° CCW：左上 ← 右上
+            (2u32, [0, 20, 0, 128], false), // 水平镜像：左上 ← 右上
+            (3, [40, 40, 40, 255], false),  // 180°：左上 ← 右下
+            (4, [0, 0, 30, 0], false),      // 垂直镜像：左上 ← 左下
+            (5, [10, 0, 0, 255], true),     // transpose：左上不变
+            (6, [0, 0, 30, 0], true),       // 90° CW：左上 ← 左下
+            (7, [40, 40, 40, 255], true),   // transverse：左上 ← 右下
+            (8, [0, 20, 0, 128], true),     // 90° CCW：左上 ← 右上
         ] {
             let (ow, oh, out) = orient_rgba(w, h, &src, o).unwrap();
-            assert_eq!((ow, oh), if swap { (h, w) } else { (w, h) }, "orientation={o} 尺寸");
+            assert_eq!(
+                (ow, oh),
+                if swap { (h, w) } else { (w, h) },
+                "orientation={o} 尺寸"
+            );
             assert_eq!(px(&out, ow, 0, 0), expect_00, "orientation={o} 左上角");
             assert_eq!(out.len(), src.len());
         }
@@ -430,14 +432,23 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("ok.png");
         // 2x2 RGBA = 16 字节；给 8 字节 → 长度不符
-        assert!(encode_rgba_to(2, 2, &[0u8; 8], &p, None, None).is_err(), "长度不符");
-        assert!(encode_rgba_to(0, 1, &[], &p, None, None).is_err(), "非法尺寸");
+        assert!(
+            encode_rgba_to(2, 2, &[0u8; 8], &p, None, None).is_err(),
+            "长度不符"
+        );
+        assert!(
+            encode_rgba_to(0, 1, &[], &p, None, None).is_err(),
+            "非法尺寸"
+        );
         assert!(
             encode_rgba_to(2, 1, &[0u8; 8], &p, Some(101), None).is_err(),
             "quality 越界"
         );
         let p = dir.join("x.tif");
-        assert!(encode_rgba_to(2, 1, &[0u8; 8], &p, None, None).is_err(), "未知扩展名");
+        assert!(
+            encode_rgba_to(2, 1, &[0u8; 8], &p, None, None).is_err(),
+            "未知扩展名"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

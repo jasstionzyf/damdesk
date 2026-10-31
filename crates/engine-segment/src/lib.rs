@@ -21,7 +21,7 @@
 //! `DAM_MODELS_ROOT`（验收/容器用）；布局契约与 engine-embed factory 一致：
 //! `<root>/models/<model>/<model>.onnx`（core_config::model_dir）。
 //! **进程级全局态**：测试里改根必须走 `ModelsRootScope`（取 `core_config::models_root_lock()`
-//! + drop 还原），断言「当前无根」的读侧用例取 `ModelsRootScope::enter()` 与写侧互斥
+//! 加上 drop 还原），断言「当前无根」的读侧用例取 `ModelsRootScope::enter()` 与写侧互斥
 //! —— 裸 `set_models_root()` 会与同二进制并行的用例互相踩（卡 task）。
 
 #[cfg(feature = "local-infer")]
@@ -40,20 +40,11 @@ pub enum SegmentError {
     #[error("onnx: {0}")]
     Onnx(String),
     #[error("{detector}: 参数错误: {msg}")]
-    BadParams {
-        detector: &'static str,
-        msg: String,
-    },
+    BadParams { detector: &'static str, msg: String },
     #[error("{detector}: 输入不符: {msg}")]
-    InputMismatch {
-        detector: &'static str,
-        msg: String,
-    },
+    InputMismatch { detector: &'static str, msg: String },
     #[error("{detector}: {msg}")]
-    Failed {
-        detector: &'static str,
-        msg: String,
-    },
+    Failed { detector: &'static str, msg: String },
 }
 
 pub type Result<T> = std::result::Result<T, SegmentError>;
@@ -261,10 +252,13 @@ impl Mask {
                     }
                 }
             }
-            out.push(Component { bbox: [x0, y0, x1, y1], area: area as u32 });
+            out.push(Component {
+                bbox: [x0, y0, x1, y1],
+                area: area as u32,
+            });
         }
         // 稳定排序：面积降序，同面积保持扫描序（确定性，不依赖 sort_unstable）
-        out.sort_by(|a, b| b.area.cmp(&a.area));
+        out.sort_by_key(|c| std::cmp::Reverse(c.area));
         out
     }
 
@@ -333,7 +327,7 @@ impl Segmentation {
     ///   变化的响应，不含实现口径差。
     /// - 无法到达 target（主体过满 bbox 占满全图 / 无前景）时返回可达的最优窗，
     ///   修复成败交由复检裁决（guaranteed 破例 → pending_human 兜底）。
-    /// 无前景 → None（调用方响亮报错，不静默输出原图）。
+    /// - 无前景 → None（调用方响亮报错，不静默输出原图）。
     pub fn crop_window(&self, target: f64) -> Option<([usize; 4], f64)> {
         // 主主体 bbox（散点掩码退化为小噪声块时面积可能小于全掩码 bbox，取较大者的
         // 语义是「最大连通域」——它就是画面主体；散点噪声域面积小不会胜出）
@@ -350,8 +344,10 @@ impl Segmentation {
             let w = (bw * s).round().max(1.0).min(side as f64) as usize;
             let h = (bh * s).round().max(1.0).min(side as f64) as usize;
             // 中心对齐 bbox 中心（不随 s 漂移）+ 钳进网格（越界整体平移，不缩窗）
-            let x0 = ((cx - w as f64 / 2.0).round() as isize).clamp(0, (side - w) as isize) as usize;
-            let y0 = ((cy - h as f64 / 2.0).round() as isize).clamp(0, (side - h) as isize) as usize;
+            let x0 =
+                ((cx - w as f64 / 2.0).round() as isize).clamp(0, (side - w) as isize) as usize;
+            let y0 =
+                ((cy - h as f64 / 2.0).round() as isize).clamp(0, (side - h) as isize) as usize;
             let win = [x0, y0, x0 + w - 1, y0 + h - 1];
             let fg = self.mask.fg_in_window(win[0], win[1], win[2], win[3]);
             let ratio = fg as f64 / (w * h) as f64;
@@ -444,7 +440,11 @@ mod infer {
             if w == 0 || h == 0 || pixels.len() != w * h * 3 {
                 return Err(SegmentError::InputMismatch {
                     detector: "u2net",
-                    msg: format!("RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}", w * h * 3, pixels.len()),
+                    msg: format!(
+                        "RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}",
+                        w * h * 3,
+                        pixels.len()
+                    ),
                 });
             }
             let input = preprocess(width, height, pixels);
@@ -532,7 +532,11 @@ mod infer {
         }
         let bbox = mask.bbox();
         let fg_ratio = mask.fg_ratio();
-        Segmentation { mask, fg_ratio, bbox }
+        Segmentation {
+            mask,
+            fg_ratio,
+            bbox,
+        }
     }
 }
 
@@ -628,7 +632,10 @@ mod tests {
         // 显式注入优先于环境变量
         let other = dir.join("other");
         set_models_root(&other);
-        assert_eq!(model_file(U2NET).unwrap(), other.join("models/u2net/u2net.onnx"));
+        assert_eq!(
+            model_file(U2NET).unwrap(),
+            other.join("models/u2net/u2net.onnx")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -679,8 +686,8 @@ mod tests {
         let w = win[2] - win[0] + 1;
         let h = win[3] - win[1] + 1;
         assert!((ratio - 0.75).abs() < 0.02, "ratio={ratio}");
-        assert!(w >= 113 && w <= 118, "w={w}");
-        assert!(h >= 113 && h <= 118, "h={h}");
+        assert!((113..=118).contains(&w), "w={w}");
+        assert!((113..=118).contains(&h), "h={h}");
         // 窗口完整覆盖 bbox
         assert!(win[0] <= 110 && win[1] <= 110 && win[2] >= 209 && win[3] >= 209);
 
@@ -822,7 +829,10 @@ mod tests {
             .collect();
         let seg = postprocess(map);
         let fg = seg.mask.fg_count();
-        assert!((fg as f64 / (SIDE * SIDE) as f64 - 0.5).abs() < 0.01, "fg={fg}");
+        assert!(
+            (fg as f64 / (SIDE * SIDE) as f64 - 0.5).abs() < 0.01,
+            "fg={fg}"
+        );
         assert!(seg.bbox.is_some());
         // 常数图：span 兜底 → (v-min)/span=0 → 无前景
         let seg2 = postprocess(vec![0.7f32; SIDE * SIDE]);

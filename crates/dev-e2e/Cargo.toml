@@ -73,6 +73,8 @@ engine-restore = { path = "../engine-restore" }
 svc-import.workspace = true
 svc-pipeline.workspace = true
 svc-library.workspace = true
+# C8 pack_lint：插件包（manifest.json 形态）装载门禁同源校验
+pack-host = { path = "../pack-host" }
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -1,3 +1,4 @@
+#![allow(non_snake_case)] // 本模块 DTO 字段 = 前端 JSON camelCase 契约，勿改
 //! W2 图库读 API：资产列表（过滤+分页）/ 统计 / 目录树 / 单资产标签。
 //! 复用 svc-library（L2 读模型），薄壳零容忍。
 
@@ -227,15 +228,21 @@ pub async fn verify(State(state): State<AppState>) -> impl IntoResponse {
             Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         }
     };
-    let probes = match {
+    let join = {
         let thumbs_root = state.thumbs_root.clone();
         tokio::task::spawn_blocking(move || {
             svc_import::probe_paths_checked(&targets, Some(&thumbs_root))
         })
         .await
-    } {
+    };
+    let probes = match join {
         Ok(p) => p,
-        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, format!("probe task: {e}")),
+        Err(e) => {
+            return err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("probe task: {e}"),
+            )
+        }
     };
     let report = {
         let conn = state.db.lock().await;
@@ -670,6 +677,7 @@ pub struct IdsReq {
 /// 避免 SQLite 变量数上限（默认 999）被击穿后报看不懂的错。
 const MAX_IDS_PER_CALL: usize = 900;
 
+#[allow(clippy::result_large_err)] // 错误即 Response（axum handler 惯例）
 fn check_ids(ids: &[i64]) -> Result<(), axum::response::Response> {
     if ids.is_empty() {
         return Err(err_coded(
@@ -905,9 +913,7 @@ pub fn humanize_fs_error(desktop: bool, code: &str, raw: &str) -> String {
             "无法移动：源文件与目标目录不在同一磁盘/分区，或目录只读——请改选同一磁盘内的目录。"
                 .to_string()
         }
-        (true, "permission_denied") => {
-            "无法移动：没有写权限，请检查目标目录权限。".to_string()
-        }
+        (true, "permission_denied") => "无法移动：没有写权限，请检查目标目录权限。".to_string(),
         (_, "not_found") => {
             "磁盘文件不存在（可能已被外部移动或删除），请先「重新定位」再移动。".to_string()
         }
@@ -915,7 +921,9 @@ pub fn humanize_fs_error(desktop: bool, code: &str, raw: &str) -> String {
     }
 }
 
-fn humanize_move_results(results: Vec<svc_library::AssetOpResult>) -> Vec<svc_library::AssetOpResult> {
+fn humanize_move_results(
+    results: Vec<svc_library::AssetOpResult>,
+) -> Vec<svc_library::AssetOpResult> {
     results
         .into_iter()
         .map(|mut r| {
@@ -948,9 +956,12 @@ pub async fn move_assets(
     // WEBCAP ①（前置拦截）：目标不可写 / 不在可写库根内 / 跨设备 → 提交前 4xx + code，
     // 不产生任何磁盘副作用。判定源 = svc_library::capabilities（与 /api/capabilities 同源）。
     // ② 的逐条分类（下面 humanize）仍然保留作兜底：预检通过后磁盘状态仍可能变。
-    if let Err(rej) =
-        svc_library::capabilities::precheck_move(&conn, &req.ids, req.targetDir.trim(), &state.data_dir)
-    {
+    if let Err(rej) = svc_library::capabilities::precheck_move(
+        &conn,
+        &req.ids,
+        req.targetDir.trim(),
+        &state.data_dir,
+    ) {
         let text = humanize_fs_error(crate::is_desktop_form(), &rej.code, &rej.message);
         return (
             StatusCode::BAD_REQUEST,
@@ -970,7 +981,11 @@ mod move_error_text_tests {
 
     #[test]
     fn web_form_explains_unsupported_and_points_to_desktop() {
-        let web = humanize_fs_error(false, "cross_device", "rename 失败：Invalid cross-device link");
+        let web = humanize_fs_error(
+            false,
+            "cross_device",
+            "rename 失败：Invalid cross-device link",
+        );
         assert!(web.contains("网页版不支持"), "{web}");
         assert!(web.contains("桌面版"), "{web}");
         let ro = humanize_fs_error(false, "read_only_fs", "raw");
@@ -1190,7 +1205,7 @@ pub async fn migrate_to_library(
     // 前置拦截（在任何磁盘副作用之前）：库根必须**实测可写**。
     // 与 /api/capabilities 同一套探针口径，但**不做跨设备拒绝** —— 迁移的正当用途就是
     // 把别的盘上的参考图收进库根，跨设备按「复制」处理（本卡产品定义）。
-    let root = {
+    {
         let conn = state.db.lock().await;
         let root = library_root(&conn, &state.data_dir);
         if let Err((code, raw)) = svc_library::capabilities::probe_writable(&root) {
@@ -1291,7 +1306,10 @@ pub async fn migrate_audit(
     let conn = state.db.lock().await;
     match svc_library::migrate_audit_rows(
         &conn,
-        q.batchId.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        q.batchId
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
         q.limit.unwrap_or(500),
     ) {
         Ok(rows) => {

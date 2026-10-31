@@ -2,12 +2,12 @@
 //!
 //! 模型分层（唯一事实源）：
 //! * `custom_tag_task` —— 打标任务定义：`name` = 维度名（用户起的），`prompt` = 问什么。
-//! * `tag_result`       —— 任务结果表：每「资产 × 任务」一行，`name` = 维度名快照，
-//!                         `value` = 模型原始输出（多值不拆，保留原串）。
-//! * `tag`              —— 标签实体：**只有 value，没有 name**。结果 value 非空即自动
-//!                         扇出（按「;」「；」换行拆分）成标签行，`origin` 记来源
-//!                         （auto=模板打标 / manual=人工 / path=目录 / custom=自定义任务模型），
-//!                         `model`+`taskId` 记溯源。
+//! * `tag_result` —— 任务结果表：每「资产 × 任务」一行，`name` = 维度名快照，
+//!   `value` = 模型原始输出（多值不拆，保留原串）。
+//! * `tag` —— 标签实体：**只有 value，没有 name**。结果 value 非空即自动
+//!   扇出（按「;」「；」换行拆分）成标签行，`origin` 记来源
+//!   （auto=模板打标 / manual=人工 / path=目录 / custom=自定义任务模型），
+//!   `model`+`taskId` 记溯源。
 //!
 //! 去重与优先级：`uq_tag_asset_value(assetId, value)` 同图同值只留一行；
 //! 人工（manual）优先——写 auto/custom/path 都不覆盖已有 manual 行，人工写入则升级来源。
@@ -31,7 +31,7 @@ pub fn split_values(raw: &str) -> Vec<String> {
             continue;
         }
         let v: String = v.chars().take(TAG_VALUE_MAX_CHARS).collect();
-        if !out.iter().any(|x| *x == v) {
+        if !out.contains(&v) {
             out.push(v);
         }
     }
@@ -348,7 +348,10 @@ mod tests {
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .unwrap();
-        assert_eq!((origin.as_str(), model.as_str(), task_id), ("custom", "vl", t));
+        assert_eq!(
+            (origin.as_str(), model.as_str(), task_id),
+            ("custom", "vl", t)
+        );
         // 结果表保留原始整串 + 维度名
         let (name, raw) = asset_tag_results(&c, a)
             .unwrap()
@@ -384,7 +387,9 @@ mod tests {
         replace_tag_result(&c, a, t, "地点", "海边", "vl").unwrap();
         assert_eq!(replace_tag_result(&c, a, t, "地点", "  ", "vl").unwrap(), 0);
         let n: i64 = c
-            .query_row("SELECT COUNT(*) FROM tag WHERE assetId=?1", [a], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM tag WHERE assetId=?1", [a], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(n, 0);
         assert!(asset_tag_results(&c, a).unwrap().is_empty());
@@ -441,7 +446,10 @@ mod tests {
             Some("海尔_冰箱_501L".to_string())
         );
         assert_eq!(normalize_tag_value("\"暖橙\""), Some("暖橙".to_string()));
-        assert_eq!(normalize_tag_value(" size-4k "), Some("size-4k".to_string()));
+        assert_eq!(
+            normalize_tag_value(" size-4k "),
+            Some("size-4k".to_string())
+        );
         // 值内部已有的 _ 保持不动（两级分隔符：- 只做 key-val，_ 只做值内连接）
         assert_eq!(
             normalize_tag_value("MacBook_Pro_13寸"),
@@ -510,15 +518,9 @@ mod tests {
         assert_eq!(raw, r#"["青岛","海 边","  ","青岛 "]"#);
 
         // 已带 key 前缀的值不二次加前缀（重扇出/模型自己带上都安全）
-        let n = replace_tag_result_values(
-            &c,
-            a,
-            t,
-            "拍摄地点",
-            &["拍摄地点-山顶".to_string()],
-            "vl",
-        )
-        .unwrap();
+        let n =
+            replace_tag_result_values(&c, a, t, "拍摄地点", &["拍摄地点-山顶".to_string()], "vl")
+                .unwrap();
         assert_eq!(n, 1);
         let vals: Vec<String> = c
             .prepare("SELECT value FROM tag WHERE assetId = ?1 ORDER BY value")

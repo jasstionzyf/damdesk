@@ -36,8 +36,8 @@ fn main() {
     }
     let seg = engine_segment::segmenter("u2net").expect("u2net segmenter");
     let ocr = engine_ocr::infer::engine().expect("ocr engine");
-    const COVER_MAX: f64 = 0.08;   // 与 pack 阈值同口径（subject_cover_ratio_max）
-    const MIN_CHARS: usize = 2;    // 与 pack 同口径（min_text_chars）
+    const COVER_MAX: f64 = 0.08; // 与 pack 阈值同口径（subject_cover_ratio_max）
+    const MIN_CHARS: usize = 2; // 与 pack 同口径（min_text_chars）
     for p in &args {
         let path = Path::new(p);
         let (w, h, px) = core_media::rgb8(path).expect("decode");
@@ -45,7 +45,11 @@ fn main() {
         let s = seg.run_rgb(wu, hu, &px).expect("segment");
         let comps = s.mask.components();
         let img_area = (wu as f64) * (hu as f64);
-        println!("== {p}  {wu}x{hu}  fg_ratio={:.4}  mask_bbox={:?}", s.fg_ratio, s.mask.bbox());
+        println!(
+            "== {p}  {wu}x{hu}  fg_ratio={:.4}  mask_bbox={:?}",
+            s.fg_ratio,
+            s.mask.bbox()
+        );
         let scale = s.mask.side as f64;
         let to_px = |b: [usize; 4]| -> [i64; 4] {
             [
@@ -62,7 +66,10 @@ fn main() {
             let cell_ratio = c.area as f64 / (s.mask.side * s.mask.side) as f64;
             println!(
                 "   #{i} grid={:?} px={:?} cells={} cell_ratio={:.4} bbox_area_ratio={:.4}",
-                c.bbox, b, c.area, cell_ratio,
+                c.bbox,
+                b,
+                c.area,
+                cell_ratio,
                 area(b) as f64 / img_area
             );
             inst_px.push(b);

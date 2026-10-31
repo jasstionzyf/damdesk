@@ -4,6 +4,7 @@
 //!   - 文件不存在（单文件被删、目录整体消失、路径中间段被换成普通文件 ENOTDIR）；
 //!   - 权限拒绝（PermissionDenied，注入式 —— 容器内以 root 跑单测时 DAC 无法用 chmod 构造）；
 //!   - 其他 IO 错误（真实符号链接环 ELOOP）。
+//!
 //! 断言口径：分类正确、**不崩不吞**（错误串进 samples）、missing 标记与恢复都落库、
 //! 核查记录落 settings（stats 的新鲜度标记依赖它）。
 //!
@@ -14,8 +15,7 @@ use std::path::{Path, PathBuf};
 use svc_import::*;
 
 fn setup_db(dir: &Path) -> Connection {
-    let conn = core_storage::open(&dir.join("test.db")).unwrap();
-    conn
+    core_storage::open(&dir.join("test.db")).unwrap()
 }
 
 /// 建一个真实文件（内容无关紧要：核查只看 metadata）。返回路径。
@@ -73,7 +73,10 @@ fn deleted_file_is_marked_missing_then_recovered() {
     assert_eq!(r.notFound, 2, "两文件不存在 → notFound=2");
     assert_eq!(r.newlyMissing, 2);
     assert_eq!(r.missing, 2, "核查后 missing 必须等于「删除数」");
-    assert_eq!(r.missingBefore, 0, "核查前库里还是旧值 0（这就是原来的撒谎点）");
+    assert_eq!(
+        r.missingBefore, 0,
+        "核查前库里还是旧值 0（这就是原来的撒谎点）"
+    );
     assert_eq!(r.recovered, 0);
     assert_eq!(r.unreadable, 0);
     assert_eq!(missing_flags(&conn), vec![0, 1, 1]);
@@ -164,9 +167,15 @@ fn permission_denied_is_classified_and_never_marks_missing() {
 
     let r = apply_missing_probes(&conn, &probes, std::time::Instant::now()).unwrap();
     assert_eq!(r.permissionDenied, 1);
-    assert_eq!(r.unreadable, 1, "存在但读不了要单独计数，不能折进 missing 也不能丢");
+    assert_eq!(
+        r.unreadable, 1,
+        "存在但读不了要单独计数，不能折进 missing 也不能丢"
+    );
     assert_eq!(r.notFound, 0);
-    assert_eq!(r.missing, 0, "文件在盘上就不是「失联」（不能用 exists() 判定）");
+    assert_eq!(
+        r.missing, 0,
+        "文件在盘上就不是「失联」（不能用 exists() 判定）"
+    );
     assert_eq!(missing_flags(&conn), vec![0, 0]);
     assert!(r.samples.iter().any(|s| s.class == "permissionDenied"));
     // 记录也带上 unreadable，UI/stats 才能如实提示
@@ -189,7 +198,10 @@ fn other_io_error_is_reported_not_swallowed() {
     assert_eq!(r.notFound, 0);
     assert_eq!(r.unreadable, 1);
     assert_eq!(r.missing, 0);
-    assert!(r.samples.iter().any(|s| s.class == "other" && s.error.is_some()));
+    assert!(r
+        .samples
+        .iter()
+        .any(|s| s.class == "other" && s.error.is_some()));
 }
 
 // ---------- 分类函数直测（无 FS 依赖） ----------

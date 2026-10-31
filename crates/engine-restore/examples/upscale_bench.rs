@@ -11,7 +11,7 @@
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        eprintln!("用法: upscale_bench <img> [...]"); 
+        eprintln!("用法: upscale_bench <img> [...]");
         std::process::exit(2);
     }
     let up = engine_restore::upscale::upscaler(engine_restore::REALESR_GENERAL_X4V3)
@@ -20,13 +20,10 @@ fn main() {
     for p in &args {
         let t0 = std::time::Instant::now();
         let (w, h, px) = core_media::rgb8(std::path::Path::new(p)).expect("decode");
-        let (w, h): (u32, u32) = (
-            w.try_into().expect("w"),
-            h.try_into().expect("h"),
-        );
+        let (w, h): (u32, u32) = (w.try_into().expect("w"), h.try_into().expect("h"));
         let dec = t0.elapsed().as_millis();
         let t1 = std::time::Instant::now();
-        let (ow, oh, out) = up.run_rgb(w, h, &px).expect("run_rgb");
+        let (ow, oh, _out) = up.run_rgb(w, h, &px).expect("run_rgb");
         let inf = t1.elapsed().as_millis();
         println!(
             "{p}: {w}x{h} -> {ow}x{oh} | decode {dec}ms | infer {inf}ms | out {:.1}MP",

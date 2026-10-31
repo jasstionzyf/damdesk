@@ -11,7 +11,7 @@
 //! 会话缓存 / 模型根解析 / 模型缺省报错语义全部与 engine-segment 同模式（C3 先例：
 //! 两 L1 crate 类型独立禁互引，helpers 各自持有）。`<root>/models/<model>/<model>.onnx`。
 //! **进程级全局态**：测试里改根必须走 `ModelsRootScope`（取 `core_config::models_root_lock()`
-//! + drop 还原），断言「当前无根」的读侧用例取 `ModelsRootScope::enter()` 与写侧互斥
+//! 加上 drop 还原），断言「当前无根」的读侧用例取 `ModelsRootScope::enter()` 与写侧互斥
 //! —— 裸 `set_models_root()` / `clear_models_root()` 会与同二进制并行的用例互相踩（卡 task）。
 //!
 //! 独显高性能档（卡验收原文「检测独显切高性能档」）：`detect_device()` 探测独显
@@ -181,9 +181,7 @@ fn has_nvidia_gpu() -> bool {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    cmd.output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    cmd.output().map(|o| o.status.success()).unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -220,11 +218,20 @@ mod tests {
         let _scope = ModelsRootScope::enter();
         let _env = EnvGuard::take("DAM_MODELS_ROOT");
         set_models_root("/tmp/r-a");
-        assert_eq!(model_file(LAMA_FP32).unwrap().to_string_lossy(), "/tmp/r-a/models/lama-fp32/lama-fp32.onnx");
+        assert_eq!(
+            model_file(LAMA_FP32).unwrap().to_string_lossy(),
+            "/tmp/r-a/models/lama-fp32/lama-fp32.onnx"
+        );
         set_models_root("/tmp/r-b");
-        assert_eq!(model_file(REALESR_GENERAL_X4V3).unwrap().to_string_lossy(), "/tmp/r-b/models/realesr-general-x4v3/realesr-general-x4v3.onnx");
+        assert_eq!(
+            model_file(REALESR_GENERAL_X4V3).unwrap().to_string_lossy(),
+            "/tmp/r-b/models/realesr-general-x4v3/realesr-general-x4v3.onnx"
+        );
         clear_models_root();
-        assert!(matches!(model_file(LAMA_FP32), Err(RestoreError::NoModelsRoot)));
+        assert!(matches!(
+            model_file(LAMA_FP32),
+            Err(RestoreError::NoModelsRoot)
+        ));
     }
 
     #[test]

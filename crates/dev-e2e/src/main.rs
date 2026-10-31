@@ -23,6 +23,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
+/// 展示样本行：assetId + 文件名 + 中英标题 + 描述。
+type SampleRow = (i64, String, String, Option<String>, Option<String>);
+
 use core_config::{load_registry, InferenceSettings, SpecKind, TagSettings};
 use engine_embed::factory;
 use engine_embed::EmbedProvider;
@@ -520,7 +523,9 @@ fn run() -> Result<Vec<String>, Box<dyn Error>> {
             a.top_k.min(5),
             &filter,
             // dev 基准测的是 KNN 机制本身，关掉相关性下限（阈值另由 w3 标定脚本验）
-            &svc_library::SimilarOptions { min_score: Some(0.0) },
+            &svc_library::SimilarOptions {
+                min_score: Some(0.0),
+            },
         )?;
         lat.push(t.elapsed().as_micros() as f64 / 1000.0);
         let top = hits.first();
@@ -660,7 +665,7 @@ fn run() -> Result<Vec<String>, Box<dyn Error>> {
             "SELECT assetId, fileName, title_ch, title_en, description FROM assets
              WHERE title_ch IS NOT NULL AND TRIM(title_ch) <> '' ORDER BY assetId LIMIT 10",
         )?;
-        let samples: Vec<(i64, String, String, Option<String>, Option<String>)> = stmt
+        let samples: Vec<SampleRow> = stmt
             .query_map([], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
             })?

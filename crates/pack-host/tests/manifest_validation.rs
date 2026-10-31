@@ -145,7 +145,10 @@ fn signature_is_optional_but_type_checked() {
 
     let mut v = good();
     v["signature"] = json!("sha256:deadbeef");
-    assert_eq!(parse(&v).unwrap().signature.as_deref(), Some("sha256:deadbeef"));
+    assert_eq!(
+        parse(&v).unwrap().signature.as_deref(),
+        Some("sha256:deadbeef")
+    );
 
     let mut v = good();
     v["signature"] = json!(12345);
@@ -224,7 +227,11 @@ fn capabilities_whitelist_is_exact_and_deduped() {
     let msg = err_of(&v);
     assert!(msg.contains("op.telepathy"), "{msg}");
     assert!(msg.contains("x.y"), "{msg}");
-    assert_eq!(msg.matches("op.telepathy").count(), 1, "未知项应去重：{msg}");
+    assert_eq!(
+        msg.matches("op.telepathy").count(),
+        1,
+        "未知项应去重：{msg}"
+    );
 
     // 大小写不宽松：IO.READ ≠ io.read（白名单是字面量匹配）
     let mut v = good();
@@ -277,7 +284,11 @@ fn load_pack_reports_missing_manifest_with_path() {
     let dir = tempfile::tempdir().unwrap();
     match load_pack(dir.path()) {
         Err(ManifestError::Io { path, .. }) => {
-            assert_eq!(path, dir.path().join("manifest.json"), "错误必须点名期望路径");
+            assert_eq!(
+                path,
+                dir.path().join("manifest.json"),
+                "错误必须点名期望路径"
+            );
         }
         other => panic!("期望 Io 错误，实得 {other:?}"),
     }
@@ -364,6 +375,10 @@ fn shipped_packs_load_and_pass_install_time_checks() {
             pack.display(),
             manifest.missing_entrypoint_files(&pack)
         );
-        assert_eq!(identity.plugin_hash.len(), 64, "pluginHash 必须是 sha256 hex");
+        assert_eq!(
+            identity.plugin_hash.len(),
+            64,
+            "pluginHash 必须是 sha256 hex"
+        );
     }
 }

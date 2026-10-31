@@ -64,7 +64,9 @@ async fn call(app: &axum::Router, uri: &str) -> (StatusCode, Value) {
         .await
         .unwrap();
     let status = res.status();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -81,20 +83,34 @@ fn ids_of(v: &Value) -> Vec<i64> {
 async fn pure_filter_browse_channel() {
     let data_dir = fresh_dir("browse");
     seed(&data_dir);
-    let state =
-        app_web::test_support::state(data_dir.clone(), core_storage::open(&data_dir.join("dam.db")).unwrap());
+    let state = app_web::test_support::state(
+        data_dir.clone(),
+        core_storage::open(&data_dir.join("dam.db")).unwrap(),
+    );
     let app = app_web::router_without_dist(state);
 
     // 全值精确：命中 a/b（B07-2①）；列表序 = importedAt DESC、assetId DESC
-    let (code, v) = call(&app, "/api/library/assets?tag=%E5%B0%BA%E5%AF%B8-%E6%BB%9A%E7%AD%92_10KG&limit=10").await;
+    let (code, v) = call(
+        &app,
+        "/api/library/assets?tag=%E5%B0%BA%E5%AF%B8-%E6%BB%9A%E7%AD%92_10KG&limit=10",
+    )
+    .await;
     assert_eq!(code, StatusCode::OK);
     assert_eq!(v["total"], json!(2), "全值精确命中 2 张: {v}");
     assert_eq!(ids_of(&v), vec![2, 1]);
 
     // 大小写/首尾空格/内部空格归一化不影响命中（B07-2④）
-    let (_, v) = call(&app, "/api/library/assets?tag=%E5%B0%BA%E5%AF%B8-%E6%BB%9A%E7%AD%92_10kg&limit=10").await;
+    let (_, v) = call(
+        &app,
+        "/api/library/assets?tag=%E5%B0%BA%E5%AF%B8-%E6%BB%9A%E7%AD%92_10kg&limit=10",
+    )
+    .await;
     assert_eq!(v["total"], json!(2), "小写也命中（NOCASE）: {v}");
-    let (_, v) = call(&app, "/api/library/assets?tag=%20%E5%B0%BA%E5%AF%B8-%E6%BB%9A%E7%AD%92%2010KG%20&limit=10").await;
+    let (_, v) = call(
+        &app,
+        "/api/library/assets?tag=%20%E5%B0%BA%E5%AF%B8-%E6%BB%9A%E7%AD%92%2010KG%20&limit=10",
+    )
+    .await;
     assert_eq!(v["total"], json!(2), "首尾+内部空格归一化后命中: {v}");
 
     // 自然词（非全值）不命中——过滤路径语义仍是精确，0 命中要可见（不是静默退化成整库）
@@ -103,14 +119,30 @@ async fn pure_filter_browse_channel() {
     assert_eq!(ids_of(&v), Vec::<i64>::new(), "0 命中必须是空集");
 
     // 组合过滤：目录前缀 + 扩展名（B07-1 的组合分支）；列表序 = importedAt DESC
-    let (_, v) = call(&app, "/api/library/assets?dirPrefix=%2Flib%2Faa&ext=jpg&limit=10").await;
+    let (_, v) = call(
+        &app,
+        "/api/library/assets?dirPrefix=%2Flib%2Faa&ext=jpg&limit=10",
+    )
+    .await;
     assert_eq!(v["total"], json!(3), "dir+ext 组合: {v}");
     assert_eq!(ids_of(&v), vec![4, 3, 1]);
     // 组合 + NOCASE：sunset 命中 Sunset（大小写不敏感贯穿组合条件）
-    let (_, v) = call(&app, "/api/library/assets?dirPrefix=%2Flib%2Faa&ext=jpg&tag=sunset&limit=10").await;
-    assert_eq!(v["total"], json!(1), "组合条件 + 大小写不敏感命中 Sunset: {v}");
+    let (_, v) = call(
+        &app,
+        "/api/library/assets?dirPrefix=%2Flib%2Faa&ext=jpg&tag=sunset&limit=10",
+    )
+    .await;
+    assert_eq!(
+        v["total"],
+        json!(1),
+        "组合条件 + 大小写不敏感命中 Sunset: {v}"
+    );
     assert_eq!(ids_of(&v), vec![3]);
-    let (_, v) = call(&app, "/api/library/assets?dirPrefix=%2Flib%2Faa&tag=%E4%B8%8D%E5%AD%98%E5%9C%A8&limit=10").await;
+    let (_, v) = call(
+        &app,
+        "/api/library/assets?dirPrefix=%2Flib%2Faa&tag=%E4%B8%8D%E5%AD%98%E5%9C%A8&limit=10",
+    )
+    .await;
     assert_eq!(v["total"], json!(0), "真 0 命中 = 空集: {v}");
 
     std::fs::remove_dir_all(&data_dir).ok();
@@ -120,8 +152,10 @@ async fn pure_filter_browse_channel() {
 async fn tag_prefix_candidates_endpoint() {
     let data_dir = fresh_dir("prefix");
     seed(&data_dir);
-    let state =
-        app_web::test_support::state(data_dir.clone(), core_storage::open(&data_dir.join("dam.db")).unwrap());
+    let state = app_web::test_support::state(
+        data_dir.clone(),
+        core_storage::open(&data_dir.join("dam.db")).unwrap(),
+    );
     let app = app_web::router_without_dist(state);
 
     // 前缀候选（B07-2②）：key 前缀 → 该 key 下全部值 + 计数 + total/hasMore
@@ -150,7 +184,11 @@ async fn tag_prefix_candidates_endpoint() {
     let (_, v) = call(&app, "/api/library/tags?prefix=%25").await;
     assert_eq!(v["total"], json!(0), "字面 % 不是通配符: {v}");
     let (_, v) = call(&app, "/api/library/tags?prefix=%E4%B8%8D%E5%AD%98%E5%9C%A8").await;
-    assert_eq!(v["total"], json!(0), "无匹配候选也要给 total=0（前端据此显示空态）: {v}");
+    assert_eq!(
+        v["total"],
+        json!(0),
+        "无匹配候选也要给 total=0（前端据此显示空态）: {v}"
+    );
 
     // limit 生效 + hasMore 探针
     let (_, v) = call(&app, "/api/library/tags?prefix=%E5%B0%BA%E5%AF%B8&limit=1").await;

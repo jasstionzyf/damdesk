@@ -125,7 +125,11 @@ impl D4 {
     pub fn compose(self, rhs: D4) -> D4 {
         let (k1, j1) = self.kj();
         let (k2, j2) = rhs.kj();
-        let k = if j1 { (k1 + 4 - k2 % 4) % 4 } else { (k1 + k2) % 4 };
+        let k = if j1 {
+            (k1 + 4 - k2 % 4) % 4
+        } else {
+            (k1 + k2) % 4
+        };
         D4::from_kj(k, j1 ^ j2)
     }
 
@@ -589,8 +593,10 @@ pub fn build_dup_groups_d4(members: &[DupMemberD4], threshold: u32) -> Vec<DupGr
             let kind = group_kind(&group_members, members);
             let mut group_edges: Vec<DupEdge> = edges
                 .iter()
-                .filter(|e| group_members.binary_search(&e.a).is_ok()
-                    && group_members.binary_search(&e.b).is_ok())
+                .filter(|e| {
+                    group_members.binary_search(&e.a).is_ok()
+                        && group_members.binary_search(&e.b).is_ok()
+                })
                 .copied()
                 .collect();
             group_edges.sort_unstable_by_key(|e| (e.a, e.b));
@@ -813,11 +819,9 @@ mod tests {
                 let algebra = a.compose(b).apply_grid(&g);
                 let pixels = a.apply_grid(&b.apply_grid(&g));
                 assert_eq!(
-                    algebra,
-                    pixels,
+                    algebra, pixels,
                     "{:?} ∘ {:?} 的代数结果与像素结果不一致",
-                    a,
-                    b
+                    a, b
                 );
             }
         }
@@ -945,11 +949,7 @@ mod tests {
             "单值比对本应漏判（距离 {}），测试图不够非对称？",
             miss.distance
         );
-        let hit = best_variant_match(
-            &d4_phashes(&g).unwrap().to_vec(),
-            &rotated_b,
-        )
-        .unwrap();
+        let hit = best_variant_match(d4_phashes(&g).unwrap().as_ref(), &rotated_b).unwrap();
         assert_eq!(hit.distance, 0);
         assert_eq!(hit.transform, D4::Rot90);
     }
@@ -967,18 +967,31 @@ mod tests {
         for t in &tokens {
             let lit = t.trim_matches('"');
             assert_eq!(lit.len(), 16, "每项应是 16 位十六进制字符串: {t}");
-            assert!(lit.chars().all(|c| c.is_ascii_hexdigit()), "{t} 不是十六进制");
+            assert!(
+                lit.chars().all(|c| c.is_ascii_hexdigit()),
+                "{t} 不是十六进制"
+            );
         }
         assert_eq!(parse_phashes(&text), hs.to_vec());
         // 老格式/人工手写也要能吃：无引号、空格、单值
-        let plain = hs.iter().map(|h| phash_hex_of(*h)).collect::<Vec<_>>().join(", ");
+        let plain = hs
+            .iter()
+            .map(|h| phash_hex_of(*h))
+            .collect::<Vec<_>>()
+            .join(", ");
         assert_eq!(parse_phashes(&plain), hs.to_vec());
         assert_eq!(parse_phashes("  "), Vec::<u64>::new());
         assert_eq!(parse_phashes("[\"zz\",\"00\"]"), vec![0]);
         // 读列口径：多值列优先，缺失回落老单值（不得退化成空 = 「无 pHash」）
-        assert_eq!(phashes_for_compare(Some(&text), Some("0000000000000000")), hs.to_vec());
+        assert_eq!(
+            phashes_for_compare(Some(&text), Some("0000000000000000")),
+            hs.to_vec()
+        );
         assert_eq!(phashes_for_compare(None, Some("0000000000000007")), vec![7]);
-        assert_eq!(phashes_for_compare(Some("[]"), Some("0000000000000007")), vec![7]);
+        assert_eq!(
+            phashes_for_compare(Some("[]"), Some("0000000000000007")),
+            vec![7]
+        );
         assert!(phashes_for_compare(None, None).is_empty());
         // 列组装入口等价
         let mm = DupMemberD4::from_columns(9, Some("h".into()), None, Some("0000000000000007"));

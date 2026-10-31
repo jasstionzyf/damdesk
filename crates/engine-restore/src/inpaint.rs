@@ -16,7 +16,7 @@ use image::imageops::FilterType;
 use ort::session::Session;
 use ort::value::Tensor;
 
-use crate::{RestoreError, LAMA_FP32, Result};
+use crate::{RestoreError, Result, LAMA_FP32};
 
 /// 模型固定输入边长（权重锁定）。
 pub const LAMA_SIDE: u32 = 512;
@@ -123,10 +123,22 @@ impl Inpainter {
             )));
         }
         // 输入分派：名字含 mask → mask；否则默认 [image, mask] 顺序
-        let (image_in, mask_in) = match (session.inputs[0].name.contains("mask"), session.inputs[1].name.contains("mask")) {
-            (false, true) => (session.inputs[0].name.clone(), session.inputs[1].name.clone()),
-            (true, false) => (session.inputs[1].name.clone(), session.inputs[0].name.clone()),
-            _ => (session.inputs[0].name.clone(), session.inputs[1].name.clone()),
+        let (image_in, mask_in) = match (
+            session.inputs[0].name.contains("mask"),
+            session.inputs[1].name.contains("mask"),
+        ) {
+            (false, true) => (
+                session.inputs[0].name.clone(),
+                session.inputs[1].name.clone(),
+            ),
+            (true, false) => (
+                session.inputs[1].name.clone(),
+                session.inputs[0].name.clone(),
+            ),
+            _ => (
+                session.inputs[0].name.clone(),
+                session.inputs[1].name.clone(),
+            ),
         };
         let out_name = session
             .outputs
@@ -154,7 +166,11 @@ impl Inpainter {
         if w == 0 || h == 0 || pixels.len() != w * h * 3 {
             return Err(RestoreError::Failed {
                 plugin: P,
-                msg: format!("RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}", w * h * 3, pixels.len()),
+                msg: format!(
+                    "RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}",
+                    w * h * 3,
+                    pixels.len()
+                ),
             });
         }
         if mask.len() != w * h {
@@ -171,12 +187,22 @@ impl Inpainter {
         }
         // 缩到 512²（图 Triangle / 掩码 Nearest）
         let side = LAMA_SIDE as usize;
-        let src = image::RgbImage::from_raw(width, height, pixels.to_vec())
-            .ok_or_else(|| RestoreError::Failed { plugin: P, msg: "RGB 缓冲非法".into() })?;
+        let src = image::RgbImage::from_raw(width, height, pixels.to_vec()).ok_or_else(|| {
+            RestoreError::Failed {
+                plugin: P,
+                msg: "RGB 缓冲非法".into(),
+            }
+        })?;
         let small = image::imageops::resize(&src, LAMA_SIDE, LAMA_SIDE, FilterType::Triangle);
-        let mask_img = image::GrayImage::from_raw(width, height, mask.to_vec())
-            .ok_or_else(|| RestoreError::Failed { plugin: P, msg: "掩码缓冲非法".into() })?;
-        let mask_small = image::imageops::resize(&mask_img, LAMA_SIDE, LAMA_SIDE, FilterType::Nearest);
+        let mask_img =
+            image::GrayImage::from_raw(width, height, mask.to_vec()).ok_or_else(|| {
+                RestoreError::Failed {
+                    plugin: P,
+                    msg: "掩码缓冲非法".into(),
+                }
+            })?;
+        let mask_small =
+            image::imageops::resize(&mask_img, LAMA_SIDE, LAMA_SIDE, FilterType::Nearest);
 
         // NCHW 输入
         let mut img_t = vec![0f32; 3 * side * side];
@@ -187,7 +213,11 @@ impl Inpainter {
             img_t[i] = f32::from(p[i * 3]);
             img_t[n + i] = f32::from(p[i * 3 + 1]);
             img_t[2 * n + i] = f32::from(p[i * 3 + 2]);
-            msk_t[i] = if mask_small.as_raw()[i] > 127 { 1.0 } else { 0.0 };
+            msk_t[i] = if mask_small.as_raw()[i] > 127 {
+                1.0
+            } else {
+                0.0
+            };
         }
         let ti = Tensor::from_array((vec![1usize, 3, side, side], img_t.into_boxed_slice()))
             .map_err(|e| RestoreError::Onnx(e.to_string()))?;
@@ -219,8 +249,13 @@ impl Inpainter {
         for (i, &v) in out.iter().enumerate() {
             small_u8[i] = (v * gain).clamp(0.0, 255.0).round() as u8;
         }
-        let filled = image::RgbImage::from_raw(LAMA_SIDE, LAMA_SIDE, small_u8)
-            .ok_or_else(|| RestoreError::Failed { plugin: P, msg: "输出缓冲非法".into() })?;
+        let filled =
+            image::RgbImage::from_raw(LAMA_SIDE, LAMA_SIDE, small_u8).ok_or_else(|| {
+                RestoreError::Failed {
+                    plugin: P,
+                    msg: "输出缓冲非法".into(),
+                }
+            })?;
         let back = image::imageops::resize(&filled, width, height, FilterType::Triangle);
 
         // paste-back：掩码区写补绘，掩码外逐字节保真
@@ -333,7 +368,12 @@ mod tests {
                 // 掩码外保真（原图 = 全 235 均匀底）
                 assert_eq!((out[0], out[1], out[2]), (235, 235, 235));
                 let c = (32 * n + 32) * 3;
-                eprintln!("LAMA_SMOKE_OK center=({}, {}, {})", out[c], out[c + 1], out[c + 2]);
+                eprintln!(
+                    "LAMA_SMOKE_OK center=({}, {}, {})",
+                    out[c],
+                    out[c + 1],
+                    out[c + 2]
+                );
             }
             Err(e) => panic!("lama 推理失败: {e}"),
         }

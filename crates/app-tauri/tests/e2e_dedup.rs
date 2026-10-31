@@ -3,6 +3,7 @@
 //! 注入 10 组已知重复组（每组 3 个资产 + 10 个孤立干扰项，共 40 资产）：
 //! - 组 0-4：同 fileHash + 向量完全相同（cos=1.0 ≥0.98 → near 带）
 //! - 组 5-9：同 fileHash + 向量受控扰动（cos∈[0.90,0.98) → variant 带）
+//!
 //! 验收：
 //! 1. exact_dup_groups 100% 召回 10 组 fileHash；
 //! 2. find_duplicates 100% 召回：5 near + 5 variant，带归属正确、成员完整、无干扰项误报；

@@ -1073,14 +1073,21 @@ impl PackHost {
         conn.pending.lock().unwrap().insert(id, tx);
         let frame = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
         if trace_on() {
-            eprintln!("[host-trace] rpc#{id} {method} 写请求（{}, {}B）", conn.pid, frame.to_string().len());
+            eprintln!(
+                "[host-trace] rpc#{id} {method} 写请求（{}, {}B）",
+                conn.pid,
+                frame.to_string().len()
+            );
         }
         if let Err(err) = conn.write_frame(&frame) {
             conn.pending.lock().unwrap().remove(&id);
             return Roundtrip::Rpc(err);
         }
         if trace_on() {
-            eprintln!("[host-trace] rpc#{id} {method} 请求已写出 → 等应答（预算 {}ms）", timeout.as_millis());
+            eprintln!(
+                "[host-trace] rpc#{id} {method} 请求已写出 → 等应答（预算 {}ms）",
+                timeout.as_millis()
+            );
         }
         match rx.recv_timeout(timeout) {
             Ok(Some(frame)) => {
@@ -1249,7 +1256,7 @@ mod tests {
         }
         assert_eq!(v["status"], "undetermined");
         assert!(v["score"].is_null());
-        assert!(!err.is_undetermined() == false);
+        assert!(err.is_undetermined());
     }
 
     #[test]

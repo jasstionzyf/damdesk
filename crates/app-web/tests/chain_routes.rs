@@ -81,7 +81,9 @@ async fn post(app: &axum::Router, uri: &str, body: Value) -> (u16, Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -92,7 +94,9 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -278,5 +282,8 @@ async fn versions_route_reports_result_rows_and_single_current() {
         body["current"]["actions"],
         json!(["resize", "convert", "watermark"])
     );
-    assert_eq!(body["current"]["chain"]["chain"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        body["current"]["chain"]["chain"].as_array().unwrap().len(),
+        3
+    );
 }

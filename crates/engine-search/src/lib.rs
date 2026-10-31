@@ -10,7 +10,7 @@
 //!   - 候选 ≤ `EXACT_SCAN_MAX`：取回向量 Rust 精确打分（结果数学上精确）
 //!   - 候选 > `EXACT_SCAN_MAX`：KNN 过采样（k×10 上限 4096）后按候选集过滤；
 //!     不足 k 条回退精确扫描（正确性优先，慢路径兜底）
-//!   （不可用 JOIN：spike 实测 vec0 的 JOIN 是 lossy post-filter，20 中只回 6）
+//!     （不可用 JOIN：spike 实测 vec0 的 JOIN 是 lossy post-filter，20 中只回 6）
 //!
 //! **k 的语义 = 交付条数**（不是召回预算，见 [`search_by_vector`]）：召回预算由本模块
 //! 内部（过采样倍数 / 精确兜底）决定，调用方传 k 就拿到 k 条。
@@ -75,6 +75,8 @@ impl SearchFilter {
 }
 
 /// 命中行（向量分 + 标量行合并后的最终返回单元）。
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SearchHit {
     pub assetId: i64,
@@ -95,6 +97,8 @@ pub struct SearchHit {
 }
 
 /// 去重组成员。
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DupMember {
     pub assetId: i64,
@@ -108,6 +112,8 @@ pub struct DupMember {
 }
 
 /// 去重组（并查集聚类；锚点 = 组内最小 resourceId）。
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DupGroup {
     pub anchorAssetId: i64,
@@ -466,7 +472,7 @@ pub fn find_duplicates(conn: &Connection, model: &str, opts: &DupOptions) -> Res
         groups.entry(root).or_default().push(*rid);
     }
 
-    /// resourceId → (assetId, fileName, absPath, thumbPath)（D7 展示字段）。
+    // resourceId → (assetId, fileName, absPath, thumbPath)（D7 展示字段）。
     let info_of = |conn: &Connection, rid: i64| -> Result<(i64, String, String, Option<String>)> {
         Ok(conn.query_row(
             "SELECT r.assetId, a.fileName, a.absPath, r.thumbPath
@@ -533,7 +539,7 @@ pub fn find_duplicates(conn: &Connection, model: &str, opts: &DupOptions) -> Res
             band: band.to_string(),
         });
     }
-    out.sort_by(|a, b| b.anchorResourceId.cmp(&a.anchorResourceId));
+    out.sort_by_key(|g| std::cmp::Reverse(g.anchorResourceId));
     Ok(out)
 }
 
@@ -564,6 +570,8 @@ mod tests {
     }
 
     #[test]
+    // NEAR_DUP > VARIANT 是产品裁决钉，编译期常量也钉住（防改动即失序）
+    #[allow(clippy::assertions_on_constants)]
     fn dup_options_defaults_match_ruling_thresholds() {
         let o = DupOptions::default();
         assert!((o.min_score - VARIANT_THRESHOLD).abs() < 1e-6);
@@ -589,7 +597,11 @@ mod tests {
             )
             .unwrap();
         }
-        for (asset, value) in [(1i64, "尺寸-滚筒_10KG"), (2, "尺寸-滚筒_10KG"), (2, "Sunset")] {
+        for (asset, value) in [
+            (1i64, "尺寸-滚筒_10KG"),
+            (2, "尺寸-滚筒_10KG"),
+            (2, "Sunset"),
+        ] {
             conn.execute(
                 "INSERT INTO tag (assetId, value, origin, score, createdAt) VALUES (?1, ?2, 'manual', 1.0, 1)",
                 rusqlite::params![asset, value],
@@ -603,7 +615,14 @@ mod tests {
     fn tag_candidate_filter_is_exact_normalized_nocase() {
         let (_d, conn) = candidate_db();
         let ids = |tag: Option<&str>| -> Vec<i64> {
-            let mut v = candidate_ids(&conn, &SearchFilter { tag: tag.map(String::from), ..Default::default() }).unwrap();
+            let mut v = candidate_ids(
+                &conn,
+                &SearchFilter {
+                    tag: tag.map(String::from),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
             v.sort_unstable();
             v
         };
@@ -657,7 +676,8 @@ mod tests {
             "标签过滤必须走 0024 nocase 索引，实际计划:\n{joined}"
         );
         assert!(
-            !joined.to_lowercase().contains("scan table tag") && !joined.to_lowercase().contains("scan tag"),
+            !joined.to_lowercase().contains("scan table tag")
+                && !joined.to_lowercase().contains("scan tag"),
             "tag 子查询不允许全表扫，实际计划:\n{joined}"
         );
     }

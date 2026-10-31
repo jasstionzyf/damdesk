@@ -151,7 +151,7 @@ fn full_run_semantic_and_dedup_queues_independent() {
     let rep = run_embed_queue(&conn, &sem, EmbedScope::Semantic, &cancel, &mut noprogress).unwrap();
     assert_eq!(rep.done, 12);
     assert_eq!(rep.failed, 0);
-    assert_eq!(rep.cancelled, false);
+    assert!(!rep.cancelled);
 
     // 向量落表 + 状态机推进
     assert_eq!(

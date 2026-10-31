@@ -1,3 +1,4 @@
+#![allow(non_snake_case)] // 本模块 payload/进度字段 = job_queue JSON 线上 camelCase 契约，勿改
 //! C2 — compliance job + 管道编排器（PLAN.md §6.3 / compliance plan §C2）。
 //!
 //! `job_queue`(kind='compliance', targetId=assetId, payload={"packId","outDir"}) 驱动，
@@ -28,9 +29,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use core_config::{FixerTier, Pack, Rule, RuleExecutor, RuleOnFail, StepKind};
-use core_storage::compliance::{
-    ComplianceRepo, NewVerdict, VerdictRow,
-};
+use core_storage::compliance::{ComplianceRepo, NewVerdict, VerdictRow};
 use core_storage::compliance_runs::ComplianceRunRepo;
 use core_storage::compliance_runs_sqlite::SqliteComplianceRunRepo;
 use core_storage::compliance_sqlite::SqliteComplianceRepo;
@@ -52,6 +51,7 @@ pub const COMPLIANCE_KIND: &str = "compliance";
 /// - 资产口径的进度/统计（`compliance_stats`、`done+failed == 资产数`）保持纯净，
 ///   组级 job 不污染资产计数（回归口径 c6/c7 不变）；
 /// - 组级 job 与资产 job 可分别重试、分别观测（组级失败大概率是 VL 通道抖动，不是某张图坏）。
+///
 /// targetId = **组锚点**（组内最小 assetId；job_queue 的行需要一个整型目标），
 /// 真正的组目标（组键 + 成员列表 + 作用域）在 payload 里（见 [`GroupPayload`]）。
 pub const COMPLIANCE_GROUP_KIND: &str = "compliance_group";
@@ -76,9 +76,7 @@ pub const COMPLIANCE_BATCH: i64 = 32;
 /// 没有任何「待人工 / 修复后合格 / 失败」这类派生词：修复成功落 pass（证据留 fixAction/
 /// recheckResult），修不了/判不了落 fail 或 undetermined。
 pub mod verdict {
-    pub use core_storage::compliance::result::{
-        FAIL, PASS, SKIPPED, UNDETERMINED,
-    };
+    pub use core_storage::compliance::result::{FAIL, PASS, SKIPPED, UNDETERMINED};
 
     /// 合法结果词判定（IP-K05：插件应答的状态必须在闭集内才可采信）。
     pub fn is_valid(s: &str) -> bool {
@@ -673,6 +671,7 @@ struct MergedVerdict<'a> {
 /// * `repair` 失败**不推翻** judge 结论（判定已经成立，只是没修成 → 行保留原结论，
 ///   失败原因进 evidence，界面能解释「为什么没修」）；
 /// * 协议违例（状态越界 / 缺规则）→ 该行 `undetermined` + `note` = 违反项，不静默采信。
+#[allow(dead_code)] // 保留：无 scope 限制的旧口径入口（= plugin_rows_scoped 空集）
 fn plugin_rows(judged: &PluginOutcome, repaired: Option<&PluginOutcome>) -> Vec<StepVerdict> {
     plugin_rows_scoped(judged, repaired, &[])
 }
@@ -729,8 +728,7 @@ fn plugin_rows_merged(
                 .map(|jv| is_conclusion(&jv.status))
                 .unwrap_or(false);
             // 闭集外的状态（协议 §4.2）不可采信 → 不算结论
-            let repair_has_conclusion =
-                verdict::is_valid(&rv.status) && is_conclusion(&rv.status);
+            let repair_has_conclusion = verdict::is_valid(&rv.status) && is_conclusion(&rv.status);
             let merged = match judged_by_rule.get(rid) {
                 Some(jv) if judge_has_conclusion && !repair_has_conclusion => MergedVerdict {
                     v: jv,
@@ -811,7 +809,8 @@ fn plugin_rows_merged(
             if v.fixed {
                 sv.fix_action = Some("plugin_repair".to_string());
             }
-            sv.recheck = Some(v.status.clone()).filter(|s| s == verdict::PASS || s == verdict::FAIL);
+            sv.recheck =
+                Some(v.status.clone()).filter(|s| s == verdict::PASS || s == verdict::FAIL);
         }
         // 插件原始证据 + 宿主补充（谁判的、包身份、修复产物、失败原因）
         let mut evidence = serde_json::json!({
@@ -830,10 +829,8 @@ fn plugin_rows_merged(
         }
         if status_rejected {
             evidence["reason"] = serde_json::json!(PluginFailure::Protocol.reason());
-            evidence["error"] = serde_json::json!(format!(
-                "插件回了闭集外的状态 {:?}（协议 §4.2）",
-                v.status
-            ));
+            evidence["error"] =
+                serde_json::json!(format!("插件回了闭集外的状态 {:?}（协议 §4.2）", v.status));
         }
         let arts = artifacts_for(rule_id);
         if !arts.is_empty() {
@@ -841,7 +838,8 @@ fn plugin_rows_merged(
         }
         // repair 自身的失败不能吞：判定结论保留，修没修成照样可见
         if let Some((kind, detail)) = repaired.and_then(|r| r.failure.as_ref()) {
-            evidence["repair_error"] = serde_json::json!({ "reason": kind.reason(), "error": detail });
+            evidence["repair_error"] =
+                serde_json::json!({ "reason": kind.reason(), "error": detail });
         }
         let plugin_evidence = merge_evidence(evidence, v.evidence.clone());
         sv.evidence = plugin_evidence;
@@ -1045,8 +1043,13 @@ pub fn run_compliance_queue_with_limit_in_run_engine(
                         status: "done".into(),
                         index,
                         total,
-                        error: (!rule_errors.is_empty())
-                            .then(|| format!("{} 条规则级失败已隔离: {} 行判定已落库", rule_errors.len(), verdicts)),
+                        error: (!rule_errors.is_empty()).then(|| {
+                            format!(
+                                "{} 条规则级失败已隔离: {} 行判定已落库",
+                                rule_errors.len(),
+                                verdicts
+                            )
+                        }),
                     });
                 }
                 Err(e) => {
@@ -1061,7 +1064,9 @@ pub fn run_compliance_queue_with_limit_in_run_engine(
                     if is_failed {
                         report.failed += 1;
                         if report.errors.len() < 50 {
-                            report.errors.push(format!("job{job_id}/asset{asset_id}: {msg}"));
+                            report
+                                .errors
+                                .push(format!("job{job_id}/asset{asset_id}: {msg}"));
                         }
                     } else {
                         report.retry += 1;
@@ -1165,7 +1170,9 @@ pub fn run_compliance_queue_with_limit_in_run_engine(
                             report.groupRetry += 1;
                         }
                         if report.groupErrors.len() < 50 {
-                            report.groupErrors.push(format!("job{job_id}/group{anchor_id}: {msg}"));
+                            report
+                                .groupErrors
+                                .push(format!("job{job_id}/group{anchor_id}: {msg}"));
                         }
                     }
                 }
@@ -1341,13 +1348,16 @@ pub fn run_compliance_queue_par_in_run(
     progress: impl FnMut(ComplianceProgress),
     run_id: Option<i64>,
 ) -> Result<(ComplianceRunReport, Option<compliance_vl::VlStatsSnapshot>)> {
-    run_compliance_queue_par_in_run_engine(factory, pack, vl, None, workers, cancel, progress, run_id)
+    run_compliance_queue_par_in_run_engine(
+        factory, pack, vl, None, workers, cancel, progress, run_id,
+    )
 }
 
 /// IP-K05：并行入口 + 执行通道（`plugin = Some(..)` → 逐图 job 全交行业包插件）。
 ///
 /// 语义与 [`run_compliance_queue_par_in_run`] 完全一致（同一份实现，不是复制）；
 /// 插件句柄 `&self` 可并发调用（`pack-host` 内部串行化子进程往返），worker 数与 legacy 同口径。
+#[allow(clippy::too_many_arguments)] // 编排入口全参固有宽度
 pub fn run_compliance_queue_par_in_run_engine(
     factory: ConnFactory,
     pack: &Pack,
@@ -1554,7 +1564,7 @@ pub fn run_compliance_queue_par_in_run_engine(
             let conn = factory().map_err(|e| PipelineError::Compliance(format!("主连接: {e}")))?;
             let _ = conn.busy_timeout(std::time::Duration::from_secs(15));
             let _ = jobq::requeue_stale(&conn)?; // 断点续跑：崩溃残留 running 回 pending
-            // CMP-JOB-01：本轮的 run 账本（跳过计数唯一写入口）
+                                                 // CMP-JOB-01：本轮的 run 账本（跳过计数唯一写入口）
             let runs = run_id.map(|rid| (rid, SqliteComplianceRunRepo::new(&conn)));
             let mut all_workers_dead = false;
             // COMPLIANCE-DOMAIN：**先逐图、后组级**。
@@ -1572,7 +1582,9 @@ pub fn run_compliance_queue_par_in_run_engine(
                     return Ok(());
                 }
                 let batch = match phase {
-                    Phase::Group => jobq::claim_batch(&conn, COMPLIANCE_GROUP_KIND, COMPLIANCE_BATCH)?,
+                    Phase::Group => {
+                        jobq::claim_batch(&conn, COMPLIANCE_GROUP_KIND, COMPLIANCE_BATCH)?
+                    }
                     Phase::Asset => jobq::claim_batch(&conn, COMPLIANCE_KIND, COMPLIANCE_BATCH)?,
                 };
                 if batch.is_empty() {
@@ -1631,7 +1643,10 @@ pub fn run_compliance_queue_par_in_run_engine(
                         .recv_timeout(std::time::Duration::from_secs(1800))
                         .map_err(|_| PipelineError::Compliance("worker 结果通道中断".into()))?;
                     if let Some(msg) = &o.error {
-                        eprintln!("compliance job{} asset{} error: {msg}", o.job_id, o.asset_id);
+                        eprintln!(
+                            "compliance job{} asset{} error: {msg}",
+                            o.job_id, o.asset_id
+                        );
                     }
                     if o.job_id < 0 {
                         // worker 初始化失败（无 job 语义）：计入 errors，结束本轮
@@ -1647,7 +1662,10 @@ pub fn run_compliance_queue_par_in_run_engine(
                     if o.group {
                         report.groupTotal += 1;
                         if let Some(msg) = &o.error {
-                            eprintln!("compliance 组级 job{} group{} error: {msg}", o.job_id, o.asset_id);
+                            eprintln!(
+                                "compliance 组级 job{} group{} error: {msg}",
+                                o.job_id, o.asset_id
+                            );
                             if o.is_failed {
                                 report.groupFailed += 1;
                                 if report.groupErrors.len() < 50 {
@@ -1713,7 +1731,11 @@ pub fn run_compliance_queue_par_in_run_engine(
                         }
                     }
                     let status = if o.error.is_some() {
-                        if o.is_failed { "failed" } else { "retry" }
+                        if o.is_failed {
+                            "failed"
+                        } else {
+                            "retry"
+                        }
                     } else if o.skipped {
                         "skipped"
                     } else {
@@ -1794,7 +1816,8 @@ fn process_job(
     // 原先这里直接 `return Ok(AssetOutcome::Skipped)`：run 侧照常 `note_skipped(+1)`，
     // 明细里却没有原因（还留着上一次的失败原文）→「跳过 N」与「带原因的条数」对不上，
     // 界面上那一条显示成「已完成 + 失败原因」。原因词表见 [`crate::skip_reason`]。
-    if let Some(note) = crate::skip_reason::for_asset_state(snap.deleted, snap.missing, &snap.media_type)
+    if let Some(note) =
+        crate::skip_reason::for_asset_state(snap.deleted, snap.missing, &snap.media_type)
     {
         eprintln!("compliance job{job_id} asset{asset_id} 跳过（{note}）");
         mark_skipped(conn, job_id, &note)?;
@@ -1899,10 +1922,14 @@ fn process_job(
                 vl: vl_session,
                 // DM-C1：重绘区域的本地证据（读失败不炸 job —— 退化为「无 OCR 文本」，
                 // 区域决议会按 vl_region_unverified 记 warning，不静默当成已验证）
-                ocr_boxes: core_storage::ocr_boxes::load_rects(conn, asset_id).unwrap_or_else(|e| {
-                    eprintln!("compliance asset{asset_id}: 读 OCR 行框失败（按无文本处理）: {e}");
-                    Vec::new()
-                }),
+                ocr_boxes: core_storage::ocr_boxes::load_rects(conn, asset_id).unwrap_or_else(
+                    |e| {
+                        eprintln!(
+                            "compliance asset{asset_id}: 读 OCR 行框失败（按无文本处理）: {e}"
+                        );
+                        Vec::new()
+                    },
+                ),
             };
             let (verdicts, isolated) = run_pipeline(&mut ctx, repo, pack, job_id, rule_errors)?;
             Executed {
@@ -1979,7 +2006,8 @@ fn run_action_chain_job(
     };
     let no_cancel = AtomicBool::new(false);
     let flag = cancel.unwrap_or(&no_cancel);
-    let outcome = crate::compliance_chain::run_chain(plugin, &base, &payload.actions, out_dir, flag);
+    let outcome =
+        crate::compliance_chain::run_chain(plugin, &base, &payload.actions, out_dir, flag);
 
     let repo = SqliteAssetVersionRepo::new(conn);
     let run_id: Option<i64> = conn
@@ -2236,7 +2264,10 @@ fn dup_data_for(
             Err(_) => (None, "none"),
         },
     };
-    let (ph, ph_src) = match p_hash.as_deref().and_then(|h| u64::from_str_radix(h, 16).ok()) {
+    let (ph, ph_src) = match p_hash
+        .as_deref()
+        .and_then(|h| u64::from_str_radix(h, 16).ok())
+    {
         Some(p) => (Some(p), "db"),
         None => match core_media::luma32(Path::new(abs_path))
             .ok()
@@ -2316,11 +2347,7 @@ fn group_short_circuits(
     let cross: Vec<(String, Vec<String>)> = deps_of
         .iter()
         .filter(|(rid, deps)| {
-            !deps.is_empty()
-                && pack
-                    .rule(rid)
-                    .map(|r| r.is_group_scoped())
-                    .unwrap_or(false)
+            !deps.is_empty() && pack.rule(rid).map(|r| r.is_group_scoped()).unwrap_or(false)
         })
         .map(|(rid, deps)| {
             let per_asset: Vec<String> = deps
@@ -2336,7 +2363,8 @@ fn group_short_circuits(
         return Ok(out);
     }
     // 每成员查一次逐图判定行（组级 job 的组大小本来就不大；不做 N×M 次查询）
-    let mut rows_by_asset: BTreeMap<i64, Vec<core_storage::compliance::VerdictRow>> = BTreeMap::new();
+    let mut rows_by_asset: BTreeMap<i64, Vec<core_storage::compliance::VerdictRow>> =
+        BTreeMap::new();
     for m in members {
         let rows = repo.find_asset_verdicts(&pack.id, m.asset_id)?;
         rows_by_asset.insert(m.asset_id, rows);
@@ -2357,14 +2385,11 @@ fn group_short_circuits(
                     .filter(|r| &r.rule_id == d)
                     .filter(|r| r.judgement_scope.as_deref() != Some(VERDICT_SCOPE_GROUP))
                     .max_by_key(|r| r.id);
-                match row {
-                    Some(r) => {
-                        any_present = true;
-                        if r.result == verdict::FAIL {
-                            any_failed = true;
-                        }
+                if let Some(r) = row {
+                    any_present = true;
+                    if r.result == verdict::FAIL {
+                        any_failed = true;
                     }
-                    None => {}
                 }
             }
             if any_failed {
@@ -2464,8 +2489,8 @@ fn process_group_job(
     }
 
     let group_key = payload.groupKey.clone();
-    let member_ids: Vec<i64> = members.iter().map(|m| m.asset_id).collect();
-    let bad_members: Vec<i64> = members
+    let _member_ids: Vec<i64> = members.iter().map(|m| m.asset_id).collect();
+    let _bad_members: Vec<i64> = members
         .iter()
         .filter(|m| m.unusable)
         .map(|m| m.asset_id)
@@ -2500,11 +2525,7 @@ fn process_group_job(
             .get(&rule.id)
             .map(|d| {
                 d.iter()
-                    .filter(|x| {
-                        pack.rule(x)
-                            .map(|r| !r.is_group_scoped())
-                            .unwrap_or(false)
-                    })
+                    .filter(|x| pack.rule(x).map(|r| !r.is_group_scoped()).unwrap_or(false))
                     .cloned()
                     .collect()
             })
@@ -2604,12 +2625,15 @@ fn process_group_job(
                             .map(|c| c.detector.clone())
                             .unwrap_or_default();
                         let out = crate::compliance_group::run(&detector, &input, &params)
-                            .map_err(|e| PipelineError::Compliance(format!(
-                                "组级 job{job_id} rule{}: {e}",
-                                rule.id
-                            )))?;
+                            .map_err(|e| {
+                                PipelineError::Compliance(format!(
+                                    "组级 job{job_id} rule{}: {e}",
+                                    rule.id
+                                ))
+                            })?;
                         if out.pass {
-                            let mut sv = StepVerdict::new(rule.id.clone(), verdict::PASS, out.evidence);
+                            let mut sv =
+                                StepVerdict::new(rule.id.clone(), verdict::PASS, out.evidence);
                             sv.score = Some(out.score);
                             sv
                         } else {
@@ -2654,16 +2678,15 @@ fn process_group_job(
                         }
                     };
                     let probe_max = ask.probe_max as usize;
-                    let (probed, unprobed): (Vec<&GroupMemberCtx>, Vec<i64>) = if probe_max == 0
-                        || probe_max >= active.len()
-                    {
-                        (active.clone(), Vec::new())
-                    } else {
-                        (
-                            active.iter().take(probe_max).cloned().collect(),
-                            active.iter().skip(probe_max).map(|m| m.asset_id).collect(),
-                        )
-                    };
+                    let (probed, unprobed): (Vec<&GroupMemberCtx>, Vec<i64>) =
+                        if probe_max == 0 || probe_max >= active.len() {
+                            (active.clone(), Vec::new())
+                        } else {
+                            (
+                                active.iter().take(probe_max).cloned().collect(),
+                                active.iter().skip(probe_max).map(|m| m.asset_id).collect(),
+                            )
+                        };
                     let mut per_member: Vec<serde_json::Value> = Vec::new();
                     let mut seen: Vec<String> = Vec::new();
                     for m in &probed {
@@ -2709,16 +2732,14 @@ fn process_group_job(
                         group_fail_verdict(rule, evidence, missing.len() as f64)
                     }
                 }
-                RuleExecutor::LocalModel => {
-                    group_degraded_verdict(
-                        &rule.id,
-                        serde_json::json!({
-                            "scope": "group", "reason": "executor_not_available",
-                            "detail": "per_group 不支持 local_model 执行档",
-                            "groupKey": group_key, "members": active_ids,
-                        }),
-                    )
-                }
+                RuleExecutor::LocalModel => group_degraded_verdict(
+                    &rule.id,
+                    serde_json::json!({
+                        "scope": "group", "reason": "executor_not_available",
+                        "detail": "per_group 不支持 local_model 执行档",
+                        "groupKey": group_key, "members": active_ids,
+                    }),
+                ),
             }
         };
         // 按成员展开落库（参与判定的成员内容逐字相同；被上游短路的成员落 skipped + 短路证据）
@@ -2786,10 +2807,7 @@ fn with_fail_label(sv: StepVerdict, rule: &Rule) -> StepVerdict {
         return sv;
     }
     let mut sv = sv;
-    sv.evidence = merge_evidence(
-        sv.evidence,
-        serde_json::json!({ "failReason": label }),
-    );
+    sv.evidence = merge_evidence(sv.evidence, serde_json::json!({ "failReason": label }));
     sv
 }
 
@@ -2829,20 +2847,40 @@ impl AssetCtx {
                     .snap
                     .width
                     .and_then(|w| u32::try_from(w).ok())
-                    .ok_or_else(|| format!("asset{}: primary resource 缺宽度（元数据档不可判）", self.asset_id))?;
+                    .ok_or_else(|| {
+                        format!(
+                            "asset{}: primary resource 缺宽度（元数据档不可判）",
+                            self.asset_id
+                        )
+                    })?;
                 let h = self
                     .snap
                     .height
                     .and_then(|h| u32::try_from(h).ok())
-                    .ok_or_else(|| format!("asset{}: primary resource 缺高度（元数据档不可判）", self.asset_id))?;
-                Ok(DetectorInput::Metadata { width: w, height: h })
+                    .ok_or_else(|| {
+                        format!(
+                            "asset{}: primary resource 缺高度（元数据档不可判）",
+                            self.asset_id
+                        )
+                    })?;
+                Ok(DetectorInput::Metadata {
+                    width: w,
+                    height: h,
+                })
             }
             InputKind::Rgb => {
                 if self.rgb.is_none() {
-                    let (w, h, px) = core_media::rgb8(Path::new(&self.snap.abs_path))
-                        .map_err(|e| format!("asset{} 解码失败 {}: {e}", self.asset_id, self.snap.abs_path))?;
-                    let w = u32::try_from(w).map_err(|_| format!("asset{}: 宽度非法 {w}", self.asset_id))?;
-                    let h = u32::try_from(h).map_err(|_| format!("asset{}: 高度非法 {h}", self.asset_id))?;
+                    let (w, h, px) =
+                        core_media::rgb8(Path::new(&self.snap.abs_path)).map_err(|e| {
+                            format!(
+                                "asset{} 解码失败 {}: {e}",
+                                self.asset_id, self.snap.abs_path
+                            )
+                        })?;
+                    let w = u32::try_from(w)
+                        .map_err(|_| format!("asset{}: 宽度非法 {w}", self.asset_id))?;
+                    let h = u32::try_from(h)
+                        .map_err(|_| format!("asset{}: 高度非法 {h}", self.asset_id))?;
                     self.rgb = Some(DetectorInput::Rgb {
                         width: w,
                         height: h,
@@ -2855,14 +2893,21 @@ impl AssetCtx {
     }
 
     /// 对某个具体文件（修复/do 产物）构造检测器输入。
-    fn file_input(&self, path: &Path, kind: InputKind) -> std::result::Result<DetectorInput, String> {
+    fn file_input(
+        &self,
+        path: &Path,
+        kind: InputKind,
+    ) -> std::result::Result<DetectorInput, String> {
         match kind {
             InputKind::Metadata => {
                 let (w, h) = core_media::image_size(path)
                     .map_err(|e| format!("读产物尺寸 {path:?}: {e}"))?;
                 let w = u32::try_from(w).map_err(|_| format!("产物宽度非法 {w}"))?;
                 let h = u32::try_from(h).map_err(|_| format!("产物高度非法 {h}"))?;
-                Ok(DetectorInput::Metadata { width: w, height: h })
+                Ok(DetectorInput::Metadata {
+                    width: w,
+                    height: h,
+                })
             }
             InputKind::Rgb => {
                 let (w, h, px) =
@@ -2988,7 +3033,12 @@ fn run_pipeline(
                 let short: Vec<String> = step
                     .depends_on
                     .iter()
-                    .filter(|d| dep_results.get(*d).map(|r| r == verdict::FAIL).unwrap_or(false))
+                    .filter(|d| {
+                        dep_results
+                            .get(*d)
+                            .map(|r| r == verdict::FAIL)
+                            .unwrap_or(false)
+                    })
                     .cloned()
                     .collect();
                 let sv = if !short.is_empty() {
@@ -3031,7 +3081,11 @@ fn run_pipeline(
                             // 依赖语义看检测器原始结论（fail 即短路）——最终处置（修复/转人工）不影响下游
                             dep_results.insert(
                                 rule.id.clone(),
-                                if raw_fail { verdict::FAIL.to_string() } else { sv.result.clone() },
+                                if raw_fail {
+                                    verdict::FAIL.to_string()
+                                } else {
+                                    sv.result.clone()
+                                },
                             );
                             sv
                         }
@@ -3055,8 +3109,11 @@ fn run_pipeline(
                     }
                 };
                 out.push(
-                    with_fail_label(sv.with_rule_confidence(Some(rule)), rule)
-                        .into_new(&pack.id, ctx.asset_id, job_id),
+                    with_fail_label(sv.with_rule_confidence(Some(rule)), rule).into_new(
+                        &pack.id,
+                        ctx.asset_id,
+                        job_id,
+                    ),
                 );
             }
             StepKind::Do => {
@@ -3065,11 +3122,18 @@ fn run_pipeline(
                 })?;
                 let plugin_id = step.plugin.as_deref().unwrap_or_default();
                 let ext = file_ext(&do_cur);
-                let dest = ctx.out_dir.join(format!("{}_{}.{}", ctx.asset_id, sid, ext));
+                let dest = ctx
+                    .out_dir
+                    .join(format!("{}_{}.{}", ctx.asset_id, sid, ext));
                 // C4：模型类修复器在 do 链上模型缺失 → skipped（不炸 job，证据可审计）；
                 // 其余错误（坏参数/解码失败/未知插件）仍响亮失败
-                let io = match compliance_plugins::plugin_run(plugin_id, &do_cur, &step.params, &dest, &origin)
-                {
+                let io = match compliance_plugins::plugin_run(
+                    plugin_id,
+                    &do_cur,
+                    &step.params,
+                    &dest,
+                    &origin,
+                ) {
                     Ok(io) => io,
                     Err(compliance_plugins::PluginError::ModelMissing { model, .. }) => {
                         out.push(
@@ -3086,9 +3150,7 @@ fn run_pipeline(
                         );
                         continue; // do 链断点：后续步骤的输入仍是上一产物
                     }
-                    Err(e) => {
-                        return Err(PipelineError::Compliance(format!("do 步骤 {sid}: {e}")))
-                    }
+                    Err(e) => return Err(PipelineError::Compliance(format!("do 步骤 {sid}: {e}"))),
                 };
                 out.push(
                     StepVerdict::new(
@@ -3140,10 +3202,7 @@ fn judge_rule(
         JudgeFailure::Rule(e.to_string())
     }
     // external_data：v1 不可自动判定 → 人工队列
-    if matches!(
-        rule.evidence,
-        core_config::RuleEvidence::ExternalData
-    ) {
+    if matches!(rule.evidence, core_config::RuleEvidence::ExternalData) {
         return Ok((
             StepVerdict::new(
                 rule.id.clone(),
@@ -3284,7 +3343,8 @@ fn judge_rule(
                 return Ok((sv, false));
             }
             // vl 复检同样走远程通道：错误保持 job 级（抖动可重试）
-            let sv = handle_fix_vl(ctx, rule, check, &out, recheck_max).map_err(JudgeFailure::Job)?;
+            let sv =
+                handle_fix_vl(ctx, rule, check, &out, recheck_max).map_err(JudgeFailure::Job)?;
             Ok((sv, true))
         }
         // C3：local_model 接入 engine-segment 注册表（u2net）。模型未下载 →
@@ -3314,7 +3374,9 @@ fn judge_rule(
                 .detector_input(registry::InputKind::Rgb)
                 .map_err(|e| as_rule(PipelineError::Compliance(e)))?;
             let out = run_detector(DetectChannel::Model, &check.detector, &input, &check.params)
-                .map_err(|e| as_rule(PipelineError::Compliance(format!("rule {}: {e}", rule.id))))?;
+                .map_err(|e| {
+                    as_rule(PipelineError::Compliance(format!("rule {}: {e}", rule.id)))
+                })?;
             if out.pass {
                 return Ok((pass_verdict(rule, check, &out), false));
             }
@@ -3356,8 +3418,13 @@ fn judge_rule(
             let input = ctx
                 .detector_input(entry.input)
                 .map_err(|e| as_rule(PipelineError::Compliance(e)))?;
-            let out = run_detector(DetectChannel::Classic, &check.detector, &input, &check.params)
-                .map_err(|e| as_rule(PipelineError::Compliance(format!("rule {}: {e}", rule.id))))?;
+            let out = run_detector(
+                DetectChannel::Classic,
+                &check.detector,
+                &input,
+                &check.params,
+            )
+            .map_err(|e| as_rule(PipelineError::Compliance(format!("rule {}: {e}", rule.id))))?;
             if out.pass {
                 return Ok((pass_verdict(rule, check, &out), false));
             }
@@ -3407,7 +3474,9 @@ fn run_detector(
                 .map_err(|e| e.to_string())
         }
         #[cfg(not(feature = "local-infer"))]
-        DetectChannel::Model => Err("local-infer 未启用（web 容器），local_model 检测不可用".into()),
+        DetectChannel::Model => {
+            Err("local-infer 未启用（web 容器），local_model 检测不可用".into())
+        }
     }
 }
 
@@ -3433,12 +3502,12 @@ fn as_segment_input(
     }
 }
 
-fn pass_verdict(
-    rule: &Rule,
-    check: &core_config::Check,
-    out: &DetectorOutput,
-) -> StepVerdict {
-    let mut sv = StepVerdict::new(rule.id.clone(), verdict::PASS, detector_evidence(check, out));
+fn pass_verdict(rule: &Rule, check: &core_config::Check, out: &DetectorOutput) -> StepVerdict {
+    let mut sv = StepVerdict::new(
+        rule.id.clone(),
+        verdict::PASS,
+        detector_evidence(check, out),
+    );
     sv.score = Some(out.score);
     sv
 }
@@ -3491,7 +3560,7 @@ fn handle_fix(
         return Ok(sv);
     }
     // 修复插件未注册（C3/C4 落地前）→ 转人工（不阻塞其他规则）
-    let Some(entry) = compliance_plugins::plugin_lookup(&fixer.plugin) else {
+    let Some(_entry) = compliance_plugins::plugin_lookup(&fixer.plugin) else {
         let mut sv = StepVerdict::new(
             rule.id.clone(),
             verdict::UNDETERMINED,
@@ -3529,8 +3598,13 @@ fn handle_fix(
     for _ in 0..recheck_max.max(1) {
         // C3：插件参数通道（fixer.params；smart_crop 声明目标占比区间）
         // C4：模型类修复器模型缺失 → 转人工（fixer_not_available 同语义，不炸 job）
-        let io = match compliance_plugins::plugin_run(&fixer.plugin, &src, &fixer.params, &dest, &origin)
-        {
+        let io = match compliance_plugins::plugin_run(
+            &fixer.plugin,
+            &src,
+            &fixer.params,
+            &dest,
+            &origin,
+        ) {
             Ok(io) => io,
             Err(compliance_plugins::PluginError::ModelMissing { plugin, model }) => {
                 let mut sv = StepVerdict::new(
@@ -3549,10 +3623,15 @@ fn handle_fix(
                 return Ok(sv);
             }
             Err(e) => {
-                return Err(PipelineError::Compliance(format!("rule {} 修复: {e}", rule.id)))
+                return Err(PipelineError::Compliance(format!(
+                    "rule {} 修复: {e}",
+                    rule.id
+                )))
             }
         };
-        let input = ctx.file_input(&io.path, kind).map_err(PipelineError::Compliance)?;
+        let input = ctx
+            .file_input(&io.path, kind)
+            .map_err(PipelineError::Compliance)?;
         let re = run_detector(channel, &check.detector, &input, &check.params)
             .map_err(|e| PipelineError::Compliance(format!("rule {} 复检: {e}", rule.id)))?;
         if re.pass {
@@ -3639,17 +3718,10 @@ fn vl_judge_evidence(check: &core_config::Check, out: &VlJudgeOut) -> serde_json
 }
 
 /// 多个违规件 → 白=待补洞掩码 PNG（黑底 + 白矩形，同源图尺寸）。
-fn write_region_mask(
-    ctx: &AssetCtx,
-    rule_id: &str,
-    regions: &[[f64; 4]],
-) -> Result<PathBuf> {
+fn write_region_mask(ctx: &AssetCtx, rule_id: &str, regions: &[[f64; 4]]) -> Result<PathBuf> {
     let (w, h, _px) = core_media::rgb8(Path::new(&ctx.snap.abs_path))
         .map_err(|e| PipelineError::Compliance(format!("vl 掩码底图解码: {e}")))?;
-    let (w, h) = (
-        i64::try_from(w).map_err(|_| PipelineError::Compliance("掩码宽度非法".into()))?,
-        i64::try_from(h).map_err(|_| PipelineError::Compliance("掩码高度非法".into()))?,
-    );
+    let (w, h) = (i64::from(w), i64::from(h));
     let (wi, hi) = (w as usize, h as usize);
     let mut buf = vec![0u8; wi * hi * 3];
     for r in regions {
@@ -3670,7 +3742,10 @@ fn write_region_mask(
             }
         }
     }
-    let dest = ctx.out_dir.join(format!("{asset_id}_{rule_id}_vlmask.png", asset_id = ctx.asset_id));
+    let dest = ctx.out_dir.join(format!(
+        "{asset_id}_{rule_id}_vlmask.png",
+        asset_id = ctx.asset_id
+    ));
     core_media::encode_rgb_to(w as i32, h as i32, &buf, &dest, None)
         .map_err(|e| PipelineError::Compliance(format!("vl 掩码编码: {e}")))?;
     Ok(dest)
@@ -3734,7 +3809,7 @@ fn inject_region(
             rule.id
         ))),
         1 => {
-            params["box"] = serde_yaml::to_value(&resolved.plan.regions[0])
+            params["box"] = serde_yaml::to_value(resolved.plan.regions[0])
                 .map_err(|e| PipelineError::Compliance(format!("box 序列化: {e}")))?;
             Ok(())
         }
@@ -3803,9 +3878,7 @@ fn u2net_region_plan(
             rgb[i * 3 + 2] = 255;
         }
     }
-    let dest = ctx
-        .out_dir
-        .join(format!("{}_u2netmask.png", ctx.asset_id));
+    let dest = ctx.out_dir.join(format!("{}_u2netmask.png", ctx.asset_id));
     core_media::encode_rgb_to(width as i32, height as i32, &rgb, &dest, None)
         .map_err(|e| fail("region_unavailable", e.to_string()))?;
     Ok(ResolvedRegion {
@@ -3879,10 +3952,12 @@ fn resolve_inpaint_region(
             ))
         }
         // OCR 行框通道：无框 → 回落 u2net（卡内裁决：先文字行框，再主体掩码）
-        Some(crate::inpaint_region::RegionMode::OcrText) => match crate::inpaint_region::plan_ocr_text(&ocr) {
-            Ok(plan) => ResolvedRegion { plan, mask: None },
-            Err(_) => u2net_region_plan(ctx, rule)?,
-        },
+        Some(crate::inpaint_region::RegionMode::OcrText) => {
+            match crate::inpaint_region::plan_ocr_text(&ocr) {
+                Ok(plan) => ResolvedRegion { plan, mask: None },
+                Err(_) => u2net_region_plan(ctx, rule)?,
+            }
+        }
         Some(crate::inpaint_region::RegionMode::U2Net) => u2net_region_plan(ctx, rule)?,
         // 默认通道：VL bbox（须与 OCR 行框交叉验证）
         None => match crate::inpaint_region::plan_vl_bbox(&vl_regions, &ocr) {
@@ -3899,8 +3974,12 @@ fn resolve_inpaint_region(
     };
 
     let ev = resolved.plan.evidence();
-    inject_region(ctx, rule, params, &resolved)
-        .map_err(|e| ("region_inject_failed".to_string(), serde_json::json!({ "reason": "region_inject_failed", "detail": e.to_string() })))?;
+    inject_region(ctx, rule, params, &resolved).map_err(|e| {
+        (
+            "region_inject_failed".to_string(),
+            serde_json::json!({ "reason": "region_inject_failed", "detail": e.to_string() }),
+        )
+    })?;
     Ok(ev)
 }
 
@@ -3947,7 +4026,7 @@ fn handle_fix_vl(
         sv.confidence = self_report_conf(rule, out);
         return Ok(sv);
     }
-    let Some(entry) = compliance_plugins::plugin_lookup(&fixer.plugin) else {
+    let Some(_entry) = compliance_plugins::plugin_lookup(&fixer.plugin) else {
         let mut sv = StepVerdict::new(
             rule.id.clone(),
             verdict::UNDETERMINED,
@@ -4030,7 +4109,10 @@ fn handle_fix_vl(
                 return Ok(sv);
             }
             Err(e) => {
-                return Err(PipelineError::Compliance(format!("rule {} 修复: {e}", rule.id)))
+                return Err(PipelineError::Compliance(format!(
+                    "rule {} 修复: {e}",
+                    rule.id
+                )))
             }
         };
         let re = ctx
@@ -4038,9 +4120,7 @@ fn handle_fix_vl(
             .as_ref()
             .expect("vl judge 路径必有会话")
             .judge_file(&io.path, &rule.id)
-            .map_err(|e| {
-                PipelineError::Compliance(format!("rule {} vl 复检: {e}", rule.id))
-            })?;
+            .map_err(|e| PipelineError::Compliance(format!("rule {} vl 复检: {e}", rule.id)))?;
         if vl_pass(check, &re) {
             let mut sv = StepVerdict::new(
                 rule.id.clone(),
@@ -4218,7 +4298,11 @@ recheck_max: 1
     fn stripes_jpeg(w: u32, h: u32) -> Vec<u8> {
         let img = image::RgbImage::from_fn(w, h, |x, _| {
             let stripe = (x / 4) % 2 == 0;
-            image::Rgb(if stripe { [250, 250, 250] } else { [20, 20, 20] })
+            image::Rgb(if stripe {
+                [250, 250, 250]
+            } else {
+                [20, 20, 20]
+            })
         });
         encode_jpeg(&img)
     }
@@ -4245,7 +4329,12 @@ recheck_max: 1
             std::fs::create_dir_all(dir.join("src")).unwrap();
             let conn = Connection::open_in_memory().unwrap();
             core_storage::migrations::migrate(&conn).unwrap();
-            let mut f = Fixture { dir, conn, good: Vec::new(), bad: Vec::new() };
+            let mut f = Fixture {
+                dir,
+                conn,
+                good: Vec::new(),
+                bad: Vec::new(),
+            };
             for i in 0..n {
                 let bad = i % 3 == 2; // 1/3 不合格（红边小图）
                 let id = f.add_asset(i, bad);
@@ -4262,7 +4351,11 @@ recheck_max: 1
         fn add_asset(&mut self, i: usize, bad: bool) -> i64 {
             let name = format!("img{i}.jpg");
             let path = self.dir.join("src").join(&name);
-            let bytes = if bad { bad_jpeg(800, 600) } else { good_jpeg(1000, 800) };
+            let bytes = if bad {
+                bad_jpeg(800, 600)
+            } else {
+                good_jpeg(1000, 800)
+            };
             std::fs::write(&path, bytes).unwrap();
             self.conn
                 .execute(
@@ -4302,7 +4395,7 @@ recheck_max: 1
         }
     }
 
-    fn run_all(conn: &Connection, pack: &Pack, out_dir: &Path) -> ComplianceRunReport {
+    fn run_all(conn: &Connection, pack: &Pack, _out_dir: &Path) -> ComplianceRunReport {
         let cancel = AtomicBool::new(false);
         run_compliance_queue(conn, pack, &cancel, &mut |_| {}).expect("run")
     }
@@ -4346,9 +4439,7 @@ recheck_max: 1
 
     fn verdict_of(conn: &Connection, asset: i64, rule: &str) -> (String, Option<String>) {
         conn.query_row(
-            &format!(
-                "SELECT {V}, evidence FROM rule_verdict WHERE assetId = ?1 AND ruleId = ?2"
-            ),
+            &format!("SELECT {V}, evidence FROM rule_verdict WHERE assetId = ?1 AND ruleId = ?2"),
             rusqlite::params![asset, rule],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
@@ -4363,12 +4454,26 @@ recheck_max: 1
         let fx = Fixture::new("e2e", 500);
         let ids = fx.asset_ids();
         assert_eq!(ids.len(), 500);
-        let n = compliance_enq(&fx.conn, &ids, &pack.id, Some(&fx.out_dir().to_string_lossy())).unwrap();
+        let n = compliance_enq(
+            &fx.conn,
+            &ids,
+            &pack.id,
+            Some(&fx.out_dir().to_string_lossy()),
+        )
+        .unwrap();
         assert_eq!(n, 500, "500 全部入队");
 
         let report = run_all(&fx.conn, &pack, &fx.out_dir());
         assert_eq!(report.done, 500, "全部完成");
-        assert_eq!((report.failed, report.retry, report.skipped, report.errors.len()), (0, 0, 0, 0));
+        assert_eq!(
+            (
+                report.failed,
+                report.retry,
+                report.skipped,
+                report.errors.len()
+            ),
+            (0, 0, 0, 0)
+        );
         let (d, f, p) = compliance_stats(&fx.conn).unwrap();
         assert_eq!((d, f, p), (500, 0, 0));
 
@@ -4377,7 +4482,7 @@ recheck_max: 1
 
         let good = fx.good[0]; // 白底 1000×800
         let bad = fx.bad[0]; // 红边 800×600
-        // 合格资产：全 pass
+                             // 合格资产：全 pass
         for rule in ["R1_size", "R2_white", "R4_dep", "R5_soft", "resize_64"] {
             let (r, _) = verdict_of(&fx.conn, good, rule);
             assert_eq!(r, verdict::PASS, "{rule}");
@@ -4395,7 +4500,10 @@ recheck_max: 1
         assert!(e4.unwrap().contains("R1_size"), "证据记 short_circuited_by");
         let (r5, e5) = verdict_of(&fx.conn, bad, "R5_soft");
         assert_eq!(r5, verdict::FAIL);
-        assert!(e5.as_deref().unwrap().contains("\"on_fail\":\"pass\""), "{e5:?}");
+        assert!(
+            e5.as_deref().unwrap().contains("\"on_fail\":\"pass\""),
+            "{e5:?}"
+        );
         let (rd, _) = verdict_of(&fx.conn, bad, "resize_64");
         assert_eq!(rd, verdict::PASS);
 
@@ -4418,7 +4526,11 @@ recheck_max: 1
         );
         let again = run_all(&fx.conn, &pack, &fx.out_dir());
         assert_eq!(again.done, 500);
-        assert_eq!(verdict_count(&fx.conn, "packId='mini'"), 5000, "两批次 × 2500 行");
+        assert_eq!(
+            verdict_count(&fx.conn, "packId='mini'"),
+            5000,
+            "两批次 × 2500 行"
+        );
         let (d, f, p) = compliance_stats(&fx.conn).unwrap();
         assert_eq!((d, f, p), (1000, 0, 0));
     }
@@ -4430,7 +4542,13 @@ recheck_max: 1
         let pack = mini_pack();
         let fx = Fixture::new("resume", 5);
         let ids = fx.asset_ids();
-        compliance_enq(&fx.conn, &ids, &pack.id, Some(&fx.out_dir().to_string_lossy())).unwrap();
+        compliance_enq(
+            &fx.conn,
+            &ids,
+            &pack.id,
+            Some(&fx.out_dir().to_string_lossy()),
+        )
+        .unwrap();
 
         // 模拟崩溃：claim 2 个置 running 后进程死掉（半截 verdict 行也留下）
         let claimed = jobq::claim_batch(&fx.conn, COMPLIANCE_KIND, 2).unwrap();
@@ -4457,7 +4575,11 @@ recheck_max: 1
         // 重跑：requeue_stale 续接全部 5 个
         let report = run_all(&fx.conn, &pack, &fx.out_dir());
         assert_eq!(report.done, 5, "崩溃残留也被续跑");
-        assert_eq!(verdict_count(&fx.conn, "packId='mini'"), 25, "5 资产 × 5 行，无重复无残留");
+        assert_eq!(
+            verdict_count(&fx.conn, "packId='mini'"),
+            25,
+            "5 资产 × 5 行，无重复无残留"
+        );
         // 半截行被幂等重做覆盖（该资产 5 行整、结果正确）
         let (r1, _) = verdict_of(&fx.conn, crash_asset, "R1_size");
         assert_eq!(r1, verdict::PASS);
@@ -4485,15 +4607,20 @@ recheck_max: 1
         .unwrap();
         let fx = Fixture::new("doonly", 3);
         let ids = fx.asset_ids();
-        compliance_enq(&fx.conn, &ids, &pack.id, Some(&fx.out_dir().to_string_lossy())).unwrap();
+        compliance_enq(
+            &fx.conn,
+            &ids,
+            &pack.id,
+            Some(&fx.out_dir().to_string_lossy()),
+        )
+        .unwrap();
         let report = run_all(&fx.conn, &pack, &fx.out_dir());
         assert_eq!(report.done, 3);
         assert_eq!(verdict_count(&fx.conn, "packId='do-only'"), 3);
         for id in &ids {
             let (r, e) = verdict_of(&fx.conn, *id, "resize_48");
             assert_eq!(r, verdict::PASS);
-            let ev: serde_json::Value =
-                serde_json::from_str(&e.unwrap()).unwrap();
+            let ev: serde_json::Value = serde_json::from_str(&e.unwrap()).unwrap();
             assert_eq!(ev["plugin"], "resize");
         }
         let out_files = std::fs::read_dir(fx.out_dir()).unwrap().count();
@@ -4574,10 +4701,14 @@ recheck_max: 1
         );
         #[cfg(not(feature = "local-infer"))]
         assert!(ev_lm.contains("executor_not_available"), "{ev_lm}");
-        let (r, e) = verdict_of(&fx.conn, a, "R_vl");
+        let (r, _e) = verdict_of(&fx.conn, a, "R_vl");
         assert_eq!(r, verdict::SKIPPED);
         let (r, e) = verdict_of(&fx.conn, a, "R_ext");
-        assert_eq!(r, verdict::UNDETERMINED, "external_data 需外部数据 → 未判定");
+        assert_eq!(
+            r,
+            verdict::UNDETERMINED,
+            "external_data 需外部数据 → 未判定"
+        );
         assert!(e.unwrap().contains("external_data"));
         let (r, e) = verdict_of(&fx.conn, a, "R_tag");
         assert_eq!(r, verdict::SKIPPED);
@@ -4588,11 +4719,16 @@ recheck_max: 1
         let ev = e.unwrap();
         #[cfg(feature = "local-infer")]
         assert!(
-            ev.contains("model_not_downloaded") && ev.contains("replace_bg") && ev.contains("u2net"),
+            ev.contains("model_not_downloaded")
+                && ev.contains("replace_bg")
+                && ev.contains("u2net"),
             "{ev}"
         );
         #[cfg(not(feature = "local-infer"))]
-        assert!(ev.contains("fixer_not_available") && ev.contains("replace_bg"), "{ev}");
+        assert!(
+            ev.contains("fixer_not_available") && ev.contains("replace_bg"),
+            "{ev}"
+        );
     }
 
     /// 未知 do 插件 = 配置错误 → job 响亮失败（重试耗尽转 failed，不静默跳过）。
@@ -4697,9 +4833,17 @@ recheck_max: 1
         let _ = std::fs::remove_dir_all(&link_root);
         std::fs::create_dir_all(link_root.join("models")).unwrap();
         #[cfg(unix)]
-        std::os::unix::fs::symlink(Path::new(&model_dir).canonicalize().unwrap(), link_root.join("models").join("u2net"))
-            .or_else(|_| std::fs::hard_link(Path::new(&model_dir).canonicalize().unwrap(), link_root.join("models").join("u2net")))
-            .unwrap();
+        std::os::unix::fs::symlink(
+            Path::new(&model_dir).canonicalize().unwrap(),
+            link_root.join("models").join("u2net"),
+        )
+        .or_else(|_| {
+            std::fs::hard_link(
+                Path::new(&model_dir).canonicalize().unwrap(),
+                link_root.join("models").join("u2net"),
+            )
+        })
+        .unwrap();
         let root = link_root.clone();
         // 真模型：ModelsRootScope 取进程级锁 + drop 还原（用例体内不会被其他用例改根）
         let _seg_scope = engine_segment::ModelsRootScope::set(&root);
@@ -4736,7 +4880,13 @@ recheck_max: 1
         }
         let ids = fx.asset_ids();
         assert_eq!(ids.len(), 3);
-        compliance_enq(&fx.conn, &ids, &pack.id, Some(&fx.out_dir().to_string_lossy())).unwrap();
+        compliance_enq(
+            &fx.conn,
+            &ids,
+            &pack.id,
+            Some(&fx.out_dir().to_string_lossy()),
+        )
+        .unwrap();
         let report = run_all(&fx.conn, &pack, &fx.out_dir());
         assert_eq!(report.done, 3, "errors={:?}", report.errors);
 
@@ -4789,13 +4939,27 @@ recheck_max: 1
         let pack = Pack::from_yaml_strs("iso-load", "", rules, pipeline, "").unwrap();
         // 装载期 lint 认出坏规则（K2）
         let errs = crate::compliance_lint::rule_errors(&pack);
-        assert_eq!(errs.keys().collect::<Vec<_>>(), vec!["K2_phantom"], "{errs:?}");
+        assert_eq!(
+            errs.keys().collect::<Vec<_>>(),
+            vec!["K2_phantom"],
+            "{errs:?}"
+        );
 
         let fx = Fixture::new("c8-load", 6);
         let ids = fx.asset_ids();
-        compliance_enq(&fx.conn, &ids, &pack.id, Some(&fx.out_dir().to_string_lossy())).unwrap();
+        compliance_enq(
+            &fx.conn,
+            &ids,
+            &pack.id,
+            Some(&fx.out_dir().to_string_lossy()),
+        )
+        .unwrap();
         let report = run_all(&fx.conn, &pack, &fx.out_dir());
-        assert_eq!(report.failed, 0, "坏规则不许让 job 失败: {:?}", report.errors);
+        assert_eq!(
+            report.failed, 0,
+            "坏规则不许让 job 失败: {:?}",
+            report.errors
+        );
         assert_eq!(report.done, 6);
         assert_eq!(report.ruleErrors.len(), 6, "{:?}", report.ruleErrors);
         // 每张图两行判定：K1 真判定 + K2 隔离行（undetermined + load_error）
@@ -4859,13 +5023,27 @@ recheck_max: 1
 
         let mut ids = fx.asset_ids();
         ids.push(ghost);
-        compliance_enq(&fx.conn, &ids, &pack.id, Some(&fx.out_dir().to_string_lossy())).unwrap();
+        compliance_enq(
+            &fx.conn,
+            &ids,
+            &pack.id,
+            Some(&fx.out_dir().to_string_lossy()),
+        )
+        .unwrap();
         let report = run_all(&fx.conn, &pack, &fx.out_dir());
-        assert_eq!(report.failed, 0, "运行时规则级失败不许炸 job: {:?}", report.errors);
+        assert_eq!(
+            report.failed, 0,
+            "运行时规则级失败不许炸 job: {:?}",
+            report.errors
+        );
         assert_eq!(report.done, 5);
         assert_eq!(report.retry, 0, "规则级失败不是抖动，不重试");
         assert_eq!(report.ruleErrors.len(), 1, "{:?}", report.ruleErrors);
-        assert!(report.ruleErrors[0].contains("K2_sharp"), "{:?}", report.ruleErrors);
+        assert!(
+            report.ruleErrors[0].contains("K2_sharp"),
+            "{:?}",
+            report.ruleErrors
+        );
         // 幽灵图：元数据档规则照判；像素档规则隔离
         let (r1, e1) = verdict_of(&fx.conn, ghost, "K1_size");
         assert!(r1 == "pass" || r1 == "fail", "{r1} {e1:?}");
@@ -4875,7 +5053,10 @@ recheck_max: 1
         assert_eq!(ev["reason"], "rule_error");
         // 隔离不外溢：只有幽灵图那一条规则落 rule_error，其余全是真判定
         assert_eq!(
-            verdict_count(&fx.conn, "result = 'undetermined' AND evidence LIKE '%rule_error%'"),
+            verdict_count(
+                &fx.conn,
+                "result = 'undetermined' AND evidence LIKE '%rule_error%'"
+            ),
             1
         );
         assert_eq!(verdict_count(&fx.conn, "1=1"), 10);
@@ -4900,7 +5081,13 @@ recheck_max: 1
         let pack = Pack::from_yaml_strs("iso-dep", "", rules, pipeline, "").unwrap();
         let fx = Fixture::new("c8-dep", 3);
         let ids = fx.asset_ids();
-        compliance_enq(&fx.conn, &ids, &pack.id, Some(&fx.out_dir().to_string_lossy())).unwrap();
+        compliance_enq(
+            &fx.conn,
+            &ids,
+            &pack.id,
+            Some(&fx.out_dir().to_string_lossy()),
+        )
+        .unwrap();
         let report = run_all(&fx.conn, &pack, &fx.out_dir());
         assert_eq!(report.failed, 0);
         assert_eq!(verdict_count(&fx.conn, "1=1"), 6);
@@ -5020,7 +5207,11 @@ recheck_max: 1
         for row in &rows {
             let reason = row.ev.get("reason").and_then(|x| x.as_str());
             if row.gk.ends_with("src") {
-                assert_eq!(row.result, "skipped", "src 成员必须被短路: {} {}", row.gk, row.result);
+                assert_eq!(
+                    row.result, "skipped",
+                    "src 成员必须被短路: {} {}",
+                    row.gk, row.result
+                );
                 assert_eq!(reason, Some("short_circuited_by"), "{}", row.gk);
                 assert_eq!(
                     row.ev.get("shortCircuitedBy"),
@@ -5029,7 +5220,12 @@ recheck_max: 1
                     row.gk
                 );
                 // 证据里 members 只剩参与判定的成员（空）——被短路成员单列
-                assert_eq!(row.ev.get("members"), Some(&serde_json::json!([])), "{}", row.gk);
+                assert_eq!(
+                    row.ev.get("members"),
+                    Some(&serde_json::json!([])),
+                    "{}",
+                    row.gk
+                );
                 assert_eq!(
                     row.ev.get("shortCircuitedMembers"),
                     Some(&serde_json::json!(ids[0..2])),
@@ -5068,7 +5264,13 @@ recheck_max: 1
         let pack = Pack::from_yaml_strs("c9-asset", "", rules, pipeline, "").unwrap();
         let fx = Fixture::new("c9-asset", 3);
         let ids = fx.asset_ids();
-        compliance_enq(&fx.conn, &ids, &pack.id, Some(&fx.out_dir().to_string_lossy())).unwrap();
+        compliance_enq(
+            &fx.conn,
+            &ids,
+            &pack.id,
+            Some(&fx.out_dir().to_string_lossy()),
+        )
+        .unwrap();
         let report = run_all(&fx.conn, &pack, &fx.out_dir());
         assert_eq!(report.failed, 0, "{:?}", report.errors);
         // 每组级规则每资产一行占位：skipped + reason=group_scoped + scope=group
@@ -5089,18 +5291,27 @@ recheck_max: 1
             0
         );
         assert_eq!(
-            verdict_count(&fx.conn, "ruleId = 'G1_dup' AND judgementScope = 'per_group'"),
+            verdict_count(
+                &fx.conn,
+                "ruleId = 'G1_dup' AND judgementScope = 'per_group'"
+            ),
             0,
             "只有资产 job 跑过：组级行必须为 0（组级结论由组级 job 落）"
         );
         // per_asset 规则逐图真判定、不受影响（Fixture: i%3==2 → 800×600，短边 600 < 700 →
         // 原始 fail；无修复器 + on_fail=fail → 落 fail（三态口径））
         assert_eq!(
-            verdict_count(&fx.conn, "ruleId = 'R1_size' AND judgementScope = 'per_asset' AND result = 'fail'"),
+            verdict_count(
+                &fx.conn,
+                "ruleId = 'R1_size' AND judgementScope = 'per_asset' AND result = 'fail'"
+            ),
             1
         );
         assert_eq!(
-            verdict_count(&fx.conn, "ruleId = 'R1_size' AND judgementScope = 'per_asset' AND result = 'pass'"),
+            verdict_count(
+                &fx.conn,
+                "ruleId = 'R1_size' AND judgementScope = 'per_asset' AND result = 'pass'"
+            ),
             2
         );
         assert_eq!(verdict_count(&fx.conn, "1=1"), 6);
@@ -5157,7 +5368,10 @@ recheck_max: 1
         assert_eq!(verdict_count(&fx.conn, "judgementScope = 'per_asset'"), 0);
         // 组级口径：3 个成员各一行（按成员展开），组键非空且两个组
         assert_eq!(
-            verdict_count(&fx.conn, "judgementScope = 'per_group' AND groupKey IS NOT NULL"),
+            verdict_count(
+                &fx.conn,
+                "judgementScope = 'per_group' AND groupKey IS NOT NULL"
+            ),
             3
         );
         let keys: Vec<String> = {
@@ -5169,9 +5383,12 @@ recheck_max: 1
             rows.map(|r| r.unwrap()).collect()
         };
         assert_eq!(keys.len(), 2, "{keys:?}");
-        assert!(keys[0].ends_with("src") && keys[1].ends_with("src2"), "{keys:?}");
+        assert!(
+            keys[0].ends_with("src") && keys[1].ends_with("src2"),
+            "{keys:?}"
+        );
         let group_key = keys[0].clone();
-        let mut evidence_of = |k: &str| -> serde_json::Value {
+        let evidence_of = |k: &str| -> serde_json::Value {
             let ev: String = fx
                 .conn
                 .query_row(
@@ -5221,9 +5438,16 @@ recheck_max: 1
         assert_eq!(fx.conn.query_row(
             "SELECT COUNT(*) FROM job_queue WHERE kind = 'compliance_group' AND status = 'done'",
             [], |r| r.get::<_, i64>(0)).unwrap(), 2);
-        assert_eq!(fx.conn.query_row(
-            "SELECT COUNT(*) FROM job_queue WHERE kind = 'compliance'",
-            [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+        assert_eq!(
+            fx.conn
+                .query_row(
+                    "SELECT COUNT(*) FROM job_queue WHERE kind = 'compliance'",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            0
+        );
     }
     // -----------------------------------------------------------------
     // IP-K05：插件执行通道（判定行映射 + 队列落库 + 来源列）
@@ -5303,7 +5527,11 @@ recheck_max: 1
         );
         let rows = plugin_rows(&judged, None);
         let order: Vec<&str> = rows.iter().map(|r| r.rule_id.as_str()).collect();
-        assert_eq!(order, vec!["R0_gate", "R1_size", "R2_white"], "落库/报告列序 = 包声明序");
+        assert_eq!(
+            order,
+            vec!["R0_gate", "R1_size", "R2_white"],
+            "落库/报告列序 = 包声明序"
+        );
         assert_eq!(rows[0].result, verdict::FAIL);
         assert_eq!(rows[1].result, verdict::SKIPPED);
         assert_eq!(rows[2].result, verdict::PASS);
@@ -5346,7 +5574,11 @@ recheck_max: 1
             let rows = plugin_rows(&judged, None);
             assert_eq!(rows.len(), 2, "{reason}: 每条规则都要有行（不许少）");
             for r in &rows {
-                assert_eq!(r.result, verdict::UNDETERMINED, "{reason}: 失败不得冒充 pass/fail");
+                assert_eq!(
+                    r.result,
+                    verdict::UNDETERMINED,
+                    "{reason}: 失败不得冒充 pass/fail"
+                );
                 assert_eq!(evidence_of(r)["reason"], reason);
                 assert_eq!(r.confidence, Some(0.0), "没有结论 → 必须进复核");
             }
@@ -5429,7 +5661,10 @@ recheck_max: 1
         let rows = plugin_rows(&judged, Some(&repaired));
         assert_eq!(rows[0].result, verdict::FAIL, "修复失败≠判定作废");
         assert_eq!(rows[0].confidence, Some(0.85));
-        assert_eq!(evidence_of(&rows[0])["repair_error"]["reason"], "plugin_crash");
+        assert_eq!(
+            evidence_of(&rows[0])["repair_error"]["reason"],
+            "plugin_crash"
+        );
     }
 
     // K07-FIX（2026-10-21）：repair 的 skipped/undetermined 不得覆盖 judge 结论
@@ -5504,9 +5739,7 @@ recheck_max: 1
         let pass: String = f
             .conn
             .query_row(
-                &format!(
-                    "SELECT {V} FROM rule_verdict WHERE packId = ?1 AND ruleId = 'R1_size'"
-                ),
+                &format!("SELECT {V} FROM rule_verdict WHERE packId = ?1 AND ruleId = 'R1_size'"),
                 [PLUGIN_ID],
                 |r| r.get(0),
             )
@@ -5523,7 +5756,11 @@ recheck_max: 1
         let rows = plugin_rows(&judged, Some(&repaired));
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].result, verdict::FAIL, "判不了 ≠ 推翻 fail");
-        assert_eq!(rows[0].confidence, Some(0.8), "置信度跟判定走，不被 repair 抹平");
+        assert_eq!(
+            rows[0].confidence,
+            Some(0.8),
+            "置信度跟判定走，不被 repair 抹平"
+        );
         assert_eq!(rows[0].score, Some(0.8));
         assert_eq!(rows[0].recheck, None);
         assert!(rows[0].fix_action.is_none());
@@ -5562,12 +5799,15 @@ recheck_max: 1
 
     // ---- 队列级：真库 + mock 插件（落库/来源列/运行报告） ----
 
+    type JudgeFn = Box<dyn Fn(&PluginAsset) -> PluginOutcome + Send + Sync>;
+    type ActionFn = Box<dyn Fn(&PluginAsset, &str) -> PluginOutcome + Send + Sync>;
+
     struct MockPlugin {
         id: PackIdentityInfo,
-        judge: Box<dyn Fn(&PluginAsset) -> PluginOutcome + Send + Sync>,
-        repair: Option<Box<dyn Fn(&PluginAsset) -> PluginOutcome + Send + Sync>>,
+        judge: JudgeFn,
+        repair: Option<JudgeFn>,
         /// N6e 动作链调用（`action_asset`）；不给 = 宿主默认实现（明确否认）
-        action: Option<Box<dyn Fn(&PluginAsset, &str) -> PluginOutcome + Send + Sync>>,
+        action: Option<ActionFn>,
         seen_repair_rules: std::sync::Mutex<Vec<Vec<String>>>,
     }
 
@@ -5613,7 +5853,10 @@ recheck_max: 1
         }
 
         fn repair_asset(&self, req: &PluginAsset) -> PluginOutcome {
-            self.seen_repair_rules.lock().unwrap().push(req.rule_ids.clone());
+            self.seen_repair_rules
+                .lock()
+                .unwrap()
+                .push(req.rule_ids.clone());
             match &self.repair {
                 Some(f) => f(req),
                 None => failed_outcome(self.id.clone(), PluginFailure::Unavailable, "no repair"),
@@ -5712,7 +5955,11 @@ recheck_max: 1
         // ② run 账本按队列事实回填
         let run_row = ComplianceRunRepo::finish(&runs, run_id, "done", None, &[COMPLIANCE_KIND])
             .expect("收工");
-        assert_eq!((run_row.done, run_row.failed), (0, 1), "汇总 failed=1 / done=0");
+        assert_eq!(
+            (run_row.done, run_row.failed),
+            (0, 1),
+            "汇总 failed=1 / done=0"
+        );
 
         // ③④ 结果行：失败码区分「插件结构化失败」与宿主兜底，reason 与 lastError 同源
         let (result, code, message, chain): (String, Option<String>, Option<String>, String) = f
@@ -5727,8 +5974,14 @@ recheck_max: 1
         assert_eq!(result, "failed");
         assert_eq!(code.as_deref(), Some("action_failed"));
         let message = message.expect("errorMessage 必须写");
-        assert!(message.contains("目标 36264×13040"), "插件原文透传：{message}");
-        assert!(!message.contains("未返回产物"), "不许退回宿主兜底文案：{message}");
+        assert!(
+            message.contains("目标 36264×13040"),
+            "插件原文透传：{message}"
+        );
+        assert!(
+            !message.contains("未返回产物"),
+            "不许退回宿主兜底文案：{message}"
+        );
         assert_eq!(Some(message), Some(last_error), "两处展示必须同源");
         // fields.chain[i] 带插件 error 与 evidence
         let chain: serde_json::Value = serde_json::from_str(&chain).unwrap();
@@ -5738,7 +5991,6 @@ recheck_max: 1
         assert_eq!(step["evidence"]["limit"]["maxScale"], 1.99);
         assert_eq!(chain["error"]["code"], "action_failed");
     }
-
 
     /// 插件通道跑通：行落在**插件包 id** 下、来源列（packVersion/pluginHash）逐行写入、
     /// legacy 包 id 下一行不落（两族互不污染）。
@@ -5913,7 +6165,10 @@ recheck_max: 1
         assert_eq!(report.done, 1, "插件超时不许把 job 判死");
         assert_eq!(report.failed, 0);
         assert!(
-            report.ruleErrors.iter().any(|e| e.contains("plugin_timeout")),
+            report
+                .ruleErrors
+                .iter()
+                .any(|e| e.contains("plugin_timeout")),
             "运行报告必须响亮记录插件失败：{:?}",
             report.ruleErrors
         );
@@ -6070,15 +6325,13 @@ mod c5_tests {
     fn write_jpeg(dir: &Path, name: &str, w: u32, h: u32) -> PathBuf {
         let img = image::RgbImage::from_pixel(w, h, image::Rgb([120, 130, 140]));
         let dest = dir.join(name);
-        img.save_with_format(&dest, image::ImageFormat::Jpeg).unwrap();
+        img.save_with_format(&dest, image::ImageFormat::Jpeg)
+            .unwrap();
         dest
     }
 
     /// 文件库 + 注入资产（返回未打开的 Result 连接，调用方按顺序/并行各自 open）。
-    fn setup_file_db(
-        tag: &str,
-        images: &[PathBuf],
-    ) -> (core_storage::Result<Connection>, PathBuf) {
+    fn setup_file_db(tag: &str, images: &[PathBuf]) -> (core_storage::Result<Connection>, PathBuf) {
         let dir = std::env::temp_dir().join(format!("dam-c5-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("out")).unwrap();
@@ -6144,7 +6397,8 @@ mod c5_tests {
         // 模型根指向空目录 → lama 文件缺失 → ModelMissing → pending_human（降级分支）
         // 模型根是进程级全局态 → ModelsRootScope 取 core_config::models_root_lock() + drop 还原
         // （并行 cargo test 不再互相踩；卡 task）
-        let empty_root = std::env::temp_dir().join(format!("dam-c5-empty-root-{}", std::process::id()));
+        let empty_root =
+            std::env::temp_dir().join(format!("dam-c5-empty-root-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&empty_root);
         std::fs::create_dir_all(empty_root.join("models")).unwrap();
         let _restore_scope = engine_restore::ModelsRootScope::set(&empty_root);
@@ -6156,8 +6410,7 @@ mod c5_tests {
         let ids = asset_ids(&conn);
         let pack = c5_pack();
         let out_dir = dir.join("out").to_string_lossy().to_string();
-        let enqed =
-            compliance_enq(&conn, &ids, pack.id.as_str(), Some(&out_dir)).unwrap();
+        let enqed = compliance_enq(&conn, &ids, pack.id.as_str(), Some(&out_dir)).unwrap();
         assert_eq!(enqed, 1);
 
         let base = spawn_mock(vec![
@@ -6299,13 +6552,28 @@ mod c5_tests {
         let vs = verdicts(&conn, &pack.id);
         assert_eq!(vs.len(), 1, "{vs:?}");
         assert_eq!(vs[0].1, "undetermined", "区域无文本支撑 → 未判定（不重绘）");
-        assert_eq!(vs[0].2.as_deref(), Some("inpaint"), "失败的是修复（不是判定）");
+        assert_eq!(
+            vs[0].2.as_deref(),
+            Some("inpaint"),
+            "失败的是修复（不是判定）"
+        );
         assert_eq!(vs[0].3, None, "没有复检（根本没修）");
         let ev = evidence_of(&conn, &pack.id, "R3_no_watermark");
         assert_eq!(ev["region"]["reason"], "vl_region_mismatch", "{ev}");
-        assert_eq!(ev["region"]["threshold"], crate::inpaint_region::VL_OCR_OVERLAP_MIN);
-        assert_eq!(ev["region"]["ocrBoxes"].as_array().unwrap().len(), 1, "{ev}");
-        assert_eq!(ev["region"]["vlRegions"].as_array().unwrap().len(), 1, "{ev}");
+        assert_eq!(
+            ev["region"]["threshold"],
+            crate::inpaint_region::VL_OCR_OVERLAP_MIN
+        );
+        assert_eq!(
+            ev["region"]["ocrBoxes"].as_array().unwrap().len(),
+            1,
+            "{ev}"
+        );
+        assert_eq!(
+            ev["region"]["vlRegions"].as_array().unwrap().len(),
+            1,
+            "{ev}"
+        );
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
@@ -6363,7 +6631,8 @@ mod c5_tests {
     /// （不是 `vl_no_region`，也不是静默退回 VL bbox）。
     #[test]
     fn dm_c1_region_modes_ocr_text_and_fallback() {
-        let empty_root = std::env::temp_dir().join(format!("dam-dmc1-root2-{}", std::process::id()));
+        let empty_root =
+            std::env::temp_dir().join(format!("dam-dmc1-root2-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&empty_root);
         std::fs::create_dir_all(empty_root.join("models")).unwrap();
         let _restore_scope = engine_restore::ModelsRootScope::set(&empty_root);
@@ -6535,7 +6804,10 @@ mod c5_tests {
             let (reason, ev) =
                 resolve_inpaint_region(&mut ctx, &rule, &mut params, &out).unwrap_err();
             assert_eq!(reason, "vl_no_region", "{ev}");
-            assert!(params.get("box").is_none(), "修前 bug：这里会注入 VL bbox → {params:?}");
+            assert!(
+                params.get("box").is_none(),
+                "修前 bug：这里会注入 VL bbox → {params:?}"
+            );
             assert!(params.get("mask").is_none(), "{params:?}");
         }
 
@@ -6712,5 +6984,4 @@ mod c5_tests {
         };
         assert!(out3.fix_regions().is_empty());
     }
-
 }

@@ -200,9 +200,8 @@ impl AssetVersionRepo for SqliteAssetVersionRepo<'_> {
     }
 
     fn current_working(&self, asset_id: i64) -> Result<Option<StoredVersion>> {
-        let sql = format!(
-            "SELECT {COLS} FROM asset_versions WHERE assetId = ?1 AND current = 1 LIMIT 1"
-        );
+        let sql =
+            format!("SELECT {COLS} FROM asset_versions WHERE assetId = ?1 AND current = 1 LIMIT 1");
         let mut stmt = self.conn.prepare(&sql)?;
         let mut rows = stmt.query([asset_id])?;
         match rows.next()? {

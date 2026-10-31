@@ -7,6 +7,7 @@
 //! 环境（容器只读挂载）：
 //! - DAM_TEST_MODELS=/models/siglip2-base-p224-onnx（真语义塔三件套）
 //! - DAM_TEST_MODELS_DEDUP=/models/dinov3-vits16（真去重塔）
+//!
 //! 缺任一 → 本文件测试显式失败（不静默跳过）。
 //!
 //! 放在 app-tauri（L3 可依赖全部 L0-L2，E2E 天然位置）；不走 Tauri 运行时，
@@ -283,8 +284,11 @@ fn e2e_text_search_semantics_top1() {
             query,
             5,
             &Default::default(),
-            &TextSearchOptions { min_score: Some(0.0) },
-        ).unwrap();
+            &TextSearchOptions {
+                min_score: Some(0.0),
+            },
+        )
+        .unwrap();
         assert!(!hits.is_empty(), "{query} 无结果");
         assert!(
             hits[0].fileName.starts_with(expect_prefix),
@@ -327,7 +331,9 @@ fn e2e_image_search_self_match_and_filters() {
         target,
         5,
         &Default::default(),
-        &SimilarOptions { min_score: Some(0.0) },
+        &SimilarOptions {
+            min_score: Some(0.0),
+        },
     )
     .unwrap();
     assert_eq!(hits[0].assetId, target, "自匹配第一");
@@ -367,7 +373,9 @@ fn e2e_image_search_self_match_and_filters() {
             ext: Some("webp".into()),
             ..Default::default()
         },
-        &TextSearchOptions { min_score: Some(0.0) },
+        &TextSearchOptions {
+            min_score: Some(0.0),
+        },
     )
     .unwrap();
     assert!(hits.is_empty(), "不可能过滤 → 空结果而非报错");
@@ -382,7 +390,9 @@ fn e2e_image_search_self_match_and_filters() {
             min_width: Some(1000),
             ..Default::default()
         },
-        &TextSearchOptions { min_score: Some(0.0) },
+        &TextSearchOptions {
+            min_score: Some(0.0),
+        },
     )
     .unwrap();
     assert!(hits.is_empty());
@@ -395,7 +405,9 @@ fn e2e_image_search_self_match_and_filters() {
             min_width: Some(200),
             ..Default::default()
         },
-        &TextSearchOptions { min_score: Some(0.0) },
+        &TextSearchOptions {
+            min_score: Some(0.0),
+        },
     )
     .unwrap();
     assert_eq!(hits.len(), 27, "全库 27 张都满足 min_width=200");
@@ -410,7 +422,9 @@ fn e2e_image_search_self_match_and_filters() {
             dir_prefix: Some(root.path().join("src").display().to_string()),
             ..Default::default()
         },
-        &TextSearchOptions { min_score: Some(0.0) },
+        &TextSearchOptions {
+            min_score: Some(0.0),
+        },
     )
     .unwrap();
     assert_eq!(hits.len(), 27);
@@ -467,7 +481,7 @@ fn e2e_find_duplicates_bands() {
         let best = g.members.iter().map(|m| m.score).fold(0.0f32, f32::max);
         match g.band.as_str() {
             "near" => assert!(best >= 0.98, "near 组 best={best}"),
-            "variant" => assert!(best < 0.98 && best >= 0.90, "variant 组 best={best}"),
+            "variant" => assert!((0.90..0.98).contains(&best), "variant 组 best={best}"),
             other => panic!("未知分带 {other}"),
         }
     }

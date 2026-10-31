@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)] // vips 全局锁刻意贯穿 await：测试间串行化 libvips（非 DB 锁，无死锁面）
 //! KI-28 接线钉：`runtime_python` 从「安装包资源」到「`PackHostConfig`」的整条链路（卡 `task`）。
 //!
 //! 出包实测（K14 `reports/evidence/K14/installer-7z-list.txt`）里 `grep -i python` 命中 0 条，
@@ -118,12 +119,7 @@ fn wiring_sets_runtime_python_on_pack_host_config() {
     let (root, py, launcher) = fake_resource_dir("wiring");
     let rt = app_web::PackRuntime::resolve_with(true, Some(&root));
     let work = tmp_data("wiring-work");
-    let cfg = app_web::compliance_api::pack_host_config(
-        "http://127.0.0.1:1",
-        "tok",
-        &work,
-        &rt,
-    );
+    let cfg = app_web::compliance_api::pack_host_config("http://127.0.0.1:1", "tok", &work, &rt);
     // 反向验证点：`pack_host_config` 里若摘掉 `cfg.runtime_python = rt.python.clone()`，这里必红
     assert_eq!(
         cfg.runtime_python.as_deref(),
@@ -152,10 +148,17 @@ fn wiring_sets_runtime_python_on_pack_host_config() {
 async fn caps(app: &axum::Router) -> serde_json::Value {
     let res = app
         .clone()
-        .oneshot(Request::builder().uri("/api/capabilities").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/api/capabilities")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     serde_json::from_slice(&raw).unwrap()
 }
 
@@ -172,7 +175,10 @@ async fn capabilities_reports_pack_runtime_consistently_with_form() {
     s_bundled.pack_runtime = app_web::PackRuntime::resolve_with(true, Some(&root));
     let body = caps(&app_web::router(s_bundled, data.clone())).await;
     let pr = &body["packRuntime"];
-    assert_eq!(pr["bundled"], true, "capabilities.packRuntime 没报出 bundled：{body}");
+    assert_eq!(
+        pr["bundled"], true,
+        "capabilities.packRuntime 没报出 bundled：{body}"
+    );
     assert_eq!(
         pr["python"].as_str().map(PathBuf::from),
         Some(py.clone()),
@@ -210,7 +216,6 @@ async fn capabilities_reports_pack_runtime_consistently_with_form() {
         "容器形态说明应提系统 python3，实际 {container_note:?}"
     );
 }
-
 
 // ------------------------- 端到端（假解释器）：接线断了这条必须红（反向验证点）
 

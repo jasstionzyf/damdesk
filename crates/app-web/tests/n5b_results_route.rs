@@ -21,7 +21,9 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -128,7 +130,11 @@ async fn judge_pack_without_columns_uses_default_columns_and_splits_result_verdi
     let (status, body) = get(&app, &format!("/api/compliance/results?packId={id}")).await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["kinds"], serde_json::json!(["judge"]));
-    assert_eq!(body["columns"], serde_json::Value::Null, "没声明列 → 默认列");
+    assert_eq!(
+        body["columns"],
+        serde_json::Value::Null,
+        "没声明列 → 默认列"
+    );
     assert_eq!(body["total"], 3, "{body}");
     let items = body["items"].as_array().unwrap();
     assert_eq!(items.len(), 3);
@@ -183,7 +189,11 @@ async fn process_pack_rows_have_no_verdict_and_columns_come_from_declaration() {
 
     let (status, body) = get(&app, &format!("/api/compliance/results?packId={id}")).await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["kinds"], serde_json::json!(["process"]), "处理类：前端不画审核列");
+    assert_eq!(
+        body["kinds"],
+        serde_json::json!(["process"]),
+        "处理类：前端不画审核列"
+    );
     let cols = body["columns"].as_array().unwrap();
     assert_eq!(cols.len(), 2);
     assert_eq!(cols[0]["key"], "fmt", "order 小的排前面");
@@ -196,10 +206,17 @@ async fn process_pack_rows_have_no_verdict_and_columns_come_from_declaration() {
     assert_eq!(arts.len(), 1, "ok 行带产物：{}", items[0]);
     assert_eq!(arts[0]["kind"], "export_file");
     assert_eq!(arts[0]["sha256"], "ab12");
-    assert_eq!(items[1]["result"], "failed", "跑失败如实回 failed，不改成 undetermined");
+    assert_eq!(
+        items[1]["result"], "failed",
+        "跑失败如实回 failed，不改成 undetermined"
+    );
     assert_eq!(items[1]["verdict"], serde_json::Value::Null);
     assert_eq!(items[1]["reason"], "decode_failed");
-    assert_eq!(items[1]["artifacts"].as_array().unwrap().len(), 0, "failed 行无产物");
+    assert_eq!(
+        items[1]["artifacts"].as_array().unwrap().len(),
+        0,
+        "failed 行无产物"
+    );
 }
 
 #[tokio::test]
@@ -230,11 +247,8 @@ async fn job_filter_and_latest_row_per_asset_rule() {
     register(&conn, id, &pack_dir, "judge");
     judge_row(&conn, id, 1, "R1", "fail", "{}");
     // 重跑：同 (asset, rule) 新一行（另一个 job）→ 默认视图只留最新一行
-    conn.execute(
-        "UPDATE rule_verdict SET jobId = 1234 WHERE assetId = 1",
-        [],
-    )
-    .unwrap();
+    conn.execute("UPDATE rule_verdict SET jobId = 1234 WHERE assetId = 1", [])
+        .unwrap();
     judge_row(&conn, id, 1, "R1", "pass", "{}");
     conn.execute("UPDATE rule_verdict SET jobId = 1235 WHERE id = 2", [])
         .unwrap();
@@ -244,11 +258,19 @@ async fn job_filter_and_latest_row_per_asset_rule() {
     assert_eq!(body["items"][0]["verdict"]["status"], "pass");
 
     // 指定 jobId = 看那一次执行写了什么（不被后续重跑覆盖）
-    let (_, job_a) = get(&app, &format!("/api/compliance/results?packId={id}&jobId=1234")).await;
+    let (_, job_a) = get(
+        &app,
+        &format!("/api/compliance/results?packId={id}&jobId=1234"),
+    )
+    .await;
     assert_eq!(job_a["total"], 1, "按 jobId 取那一次的行");
     assert_eq!(job_a["items"][0]["verdict"]["status"], "fail");
     assert_eq!(job_a["jobId"], 1234);
-    let (_, job_b) = get(&app, &format!("/api/compliance/results?packId={id}&jobId=1235")).await;
+    let (_, job_b) = get(
+        &app,
+        &format!("/api/compliance/results?packId={id}&jobId=1235"),
+    )
+    .await;
     assert_eq!(job_b["items"][0]["verdict"]["status"], "pass");
 }
 
@@ -295,7 +317,11 @@ async fn run_id_filters_all_assets_of_one_execution() {
     }
 
     // 一次执行 = 2 个资产的行（不是只有 asset 1）
-    let (status, body) = get(&app, &format!("/api/compliance/results?packId={id}&runId=7")).await;
+    let (status, body) = get(
+        &app,
+        &format!("/api/compliance/results?packId={id}&runId=7"),
+    )
+    .await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["total"], 2, "{body}");
     assert_eq!(body["runId"], 7);
@@ -308,7 +334,11 @@ async fn run_id_filters_all_assets_of_one_execution() {
     assert_eq!(assets, vec![1, 2], "两行都在");
 
     // 单资产队列行口径仍然可用（诊断用）
-    let (status, body) = get(&app, &format!("/api/compliance/results?packId={id}&jobId=102")).await;
+    let (status, body) = get(
+        &app,
+        &format!("/api/compliance/results?packId={id}&jobId=102"),
+    )
+    .await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["total"], 1, "{body}");
     assert_eq!(body["items"][0]["assetId"], 2);

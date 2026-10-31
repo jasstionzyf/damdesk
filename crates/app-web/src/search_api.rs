@@ -1,3 +1,5 @@
+#![allow(non_snake_case)] // 本模块 DTO 字段 = 前端 JSON camelCase 契约，勿改
+#![allow(clippy::result_large_err)] // 检索面错误即 Response（axum handler 惯例）
 //! W3 搜索 API：文搜图（query text）/ 以图搜图（上传图片或库内资产「找相似」）。
 //!
 //! 编排复用 svc-library（provider 查询向量化 + engine-search 召回 + 标量过滤），
@@ -203,10 +205,14 @@ fn run_search<T>(
 ) -> Result<(String, u32, T), axum::response::Response> {
     let conn = core_storage::open(&infer::db_path(&state.data_dir))
         .map_err(|e| err(StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
-    let embedder = state
-        .provider
-        .get(&conn, &state.models_root)
-        .map_err(|m| err_coded(StatusCode::BAD_REQUEST, codes::PROVIDER_ERROR, json!({ "detail": m }), m))?;
+    let embedder = state.provider.get(&conn, &state.models_root).map_err(|m| {
+        err_coded(
+            StatusCode::BAD_REQUEST,
+            codes::PROVIDER_ERROR,
+            json!({ "detail": m }),
+            m,
+        )
+    })?;
     let hits = f(&conn, embedder.provider.as_ref()).map_err(map_lib_err)?;
     Ok((embedder.model_key, embedder.dims, hits))
 }
@@ -221,7 +227,8 @@ fn hits_response(
     // minScore = 本次实际生效的相似度下限（前端据此显示"相似度 ≥ X%"）；
     // 文搜图有自己的一套下限（0.085），这里不回传，避免混用。
     let calibrated = svc_library::similar_min_score_calibrated(&model);
-    let mut body = json!({ "model": model, "dims": dims, "k": k, "count": hits.len(), "hits": hits });
+    let mut body =
+        json!({ "model": model, "dims": dims, "k": k, "count": hits.len(), "hits": hits });
     if let Some(m) = min_score {
         body["minScore"] = json!(m);
         body["minScoreCalibrated"] = json!(calibrated);
@@ -400,9 +407,7 @@ pub async fn by_image(
     if let Err(e) = std::fs::write(&path, &body) {
         return err(StatusCode::INTERNAL_SERVER_ERROR, "io", e.to_string());
     }
-    let opts = svc_library::SimilarOptions {
-        min_score: min_req,
-    };
+    let opts = svc_library::SimilarOptions { min_score: min_req };
     let st = state.clone();
     let res = tokio::task::spawn_blocking(move || {
         run_search(&st, |conn, p| {
@@ -412,10 +417,7 @@ pub async fn by_image(
     .await;
     match res {
         Ok(Ok((model, dims, hits))) => {
-            let min = svc_library::SimilarOptions {
-                min_score: min_req,
-            }
-            .effective(&model);
+            let min = svc_library::SimilarOptions { min_score: min_req }.effective(&model);
             hits_response(model, dims, k, hits, Some(min))
         }
         Ok(Err(resp)) => resp,

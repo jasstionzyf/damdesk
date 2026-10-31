@@ -81,7 +81,9 @@ async fn call(app: &axum::Router, method: &str, uri: &str, body: Option<Value>) 
     };
     let res = app.clone().oneshot(req).await.unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -93,7 +95,10 @@ async fn wait_report(app: &axum::Router) -> Value {
         if st["running"] == json!(false) {
             return st;
         }
-        assert!(t0.elapsed() < Duration::from_secs(10), "导出 10s 未结束: {st}");
+        assert!(
+            t0.elapsed() < Duration::from_secs(10),
+            "导出 10s 未结束: {st}"
+        );
         tokio::time::sleep(Duration::from_millis(30)).await;
     }
 }
@@ -117,15 +122,32 @@ async fn dt4_tag_filter_export_matches_preview_not_whole_library() {
     let data_dir = fresh_dir("tag");
     seed(&data_dir);
     let out_dir = data_dir.join("out");
-    let state = app_web::test_support::state(data_dir.clone(), core_storage::open(&data_dir.join("dam.db")).unwrap());
+    let state = app_web::test_support::state(
+        data_dir.clone(),
+        core_storage::open(&data_dir.join("dam.db")).unwrap(),
+    );
     let app = app_web::router_without_dist(state);
 
     // 预览口径：标签命中 3（整库未删 4 张 → 两者不同，才有判别力）
-    let (code, preview) = call(&app, "GET", "/api/library/assets?tag=%E6%B5%B7&limit=1", None).await;
+    let (code, preview) = call(
+        &app,
+        "GET",
+        "/api/library/assets?tag=%E6%B5%B7&limit=1",
+        None,
+    )
+    .await;
     assert_eq!(code, 200);
-    assert_eq!(preview["total"], json!(3), "预览口径应只算标签命中: {preview}");
+    assert_eq!(
+        preview["total"],
+        json!(3),
+        "预览口径应只算标签命中: {preview}"
+    );
     let (_, whole) = call(&app, "GET", "/api/library/assets?limit=1", None).await;
-    assert_eq!(whole["total"], json!(4), "整库口径（deleted=0）应为 4: {whole}");
+    assert_eq!(
+        whole["total"],
+        json!(4),
+        "整库口径（deleted=0）应为 4: {whole}"
+    );
 
     // 导出：同一 filter → 报告与落盘都必须只有 3 张
     let (code, started) = call(
@@ -143,13 +165,28 @@ async fn dt4_tag_filter_export_matches_preview_not_whole_library() {
     assert_eq!(code, 200, "启动失败: {started}");
     let st = wait_report(&app).await;
     let rep = &st["report"];
-    assert_eq!(rep["total"], json!(3), "导出 total 必须是标签命中数，不是整库: {st}");
-    assert_eq!(rep["exported"], json!(3), "导出文件数必须是标签命中数: {st}");
+    assert_eq!(
+        rep["total"],
+        json!(3),
+        "导出 total 必须是标签命中数，不是整库: {st}"
+    );
+    assert_eq!(
+        rep["exported"],
+        json!(3),
+        "导出文件数必须是标签命中数: {st}"
+    );
     assert_eq!(rep["skipped"], json!([]));
     assert_eq!(rep["errors"], json!([]));
     let files = exported_files(&out_dir);
-    assert_eq!(files, vec!["p1.png", "p2.png", "p3.png"], "落盘文件必须就是标签命中的 3 张");
-    assert!(out_dir.join("manifest.csv").is_file(), "manifest.csv 应写入");
+    assert_eq!(
+        files,
+        vec!["p1.png", "p2.png", "p3.png"],
+        "落盘文件必须就是标签命中的 3 张"
+    );
+    assert!(
+        out_dir.join("manifest.csv").is_file(),
+        "manifest.csv 应写入"
+    );
 
     // 同一批资产用整库 filter 对照：4 张（含未打标签的 4 号）——证明 tag 真起了作用
     let out_all = data_dir.join("out-all");
@@ -167,7 +204,11 @@ async fn dt4_tag_filter_export_matches_preview_not_whole_library() {
     .await;
     assert_eq!(code, 200);
     let st = wait_report(&app).await;
-    assert_eq!(st["report"]["total"], json!(4), "空 filter = 整库（4 张）: {st}");
+    assert_eq!(
+        st["report"]["total"],
+        json!(4),
+        "空 filter = 整库（4 张）: {st}"
+    );
     assert_eq!(exported_files(&out_all).len(), 4);
 }
 
@@ -176,7 +217,10 @@ async fn dt4_export_source_and_target_guards() {
     let data_dir = fresh_dir("guards");
     seed(&data_dir);
     let out_dir = data_dir.join("out");
-    let state = app_web::test_support::state(data_dir.clone(), core_storage::open(&data_dir.join("dam.db")).unwrap());
+    let state = app_web::test_support::state(
+        data_dir.clone(),
+        core_storage::open(&data_dir.join("dam.db")).unwrap(),
+    );
     let app = app_web::router_without_dist(state.clone());
 
     // 来源二选一：两个都给 → 400（不猜用户意图，更不落成整库）
@@ -193,7 +237,10 @@ async fn dt4_export_source_and_target_guards() {
     )
     .await;
     assert_eq!(code, 400, "两个来源同时给应 400: {body}");
-    assert!(body["error"].as_str().unwrap_or_default().contains("二选一"));
+    assert!(body["error"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("二选一"));
 
     // 选择集来源（ExportDialog 那条路）：只导 1 张，且提示 total_hint = 1
     let (code, started) = call(
@@ -209,7 +256,11 @@ async fn dt4_export_source_and_target_guards() {
     )
     .await;
     assert_eq!(code, 200, "{started}");
-    assert_eq!(started["total"], json!(1), "选择集来源的 total_hint 应是选择集大小: {started}");
+    assert_eq!(
+        started["total"],
+        json!(1),
+        "选择集来源的 total_hint 应是选择集大小: {started}"
+    );
     assert_eq!(wait_report(&app).await["report"]["total"], json!(1));
 
     // 目标建不出来（/proc 下不可写）→ 错误进 status.error，不假装成功
@@ -229,12 +280,18 @@ async fn dt4_export_source_and_target_guards() {
     let st = wait_report(&app).await;
     assert_eq!(st["report"], Value::Null, "失败时不应有报告: {st}");
     assert!(
-        st["error"].as_str().unwrap_or_default().contains("dt4-not-writable"),
+        st["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("dt4-not-writable"),
         "失败原因要能看见（含目标路径）: {st}"
     );
 
     // 已在导出中 → 409；此时取消请求应被受理（把 cancel 位置 true）
-    state.export.running.store(true, std::sync::atomic::Ordering::SeqCst);
+    state
+        .export
+        .running
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     let (code, body) = call(
         &app,
         "POST",
@@ -250,10 +307,16 @@ async fn dt4_export_source_and_target_guards() {
     let (code, _) = call(&app, "POST", "/api/export/cancel", Some(json!({}))).await;
     assert_eq!(code, 200, "导出中取消应 200");
     assert!(
-        state.export.cancel.load(std::sync::atomic::Ordering::SeqCst),
+        state
+            .export
+            .cancel
+            .load(std::sync::atomic::Ordering::SeqCst),
         "取消位应被置起"
     );
-    state.export.running.store(false, std::sync::atomic::Ordering::SeqCst);
+    state
+        .export
+        .running
+        .store(false, std::sync::atomic::Ordering::SeqCst);
     // 无导出在跑时取消 → 409（不静默吞）
     let (code, _) = call(&app, "POST", "/api/export/cancel", Some(json!({}))).await;
     assert_eq!(code, 409);

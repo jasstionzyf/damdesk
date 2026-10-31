@@ -157,8 +157,10 @@ mod tests {
 
     fn mem() -> rusqlite::Connection {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
-        conn.execute_batch(include_str!("migrations/0001_init.sql")).unwrap();
-        conn.execute_batch(include_str!("migrations/0013_exif_meta.sql")).unwrap();
+        conn.execute_batch(include_str!("migrations/0001_init.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("migrations/0013_exif_meta.sql"))
+            .unwrap();
         conn
     }
 
@@ -176,14 +178,14 @@ mod tests {
     fn aspect_boundaries() {
         // 边界样表（验收 #5）：判定与 ±2% 方图容差
         let cases: [(i64, i64, &str); 8] = [
-            (1000, 1000, "square"), // 1:1
+            (1000, 1000, "square"),    // 1:1
             (4000, 3000, "landscape"), // 4:3 = 1.333
-            (3000, 4000, "portrait"), // 3:4
+            (3000, 4000, "portrait"),  // 3:4
             (1920, 1080, "landscape"), // 16:9
-            (1080, 1920, "portrait"), // 9:16
-            (1020, 1000, "square"),  // 1.02 → 容差内（=0.02 边界含）
+            (1080, 1920, "portrait"),  // 9:16
+            (1020, 1000, "square"),    // 1.02 → 容差内（=0.02 边界含）
             (1021, 1000, "landscape"), // 1.021 → 超容差
-            (999, 1000, "square"), // 0.999 → 容差内方图
+            (999, 1000, "square"),     // 0.999 → 容差内方图
         ];
         for (w, h, want) in cases {
             let (_, got) = aspect_of(Some(w), Some(h));
@@ -209,11 +211,19 @@ mod tests {
         };
         apply_columns(&conn, id, &c).unwrap();
         let before: String = conn
-            .query_row("SELECT exif || '|' || takenAt || '|' || cameraModel FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row(
+                "SELECT exif || '|' || takenAt || '|' || cameraModel FROM assets WHERE assetId=?1",
+                [id],
+                |r| r.get(0),
+            )
             .unwrap();
         apply_columns(&conn, id, &c).unwrap();
         let after: String = conn
-            .query_row("SELECT exif || '|' || takenAt || '|' || cameraModel FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row(
+                "SELECT exif || '|' || takenAt || '|' || cameraModel FROM assets WHERE assetId=?1",
+                [id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(before, after, "重跑必须零变化");
     }
@@ -222,18 +232,28 @@ mod tests {
     fn absent_records_reason_and_clears_columns() {
         let conn = mem();
         let id = seed_asset(&conn);
-        let c = ExifColumns { taken_at: Some(7), camera_model: Some("X".into()), ..Default::default() };
+        let c = ExifColumns {
+            taken_at: Some(7),
+            camera_model: Some("X".into()),
+            ..Default::default()
+        };
         apply_columns(&conn, id, &c).unwrap();
         apply_absent(&conn, id, "no_exif", "container clean").unwrap();
         let (exif, taken): (String, Option<i64>) = conn
-            .query_row("SELECT exif, takenAt FROM assets WHERE assetId=?1", [id], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })
+            .query_row(
+                "SELECT exif, takenAt FROM assets WHERE assetId=?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
             .unwrap();
         assert!(exif.contains("no_exif"));
         assert_eq!(taken, None);
         let model: Option<String> = conn
-            .query_row("SELECT cameraModel FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row(
+                "SELECT cameraModel FROM assets WHERE assetId=?1",
+                [id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(model, None);
     }
@@ -251,7 +271,11 @@ mod tests {
         assert_eq!((w, h), (Some(3000), Some(4000)));
         set_aspect(&conn, id, w, h).unwrap();
         let cls: String = conn
-            .query_row("SELECT aspectClass FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row(
+                "SELECT aspectClass FROM assets WHERE assetId=?1",
+                [id],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(cls, "portrait");
     }

@@ -89,7 +89,9 @@ async fn get_json(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -110,7 +112,9 @@ async fn post_json(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_jso
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
@@ -136,7 +140,10 @@ async fn unknown_rule_key_is_a_visible_error_not_available_zero_rules() {
     );
     // 顶层 packError 同源透出（前端报错条直接用，不必解析 pluginState）
     let pack_error = body["packError"].as_str().unwrap_or_default();
-    assert!(pack_error.contains("severity"), "packError 要点名坏键: {body}");
+    assert!(
+        pack_error.contains("severity"),
+        "packError 要点名坏键: {body}"
+    );
     // 直白钉死复审那条假通过：绝不能「可用 + 0 条规则 + 没话说」
     assert!(
         !(ps["available"] == true && body["pack"]["rules"] == 0 && ps["note"].is_null()),

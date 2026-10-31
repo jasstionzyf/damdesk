@@ -8,9 +8,7 @@
 
 use rusqlite::{params_from_iter, Connection};
 
-use crate::compliance_runs::{
-    run_status, ComplianceRunRepo, RunCounts, RunRow, TaskRow,
-};
+use crate::compliance_runs::{run_status, ComplianceRunRepo, RunCounts, RunRow, TaskRow};
 use crate::{Result, StorageError};
 
 /// SQLite 连接上的 run 账本仓库。
@@ -72,7 +70,11 @@ impl ComplianceRunRepo for SqliteComplianceRunRepo<'_> {
             placeholders(kinds.len())
         );
         let mut vals: Vec<rusqlite::types::Value> = vec![run_id.into()];
-        vals.extend(kinds.iter().map(|k| rusqlite::types::Value::Text((*k).to_string())));
+        vals.extend(
+            kinds
+                .iter()
+                .map(|k| rusqlite::types::Value::Text((*k).to_string())),
+        );
         Ok(self.conn.execute(&sql, params_from_iter(vals))?)
     }
 
@@ -119,9 +121,9 @@ impl ComplianceRunRepo for SqliteComplianceRunRepo<'_> {
     }
 
     fn get(&self, run_id: i64) -> Result<Option<RunRow>> {
-        let mut stmt = self
-            .conn
-            .prepare(&format!("SELECT {RUN_COLS} FROM compliance_runs WHERE runId = ?1"))?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {RUN_COLS} FROM compliance_runs WHERE runId = ?1"
+        ))?;
         let mut rows = stmt.query_map([run_id], row_from)?;
         match rows.next() {
             Some(r) => Ok(Some(r?)),
@@ -205,7 +207,11 @@ impl ComplianceRunRepo for SqliteComplianceRunRepo<'_> {
         let mut vals: Vec<rusqlite::types::Value> = vec![run_id.into()];
         if !kinds.is_empty() {
             sql.push_str(&format!(" AND kind IN ({})", placeholders(kinds.len())));
-            vals.extend(kinds.iter().map(|k| rusqlite::types::Value::Text((*k).to_string())));
+            vals.extend(
+                kinds
+                    .iter()
+                    .map(|k| rusqlite::types::Value::Text((*k).to_string())),
+            );
         }
         let mut stmt = self.conn.prepare(&sql)?;
         Ok(stmt.query_row(params_from_iter(vals), |r| {

@@ -64,7 +64,8 @@ pub struct GroupDetectorEntry {
     pub id: &'static str,
     pub name: &'static str,
     /// (组输入, 参数) → 组输出
-    pub run: fn(&GroupInput, &serde_yaml::Value) -> std::result::Result<GroupDetectorOutput, String>,
+    pub run:
+        fn(&GroupInput, &serde_yaml::Value) -> std::result::Result<GroupDetectorOutput, String>,
 }
 
 /// 组级（classic）检测器静态注册表（编译进二进制）。
@@ -147,8 +148,8 @@ fn run_phash_dup(
         serde_yaml::Value::Mapping(_) => params.clone(),
         _ => serde_yaml::Value::Mapping(Default::default()),
     };
-    let p: PhashDupParams = serde_yaml::from_value(normalized)
-        .map_err(|e| format!("phash_dup: 参数错误: {e}"))?;
+    let p: PhashDupParams =
+        serde_yaml::from_value(normalized).map_err(|e| format!("phash_dup: 参数错误: {e}"))?;
 
     let members: Vec<engine_dedup::DupMember> = input
         .members
@@ -164,7 +165,11 @@ fn run_phash_dup(
     let dup_groups: Vec<serde_json::Value> = groups
         .iter()
         .map(|g| {
-            let ids: Vec<i64> = g.members.iter().map(|&i| input.members[i].asset_id).collect();
+            let ids: Vec<i64> = g
+                .members
+                .iter()
+                .map(|&i| input.members[i].asset_id)
+                .collect();
             serde_json::json!({
                 "kind": g.kind.as_str(),
                 "size": ids.len(),
@@ -249,7 +254,11 @@ pub fn resolve_group_keys(rows: &[core_storage::compliance::GroupSourceRow]) -> 
             continue; // 同一资产重复入参只算一次
         }
         match r.value.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-            Some(k) => out.by_key.entry(k.to_string()).or_default().push(r.asset_id),
+            Some(k) => out
+                .by_key
+                .entry(k.to_string())
+                .or_default()
+                .push(r.asset_id),
             None => out.missing.push(r.asset_id),
         }
     }
@@ -298,7 +307,10 @@ mod tests {
         assert_eq!(out.score, 1.0, "一个连通分量");
         let dg = out.evidence["dupGroups"].as_array().unwrap();
         assert_eq!(dg.len(), 1);
-        assert_eq!(dg[0]["kind"], "near", "含近似边 → near（混合组按 near 呈现）");
+        assert_eq!(
+            dg[0]["kind"], "near",
+            "含近似边 → near（混合组按 near 呈现）"
+        );
         assert_eq!(dg[0]["members"], serde_json::json!([11, 12, 13]));
         assert_eq!(out.metrics["dupMembers"], 3.0);
     }
@@ -338,7 +350,10 @@ mod tests {
             member(32, None, None), // 派生数据全缺 → 不可判
         ]);
         let out = run_phash_dup(&g, &serde_yaml::Value::Null).unwrap();
-        assert_eq!(out.evidence["membersWithoutDupData"], serde_json::json!([32]));
+        assert_eq!(
+            out.evidence["membersWithoutDupData"],
+            serde_json::json!([32])
+        );
         assert_eq!(out.metrics["membersWithoutDupData"], 1.0);
     }
 

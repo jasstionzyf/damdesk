@@ -80,7 +80,9 @@ async fn call(app: &axum::Router, method: &str, uri: &str) -> (StatusCode, Value
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let status = res.status();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let body: Value = if bytes.is_empty() {
         Value::Null
     } else {

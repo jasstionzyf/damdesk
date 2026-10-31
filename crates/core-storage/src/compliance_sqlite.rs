@@ -147,9 +147,7 @@ impl ComplianceRepo for SqliteComplianceRepo<'_> {
         } else if let Some(run) = f.run_id {
             // DECouple-BE：一次执行 = compliance_runs.runId，其下 task 全部带同一个 job_queue.runId
             params.push(Box::new(run));
-            sql.push_str(
-                "packId = ?1 AND jobId IN (SELECT id FROM job_queue WHERE runId = ?2)",
-            );
+            sql.push_str("packId = ?1 AND jobId IN (SELECT id FROM job_queue WHERE runId = ?2)");
         } else {
             sql.push_str(
                 "id IN (SELECT MAX(id) FROM rule_verdict WHERE packId = ?1 GROUP BY assetId, ruleId)",
@@ -201,8 +199,10 @@ impl ComplianceRepo for SqliteComplianceRepo<'_> {
              WHERE a.assetId IN ({placeholders}) ORDER BY a.assetId"
         );
         let mut stmt = self.conn.prepare(&sql)?;
-        let params: Vec<&dyn rusqlite::ToSql> =
-            asset_ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
+        let params: Vec<&dyn rusqlite::ToSql> = asset_ids
+            .iter()
+            .map(|i| i as &dyn rusqlite::ToSql)
+            .collect();
         let rows = stmt.query_map(params.as_slice(), |r| {
             let asset_id: i64 = r.get(0)?;
             let abs_path: String = r.get(1)?;
@@ -560,9 +560,7 @@ pub fn state_condition_sql(
     // 「有结论」= 至少一行生效结论是 pass/fail。全 skipped（= 每条规则对这张图都不适用）
     // 不算判过：与 Rust 侧 `state_of_verdicts_with` 同步（卡 task）——
     // 先前这种资产落 pass 分支，把「没判」算成「合格」并进了合格统计。
-    let concluded = hit(&format!(
-        " AND {EFFECTIVE_VERDICT_SQL} IN ('pass', 'fail')"
-    ));
+    let concluded = hit(&format!(" AND {EFFECTIVE_VERDICT_SQL} IN ('pass', 'fail')"));
     // 资产级改判（ruleId IS NULL）：整张图的结论直接取人工裁决
     let asset_review = |extra: &str| {
         format!(
@@ -743,8 +741,10 @@ mod tests {
         let c = db();
         let repo = SqliteComplianceRepo::new(&c);
         let a = asset(&c, "/x/a.jpg");
-        repo.insert_verdict(&verdict(a, 11, "R1_size", "pass")).unwrap();
-        repo.insert_verdict(&verdict(a, 11, "R2_white", "fail")).unwrap();
+        repo.insert_verdict(&verdict(a, 11, "R1_size", "pass"))
+            .unwrap();
+        repo.insert_verdict(&verdict(a, 11, "R2_white", "fail"))
+            .unwrap();
         // 按 job 查：全量、稳定序
         let rows = repo.find_verdicts(&VerdictFilter::job("mini", 11)).unwrap();
         assert_eq!(rows.len(), 2);
@@ -752,11 +752,20 @@ mod tests {
         assert_eq!(rows[0].result, "pass");
         assert_eq!(rows[0].score, Some(0.42));
         // 其他 pack/job 不串
-        assert!(repo.find_verdicts(&VerdictFilter::job("other", 11)).unwrap().is_empty());
-        assert!(repo.find_verdicts(&VerdictFilter::job("mini", 12)).unwrap().is_empty());
+        assert!(repo
+            .find_verdicts(&VerdictFilter::job("other", 11))
+            .unwrap()
+            .is_empty());
+        assert!(repo
+            .find_verdicts(&VerdictFilter::job("mini", 12))
+            .unwrap()
+            .is_empty());
         // 删除只清本 job
         assert_eq!(repo.delete_verdicts("mini", 11).unwrap(), 2);
-        assert!(repo.find_verdicts(&VerdictFilter::pack("mini")).unwrap().is_empty());
+        assert!(repo
+            .find_verdicts(&VerdictFilter::pack("mini"))
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -765,9 +774,12 @@ mod tests {
         let repo = SqliteComplianceRepo::new(&c);
         let a = asset(&c, "/x/a.jpg");
         // 两个批次同 (asset, rule)：job 12 是重跑
-        repo.insert_verdict(&verdict(a, 11, "R1_size", "fail")).unwrap();
-        repo.insert_verdict(&verdict(a, 12, "R1_size", "pass")).unwrap();
-        repo.insert_verdict(&verdict(a, 11, "R2_white", "pass")).unwrap();
+        repo.insert_verdict(&verdict(a, 11, "R1_size", "fail"))
+            .unwrap();
+        repo.insert_verdict(&verdict(a, 12, "R1_size", "pass"))
+            .unwrap();
+        repo.insert_verdict(&verdict(a, 11, "R2_white", "pass"))
+            .unwrap();
         let rows = repo.find_verdicts(&VerdictFilter::pack("mini")).unwrap();
         assert_eq!(rows.len(), 2, "每 (asset, rule) 只留最新一行");
         assert_eq!(rows[0].rule_id, "R1_size");
@@ -813,15 +825,20 @@ mod tests {
         repo.insert_verdict(&group_verdict(other, 21, "F3_dup", "/prop/g2"))
             .unwrap();
         // per_asset 行不含 groupKey → 不会被组内查询捞到
-        repo.insert_verdict(&verdict(a, 22, "F1_sharpness", "pass")).unwrap();
+        repo.insert_verdict(&verdict(a, 22, "F1_sharpness", "pass"))
+            .unwrap();
 
         let rows = repo
             .find_group_verdicts("mini", "F3_dup", "/prop/g1")
             .unwrap();
         assert_eq!(rows.len(), 2, "本组成员两条");
         assert!(rows.iter().all(|r| r.asset_id != other));
-        assert!(rows.iter().all(|r| r.judgement_scope.as_deref() == Some("per_group")));
-        assert!(rows.iter().all(|r| r.group_key.as_deref() == Some("/prop/g1")));
+        assert!(rows
+            .iter()
+            .all(|r| r.judgement_scope.as_deref() == Some("per_group")));
+        assert!(rows
+            .iter()
+            .all(|r| r.group_key.as_deref() == Some("/prop/g1")));
         // per_asset 行 groupKey = NULL
         let pa = repo.find_verdicts(&VerdictFilter::pack("mini")).unwrap();
         let f1 = pa.iter().find(|r| r.rule_id == "F1_sharpness").unwrap();
@@ -862,9 +879,15 @@ mod tests {
         let folder = repo.group_source_rows(&[a, b, d], None).unwrap();
         assert_eq!(folder.len(), 3);
         assert_eq!(folder[0].value.as_deref(), Some("/prop/g1"));
-        assert_eq!(folder[2].value.as_deref(), Some("/prop/g2"), "按 assetId 升序");
+        assert_eq!(
+            folder[2].value.as_deref(),
+            Some("/prop/g2"),
+            "按 assetId 升序"
+        );
 
-        let by_col = repo.group_source_rows(&[a, b, d], Some("cameraModel")).unwrap();
+        let by_col = repo
+            .group_source_rows(&[a, b, d], Some("cameraModel"))
+            .unwrap();
         assert_eq!(by_col[0].value.as_deref(), Some("X-T5"));
         assert_eq!(by_col[1].value, None, "纯空白 = 缺键");
         assert_eq!(by_col[2].value, None, "NULL = 缺键");
@@ -912,9 +935,12 @@ mod tests {
         let repo = SqliteComplianceRepo::new(&c);
         let a = asset(&c, "/x/a.jpg");
         let b = asset(&c, "/x/b.jpg");
-        repo.insert_feedback(&feedback(a, "R1_size", "fail", "pass")).unwrap();
-        repo.insert_feedback(&feedback(a, "R2_white", "undetermined", "pass")).unwrap();
-        repo.insert_feedback(&feedback(b, "R1_size", "pass", "fail")).unwrap();
+        repo.insert_feedback(&feedback(a, "R1_size", "fail", "pass"))
+            .unwrap();
+        repo.insert_feedback(&feedback(a, "R2_white", "undetermined", "pass"))
+            .unwrap();
+        repo.insert_feedback(&feedback(b, "R1_size", "pass", "fail"))
+            .unwrap();
         // 其他 pack 不串
         let mut other = feedback(a, "R1_size", "fail", "fail");
         other.pack_id = "other".into();
@@ -931,7 +957,9 @@ mod tests {
         assert_eq!(all[2].asset_id, b);
 
         // 收窄到单资产
-        let one = repo.find_feedback(&FeedbackFilter::asset("mini", a)).unwrap();
+        let one = repo
+            .find_feedback(&FeedbackFilter::asset("mini", a))
+            .unwrap();
         assert_eq!(one.len(), 2);
         // rule 收窄 + limit
         let mut f = FeedbackFilter::asset("mini", a);
@@ -996,10 +1024,15 @@ mod tests {
         let c = db();
         let repo = SqliteComplianceRepo::new(&c);
         let a = asset(&c, "/x/a.jpg");
-        repo.insert_feedback(&feedback(a, "R1", "fail", "pass")).unwrap();
-        assert!(repo.find_feedback(&FeedbackFilter::pack("nope")).unwrap().is_empty());
+        repo.insert_feedback(&feedback(a, "R1", "fail", "pass"))
+            .unwrap();
+        assert!(repo
+            .find_feedback(&FeedbackFilter::pack("nope"))
+            .unwrap()
+            .is_empty());
         // 资产删除级联（ON DELETE CASCADE）
-        c.execute("DELETE FROM assets WHERE assetId = ?1", [a]).unwrap();
+        c.execute("DELETE FROM assets WHERE assetId = ?1", [a])
+            .unwrap();
         assert_eq!(repo.count_feedback("mini").unwrap(), 0);
     }
 }

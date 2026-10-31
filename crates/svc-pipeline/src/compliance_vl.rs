@@ -106,7 +106,11 @@ pub fn vl_lookup(id: &str) -> Option<&'static VlDetectorEntry> {
 
 /// 已知 vl 检测器 id 列表（错误信息用）。
 pub fn vl_known_ids() -> String {
-    VL_DETECTORS.iter().map(|e| e.id).collect::<Vec<_>>().join(", ")
+    VL_DETECTORS
+        .iter()
+        .map(|e| e.id)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// judge 型 vl 规则的 `check.params` schema（C8）：
@@ -176,7 +180,9 @@ pub struct VlGroupJudgeParams {
 }
 
 /// 解析组级 vl 规则的 params（装载期 lint 与运行时共用）。
-pub fn vl_group_params(params: &serde_yaml::Value) -> std::result::Result<VlGroupJudgeParams, String> {
+pub fn vl_group_params(
+    params: &serde_yaml::Value,
+) -> std::result::Result<VlGroupJudgeParams, String> {
     let normalized = match params {
         serde_yaml::Value::Mapping(_) => params.clone(),
         _ => serde_yaml::Value::Mapping(Default::default()),
@@ -216,7 +222,9 @@ pub fn group_asks_from_pack(pack: &core_config::Pack) -> Vec<VlGroupAsk> {
             continue;
         }
         let Some(check) = &rule.check else { continue };
-        if vl_lookup(&check.detector).map(|e| e.scope) != Some(core_config::JudgementScope::PerGroup) {
+        if vl_lookup(&check.detector).map(|e| e.scope)
+            != Some(core_config::JudgementScope::PerGroup)
+        {
             continue;
         }
         let Ok(p) = vl_group_params(&check.params) else {
@@ -391,11 +399,7 @@ pub struct VlStatsSnapshot {
 impl VlStatsSnapshot {
     /// 平均单次时延 ms（零调用 → 0）。
     pub fn avg_ms(&self) -> u64 {
-        if self.calls == 0 {
-            0
-        } else {
-            self.ms_total / self.calls
-        }
+        self.ms_total.checked_div(self.calls).unwrap_or(0)
     }
 }
 
@@ -887,16 +891,21 @@ impl VlSession {
                     truncate(&text, 200)
                 )));
             }
-            return Err(VlError::Http(format!("http {status}: {}", truncate(&text, 400))));
+            return Err(VlError::Http(format!(
+                "http {status}: {}",
+                truncate(&text, 400)
+            )));
         }
-        let v: serde_json::Value = serde_json::from_str(&text)
-            .map_err(|e| VlError::Http(format!("应答非 JSON: {e}")))?;
+        let v: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| VlError::Http(format!("应答非 JSON: {e}")))?;
         let content = v["choices"][0]["message"]["content"]
             .as_str()
             .ok_or_else(|| VlError::Http(format!("应答缺 content: {}", truncate(&text, 400))))?
             .to_string();
         if content.trim().is_empty() {
-            return Err(VlError::Http("应答 content 为空（模型可能不支持该图格式）".into()));
+            return Err(VlError::Http(
+                "应答 content 为空（模型可能不支持该图格式）".into(),
+            ));
         }
         Ok(content)
     }
@@ -913,8 +922,10 @@ fn extract_json(text: &str) -> std::result::Result<&str, VlError> {
         return Ok(bal);
     }
     let (b, e) = (
-        s.find('{').ok_or_else(|| VlError::Parse("无 JSON 对象".into()))?,
-        s.rfind('}').ok_or_else(|| VlError::Parse("无 JSON 对象".into()))?,
+        s.find('{')
+            .ok_or_else(|| VlError::Parse("无 JSON 对象".into()))?,
+        s.rfind('}')
+            .ok_or_else(|| VlError::Parse("无 JSON 对象".into()))?,
     );
     if b >= e {
         return Err(VlError::Parse("JSON 区间非法".into()));
@@ -1036,9 +1047,9 @@ fn parse_round(
 
     let mut judge = BTreeMap::new();
     for ask in judge_asks {
-        let entry = rules.get(&ask.rule_id).ok_or_else(|| {
-            VlError::Parse(format!("应答缺规则 {} 判定", ask.rule_id))
-        })?;
+        let entry = rules
+            .get(&ask.rule_id)
+            .ok_or_else(|| VlError::Parse(format!("应答缺规则 {} 判定", ask.rule_id)))?;
         // 两种模式：
         // - 词表模式（ask.options 非空）：读 `answer`（兼容 label/result/字符串形式的 violated），
         //   词表校验后 `violated = (answer != expect)`；
@@ -1086,10 +1097,7 @@ fn parse_round(
         if let Some(rs) = entry.get("regions").and_then(|r| r.as_array()) {
             for r in rs {
                 if let Some(b) = r.get("bbox").and_then(|b| b.as_array()) {
-                    let nums: Vec<f64> = b
-                        .iter()
-                        .filter_map(|x| x.as_f64())
-                        .collect();
+                    let nums: Vec<f64> = b.iter().filter_map(|x| x.as_f64()).collect();
                     if nums.len() == b.len() {
                         if let Some(bb) = clamp_bbox(&nums) {
                             regions.push(bb);
@@ -1183,7 +1191,11 @@ pub fn build_prompt(intro: &str, judge_asks: &[VlJudgeAsk], tag_asks: &[VlTagAsk
                 i + 1,
                 a.rule_id,
                 a.prompt,
-                if a.expect == "是" { "应存在" } else { "不应存在" }
+                if a.expect == "是" {
+                    "应存在"
+                } else {
+                    "不应存在"
+                }
             ));
         } else {
             // 词表模式：原词回答，answer 只能取词表之一（pass = answer == expect）
@@ -1302,7 +1314,10 @@ mod tests {
         // C8：前言由调用方给（pack 可覆盖），且不再硬编码行业措辞
         assert!(p.starts_with(DEFAULT_VL_INTRO));
         assert!(p.contains("对这张图片执行判定"));
-        assert!(!p.contains("商品图"), "业务中性红线：模板不许再硬编码行业措辞");
+        assert!(
+            !p.contains("商品图"),
+            "业务中性红线：模板不许再硬编码行业措辞"
+        );
         let custom = build_prompt("这是一套房源照片。", &[judge_ask()], &[tag_ask()]);
         assert!(custom.starts_with("这是一套房源照片。"));
     }
@@ -1312,7 +1327,10 @@ mod tests {
         let raw = r#"{"rules":{"R3_no_watermark":{"violated":false,"regions":[]}},"tags":{"dress_silhouette":"A字","scene":"白底图"}}"#;
         let r = parse_round(raw, &[judge_ask()], &[tag_ask()]).unwrap();
         assert!(!r.judge["R3_no_watermark"].violated);
-        assert_eq!(r.tags["R5_attribute"], vec!["A字".to_string(), "白底图".to_string()]);
+        assert_eq!(
+            r.tags["R5_attribute"],
+            vec!["A字".to_string(), "白底图".to_string()]
+        );
     }
 
     #[test]
@@ -1323,7 +1341,10 @@ mod tests {
         assert!(j.violated);
         assert_eq!(j.regions, vec![[0.7, 0.8, 1.0, 0.95]]); // 越界钳制
         assert_eq!(r.tags["R5_attribute"], vec!["平铺".to_string()]); // 词表外丢弃
-        assert_eq!(r.tags_rejected["R5_attribute"], vec!["dress_silhouette:蓬蓬裙".to_string()]);
+        assert_eq!(
+            r.tags_rejected["R5_attribute"],
+            vec!["dress_silhouette:蓬蓬裙".to_string()]
+        );
     }
 
     #[test]
@@ -1337,8 +1358,8 @@ mod tests {
         // pass = (violated == (expect=="是"))；R3 expect=否 → violated=false 才过
         let a = judge_ask();
         let expect_yes = a.expect == "是";
-        assert!(!(true == expect_yes), "violated=true + expect=否 → 不过");
-        assert!(false == expect_yes, "violated=false + expect=否 → 过");
+        assert!(!(expect_yes), "violated=true + expect=否 → 不过");
+        assert!(!expect_yes, "violated=false + expect=否 → 过");
     }
 
     // ---------- COMPLIANCE-DOMAIN：正向 gate + VL 自评置信度 ----------
@@ -1372,13 +1393,26 @@ mod tests {
         // violated 与 expect 对账：answer=是 + expect=是 → 没有问题
         assert!(!out.violated);
         // answer=否 → 问题成立
-        let r2 = parse_round(r#"{"rules":{"F0_domain":{"answer":"否","confidence":0.9}}}"#, &[gate_ask()], &[]).unwrap();
+        let r2 = parse_round(
+            r#"{"rules":{"F0_domain":{"answer":"否","confidence":0.9}}}"#,
+            &[gate_ask()],
+            &[],
+        )
+        .unwrap();
         assert!(r2.judge["F0_domain"].violated);
         // 词表外答案 → 解析失败（不静默当命中）
-        let bad = parse_round(r#"{"rules":{"F0_domain":{"answer":"可能是吧"}}}"#, &[gate_ask()], &[]);
+        let bad = parse_round(
+            r#"{"rules":{"F0_domain":{"answer":"可能是吧"}}}"#,
+            &[gate_ask()],
+            &[],
+        );
         assert!(bad.is_err(), "词表外答案必须报错");
         // 缺 answer → 报错
-        let missing = parse_round(r#"{"rules":{"F0_domain":{"violated":true}}}"#, &[gate_ask()], &[]);
+        let missing = parse_round(
+            r#"{"rules":{"F0_domain":{"violated":true}}}"#,
+            &[gate_ask()],
+            &[],
+        );
         assert!(missing.is_err(), "词表模式缺 answer 必须报错");
     }
 
@@ -1459,15 +1493,19 @@ mod tests {
         assert_eq!(p.options.len(), 2);
         assert_eq!(p.probe_max, 0);
         // 未知键 → 拒（承接 C8 口径）
-        let bad = serde_yaml::from_str("prompt: p\noptions: [客厅]\nrequire_all: [客厅]\ngroup_by: 房源号")
-            .unwrap();
+        let bad = serde_yaml::from_str(
+            "prompt: p\noptions: [客厅]\nrequire_all: [客厅]\ngroup_by: 房源号",
+        )
+        .unwrap();
         assert!(vl_group_params(&bad).unwrap_err().contains("group_by"));
         // require_all 必须在 options 里
         let bad2 = serde_yaml::from_str("prompt: p\noptions: [客厅]\nrequire_all: [卧室]").unwrap();
         assert!(vl_group_params(&bad2).unwrap_err().contains("不在 options"));
         // 空 options / 空 require_all
         let bad3 = serde_yaml::from_str("prompt: p\noptions: []\nrequire_all: []").unwrap();
-        assert!(vl_group_params(&bad3).unwrap_err().contains("options 不能为空"));
+        assert!(vl_group_params(&bad3)
+            .unwrap_err()
+            .contains("options 不能为空"));
     }
 
     #[test]
@@ -1481,8 +1519,12 @@ mod tests {
         );
         // 兼容 rules[ruleId].label
         assert_eq!(
-            parse_group_label("{\"rules\":{\"F4_scene_complete\":{\"label\":\"卫生间\"}}}", rid, &ids)
-                .unwrap(),
+            parse_group_label(
+                "{\"rules\":{\"F4_scene_complete\":{\"label\":\"卫生间\"}}}",
+                rid,
+                &ids
+            )
+            .unwrap(),
             "卫生间"
         );
         // 带围栏/废话 + 解释句子 → 词表子串兜底
@@ -1542,7 +1584,10 @@ mod tests {
         )
         .unwrap();
         let (judge, tag) = asks_from_pack(&pack);
-        assert!(judge.is_empty(), "组级 vl 规则不进资产级 judge 提问: {judge:?}");
+        assert!(
+            judge.is_empty(),
+            "组级 vl 规则不进资产级 judge 提问: {judge:?}"
+        );
         assert_eq!(tag.len(), 1, "打标型仍在资产级");
         let gasks = group_asks_from_pack(&pack);
         assert_eq!(gasks.len(), 1);
@@ -1564,8 +1609,7 @@ mod tests {
                 let mut stream = req.unwrap();
                 let mut buf = vec![0u8; 8192];
                 let _ = stream.read(&mut buf);
-                let body =
-                    r#"{"error":{"message":"You have uploaded an unsupported image."}}"#;
+                let body = r#"{"error":{"message":"You have uploaded an unsupported image."}}"#;
                 let http = format!(
                     "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\
                      Content-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1591,8 +1635,13 @@ mod tests {
             max_tokens: 128,
             proxy: Some(String::new()),
         };
-        let mut sess = VlSession::new(cfg, vec![gate_ask()], Vec::new(), Arc::new(VlStats::default()));
-        let e = sess.round(&p).err().expect("坏图必须报错");
+        let mut sess = VlSession::new(
+            cfg,
+            vec![gate_ask()],
+            Vec::new(),
+            Arc::new(VlStats::default()),
+        );
+        let e = sess.round(&p).expect_err("坏图必须报错");
         assert!(matches!(e, VlError::Decode(_)), "期望 Decode，实际 {e:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1609,15 +1658,27 @@ mod tests {
         std::fs::write(&b, b"image-B").unwrap();
 
         let base = VlCache::key(&a, "prompt", "deepseek-flash", 4096).unwrap();
-        assert_eq!(base, VlCache::key(&a, "prompt", "deepseek-flash", 4096).unwrap());
+        assert_eq!(
+            base,
+            VlCache::key(&a, "prompt", "deepseek-flash", 4096).unwrap()
+        );
         // 内容不同
-        assert_ne!(base, VlCache::key(&b, "prompt", "deepseek-flash", 4096).unwrap());
+        assert_ne!(
+            base,
+            VlCache::key(&b, "prompt", "deepseek-flash", 4096).unwrap()
+        );
         // prompt 不同（不同规则问的不是一回事）
-        assert_ne!(base, VlCache::key(&a, "prompt2", "deepseek-flash", 4096).unwrap());
+        assert_ne!(
+            base,
+            VlCache::key(&a, "prompt2", "deepseek-flash", 4096).unwrap()
+        );
         // 模型不同
         assert_ne!(base, VlCache::key(&a, "prompt", "qwen3-vl", 4096).unwrap());
         // 预算不同
-        assert_ne!(base, VlCache::key(&a, "prompt", "deepseek-flash", 1024).unwrap());
+        assert_ne!(
+            base,
+            VlCache::key(&a, "prompt", "deepseek-flash", 1024).unwrap()
+        );
         // 图不存在 → None（调用方照常发请求，不因缓存读写失败把判定拖挂）
         assert!(VlCache::key(&dir.path().join("nope.jpg"), "p", "m", 1).is_none());
     }
@@ -1648,7 +1709,7 @@ mod tests {
         let img = dir.path().join("img.jpg");
         std::fs::write(&img, b"not-a-real-jpeg-but-cache-first").unwrap();
         let cfg = VlConfig {
-            base_url: "http://127.0.0.1:9".into(),   // discard 端口：连上就说明没走缓存
+            base_url: "http://127.0.0.1:9".into(), // discard 端口：连上就说明没走缓存
             api_key: "k".into(),
             model: "mock-vl".into(),
             timeout_secs: 2,
@@ -1661,9 +1722,15 @@ mod tests {
         let key = VlCache::key(&img, "是不是纯白色背景", &cfg.model, 4096).unwrap();
         VlCache::global().put(key, "是".into());
 
-        let raw = sess.ask_raw(&img, "是不是纯白色背景", 4096).expect("二次问必须命中缓存");
+        let raw = sess
+            .ask_raw(&img, "是不是纯白色背景", 4096)
+            .expect("二次问必须命中缓存");
         assert_eq!(raw, "是");
-        assert_eq!(stats.calls.load(Ordering::Relaxed), 0, "命中缓存不该发 HTTP");
+        assert_eq!(
+            stats.calls.load(Ordering::Relaxed),
+            0,
+            "命中缓存不该发 HTTP"
+        );
         assert!(stats.cache_hits.load(Ordering::Relaxed) >= 1);
         VlCache::global().clear();
     }

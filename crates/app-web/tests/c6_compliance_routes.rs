@@ -16,7 +16,13 @@ fn seed(path: &PathBuf) -> Connection {
     let _ = std::fs::remove_file(path);
     let conn = core_storage::open(path).unwrap();
     // 资产 1 合格 / 2 修复后合格（三态口径 = 仍算合格）/ 3 不合格 / 4 未判定（执行出错）/ 5 未跑
-    for (id, name) in [(1, "a.jpg"), (2, "b.jpg"), (3, "c.jpg"), (4, "d.jpg"), (5, "e.jpg")] {
+    for (id, name) in [
+        (1, "a.jpg"),
+        (2, "b.jpg"),
+        (3, "c.jpg"),
+        (4, "d.jpg"),
+        (5, "e.jpg"),
+    ] {
         conn.execute(
             "INSERT INTO assets (assetId, absPath, mediaType, missing, fileName, fileExt, fileSz, mtime, importedAt)
              VALUES (?1, ?2, 'image', 0, ?3, 'jpg', 10, 0, ?1)",
@@ -44,10 +50,22 @@ fn seed(path: &PathBuf) -> Connection {
         .unwrap();
     };
     add(1, "R1_size", "pass", None, None);
-    add(2, "R1_size", "pass", Some("upscale_800"), Some(r#"{"recheck":{"ok":true}}"#));
+    add(
+        2,
+        "R1_size",
+        "pass",
+        Some("upscale_800"),
+        Some(r#"{"recheck":{"ok":true}}"#),
+    );
     add(3, "R1_size", "fail", None, Some(r#"{"threshold":700}"#));
     // 资产 4：打标型软 fail + 一条真未判定（VL 超时：判定过程出错，不是「机器不敢判」）
-    add(4, "R5_attribute", "fail", None, Some(r#"{"on_fail":"pass","detector":{"tags":[]}}"#));
+    add(
+        4,
+        "R5_attribute",
+        "fail",
+        None,
+        Some(r#"{"on_fail":"pass","detector":{"tags":[]}}"#),
+    );
     add(
         4,
         "R2_white_bg",
@@ -65,7 +83,9 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     let j = serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null);
     (status, j)
 }
@@ -84,7 +104,9 @@ async fn post(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_json::Va
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     let j = serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null);
     (status, j)
 }
@@ -96,7 +118,9 @@ async fn get_text(app: &axum::Router, uri: &str) -> (u16, String) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, String::from_utf8_lossy(&raw).to_string())
 }
 
@@ -126,14 +150,21 @@ async fn compliance_full_flow_over_http() {
     assert_eq!(st["states"]["undetermined"], 1);
     assert_eq!(st["states"]["unjudged"], 1);
     assert_eq!(st["states"]["total"], 5);
-    assert!(st["states"].get("fixed").is_none(), "旧档位键必须消失: {st}");
+    assert!(
+        st["states"].get("fixed").is_none(),
+        "旧档位键必须消失: {st}"
+    );
     assert!(st["states"].get("pending_human").is_none(), "{st}");
-    assert_eq!(st["queue"]["total"], 1, "低置信度复核队列 1 张（undetermined）");
+    assert_eq!(
+        st["queue"]["total"], 1,
+        "低置信度复核队列 1 张（undetermined）"
+    );
     assert_eq!(st["queue"]["unresolved"], 1);
     assert_eq!(st["feedback"]["total"], 0);
     // 行业元数据来自插件自带 resources/rules.json（规则条数 > 0），不是宿主内置 YAML
     assert!(
-        st["pack"]["id"] == "com.soujpg.pack.ecommerce" && st["pack"]["rules"].as_i64().unwrap() > 0,
+        st["pack"]["id"] == "com.soujpg.pack.ecommerce"
+            && st["pack"]["rules"].as_i64().unwrap() > 0,
         "规则清单必须来自处理插件：{st}"
     );
 
@@ -157,7 +188,11 @@ async fn compliance_full_flow_over_http() {
     // 判定维度过滤已从图库列表**下线**：任何 compliance 词（含非法词）一律 400 + 稳定码 + 指路 job 域。
     // 分桶本身仍由 /api/compliance/status（上面第 1 段）与 job 域下钻负责 —— 这里只守「图库不读判定」。
     for state_word in ["pass", "fail", "undetermined", "unjudged", "bogus"] {
-        let (code, r) = get(&app, &format!("/api/library/assets?compliance={state_word}")).await;
+        let (code, r) = get(
+            &app,
+            &format!("/api/library/assets?compliance={state_word}"),
+        )
+        .await;
         assert_eq!(code, 400, "compliance={state_word} 必须被拒: {r}");
         assert!(
             r["error"]
@@ -168,7 +203,11 @@ async fn compliance_full_flow_over_http() {
         );
     }
     // 组合维度也不再被接受（不静默忽略成「整库」）
-    let (code, r) = get(&app, "/api/library/assets?compliance=fail&dirPrefix=/x&limit=50").await;
+    let (code, r) = get(
+        &app,
+        "/api/library/assets?compliance=fail&dirPrefix=/x&limit=50",
+    )
+    .await;
     assert_eq!(code, 400, "{r}");
     // 不带判定维度的图库列表照常工作（5 张全在）
     let (code, r) = get(&app, "/api/library/assets?limit=50").await;
@@ -223,15 +262,24 @@ async fn compliance_full_flow_over_http() {
     .await;
     assert_eq!(code, 200, "{f3}");
     assert_eq!(f3["feedback"]["machineResult"], "undetermined");
-    assert_eq!(f3["feedback"]["misjudged"], false, "未判定的人工处置不算误判");
-    assert_eq!(f3["feedback"]["reason"], "背景发灰，人工确认不合格", "人工备注优先");
+    assert_eq!(
+        f3["feedback"]["misjudged"], false,
+        "未判定的人工处置不算误判"
+    );
+    assert_eq!(
+        f3["feedback"]["reason"], "背景发灰，人工确认不合格",
+        "人工备注优先"
+    );
 
     // 队列：已处置 → resolved=true；onlyUnresolved 过滤掉
     let (_, q2) = get(&app, "/api/compliance/queue?onlyUnresolved=true").await;
     assert_eq!(q2["total"], 0, "只看未处置 → 空: {q2}");
     let (_, q3) = get(&app, "/api/compliance/queue").await;
     assert_eq!(q3["items"][0]["resolved"], true);
-    assert_eq!(q3["items"][0]["rules"][0]["feedback"]["humanResult"], "fail");
+    assert_eq!(
+        q3["items"][0]["rules"][0]["feedback"]["humanResult"],
+        "fail"
+    );
 
     // ---------- 5) 反馈 CSV 导出（完整 + 内容正确） ----------
     let (code, csv) = get_text(&app, "/api/compliance/feedback/export").await;
@@ -243,7 +291,10 @@ async fn compliance_full_flow_over_http() {
         "表头: {}",
         lines[0]
     );
-    assert!(csv.contains("\"com.soujpg.pack.ecommerce\",3,\"R1_size\",\"fail\",\"pass\",1,"), "{csv}");
+    assert!(
+        csv.contains("\"com.soujpg.pack.ecommerce\",3,\"R1_size\",\"fail\",\"pass\",1,"),
+        "{csv}"
+    );
     assert!(csv.contains(",0,"), "转人工处置 misjudged=0: {csv}");
     // 列表接口口径一致
     let (_, fl) = get(&app, "/api/compliance/feedback").await;
@@ -255,19 +306,31 @@ async fn compliance_full_flow_over_http() {
     let (code, v) = get(&app, "/api/compliance/verdicts?assetId=4").await;
     assert_eq!(code, 200);
     // DECouple-BE：资产视图只回判定行原文（资产级 state/stateLabel 已下线）
-    assert!(v.get("state").is_none() && v.get("stateLabel").is_none(), "{v}");
+    assert!(
+        v.get("state").is_none() && v.get("stateLabel").is_none(),
+        "{v}"
+    );
     let rows = v["items"].as_array().unwrap();
     assert_eq!(rows.len(), 2, "该资产两条判定都列出");
     // 机器结论逐行原样保留（R2 = undetermined、R5 软 fail 仍是 fail；不因资产级汇总被改写）
-    let r2 = rows.iter().find(|r| r["ruleId"] == "R2_white_bg").expect("R2 行");
+    let r2 = rows
+        .iter()
+        .find(|r| r["ruleId"] == "R2_white_bg")
+        .expect("R2 行");
     assert_eq!(r2["result"], "undetermined", "{v}");
-    let r5 = rows.iter().find(|r| r["ruleId"] == "R5_attribute").expect("R5 行");
+    let r5 = rows
+        .iter()
+        .find(|r| r["ruleId"] == "R5_attribute")
+        .expect("R5 行");
     assert_eq!(r5["result"], "fail", "{v}");
 
     // ---------- 6) 旧「行业包」管理面已下线（一个行业 = 一个处理插件） ----------
     for (uri, body) in [
         ("/api/compliance/packs/import", r#"{"dir":"/tmp/whatever"}"#),
-        ("/api/compliance/packs/activate", r#"{"source":"builtin","id":"ecommerce-taobao"}"#),
+        (
+            "/api/compliance/packs/activate",
+            r#"{"source":"builtin","id":"ecommerce-taobao"}"#,
+        ),
     ] {
         let (code, res) = post(&app, uri, body).await;
         assert!(
@@ -279,10 +342,17 @@ async fn compliance_full_flow_over_http() {
     let (code, list) = get(&app, "/api/compliance/packs").await;
     assert_eq!(code, 200, "{list}");
     assert!(list["plugins"].is_array(), "{list}");
-    assert!(list["builtin"].is_null() && list["imported"].is_null(), "{list}");
+    assert!(
+        list["builtin"].is_null() && list["imported"].is_null(),
+        "{list}"
+    );
 
     // ---------- 7) 插件详情：规则清单来自包自带 resources/rules.json ----------
-    let (code, pv) = get(&app, "/api/compliance/packs/com.soujpg.pack.ecommerce?probe=false").await;
+    let (code, pv) = get(
+        &app,
+        "/api/compliance/packs/com.soujpg.pack.ecommerce?probe=false",
+    )
+    .await;
     assert_eq!(code, 200, "仓库自带的电商处理插件必须能读详情：{pv}");
     assert_eq!(pv["source"], "plugin");
     assert_eq!(pv["manifest"]["id"], "com.soujpg.pack.ecommerce");

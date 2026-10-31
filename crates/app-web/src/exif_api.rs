@@ -1,3 +1,4 @@
+#![allow(non_snake_case)] // 本模块 DTO 字段 = 前端 JSON camelCase 契约，勿改
 //! EXIF2（task）— 元数据回填 API：
 //! - POST /api/exif/backfill  入队存量（exif IS NULL）+ 同步跑完（解析纯本地、毫秒/张）
 //! - POST /api/exif/retry-failed  复活 failed job（文件恢复后）
@@ -38,8 +39,11 @@ pub struct BackfillReq {
 }
 
 /// POST /api/exif/backfill
-pub async fn backfill(State(state): State<AppState>, Json(req): Json<BackfillReq>) -> impl IntoResponse {
-    let mut conn = state.db.lock().await;
+pub async fn backfill(
+    State(state): State<AppState>,
+    Json(req): Json<BackfillReq>,
+) -> impl IntoResponse {
+    let conn = state.db.lock().await;
     let reset = if req.force {
         match exif_reset_for_reparse(&conn, req.fromId, req.toId) {
             Ok(n) => n,
@@ -53,12 +57,11 @@ pub async fn backfill(State(state): State<AppState>, Json(req): Json<BackfillReq
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
     let cancel = AtomicBool::new(false);
-    let run = run_exif_queue_with_limit(&conn, &cancel, &mut |_, _, _, _| {}, req.limit.unwrap_or(0));
-    let cfg: core_config::ExifSettings = core_storage::settings::get_or_default(
-        &conn,
-        core_config::EXIF_SETTINGS_KEY,
-    )
-    .unwrap_or_default();
+    let run =
+        run_exif_queue_with_limit(&conn, &cancel, &mut |_, _, _, _| {}, req.limit.unwrap_or(0));
+    let cfg: core_config::ExifSettings =
+        core_storage::settings::get_or_default(&conn, core_config::EXIF_SETTINGS_KEY)
+            .unwrap_or_default();
     match run {
         Ok(report) => (
             StatusCode::OK,
@@ -85,7 +88,7 @@ pub async fn backfill(State(state): State<AppState>, Json(req): Json<BackfillReq
 
 /// POST /api/exif/retry-failed → 复活后立即再跑一轮
 pub async fn retry_failed(State(state): State<AppState>) -> impl IntoResponse {
-    let mut conn = state.db.lock().await;
+    let conn = state.db.lock().await;
     let revived = match exif_retry_failed(&conn) {
         Ok(n) => n,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),

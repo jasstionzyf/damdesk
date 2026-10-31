@@ -76,10 +76,7 @@ fn seed_vectors(conn: &Connection) {
 }
 
 fn state(conn: Connection) -> app_web::AppState {
-    app_web::test_support::state(
-        PathBuf::from(std::env::temp_dir().join("ki2b-dedup-data")),
-        conn,
-    )
+    app_web::test_support::state(std::env::temp_dir().join("ki2b-dedup-data"), conn)
 }
 
 async fn post(app: axum::Router, uri: &str) -> (u16, serde_json::Value) {
@@ -94,7 +91,9 @@ async fn post(app: axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -107,7 +106,9 @@ async fn get(app: axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -165,13 +166,15 @@ async fn backfill_then_groups_reports_visual_kinds() {
     let mixed_group = groups.iter().find(|g| g["size"] == 3).expect("混合组");
     assert_eq!(mixed_group["kind"], "near_visual", "组内最保守层说话");
     assert_eq!(mixed_group["mixed"], true);
-    assert_eq!(mixed_group["layers"], serde_json::json!(["phash", "visual"]));
+    assert_eq!(
+        mixed_group["layers"],
+        serde_json::json!(["phash", "visual"])
+    );
     assert!(mixed_group["members"]
         .as_array()
         .unwrap()
         .iter()
-        .any(|m| m["assetId"] == 3
-            && (m["similarity"].as_f64().unwrap() - 0.99).abs() < 1e-3));
+        .any(|m| m["assetId"] == 3 && (m["similarity"].as_f64().unwrap() - 0.99).abs() < 1e-3));
     assert!(mixed_group["members"]
         .as_array()
         .unwrap()
@@ -211,6 +214,8 @@ async fn backfill_then_groups_reports_visual_kinds() {
 /// 没有判重向量的形态（web 容器关本地推理 / 桌面还没嵌入）→
 /// backfill 不谎报：hint 说明原因，groups 的 judge.vectors=0（= 未检测）
 #[tokio::test]
+// DEFAULT_BACKFILL_BATCH > 0 是编译期常量序关系钉（防 0/负值误配全量占锁）
+#[allow(clippy::assertions_on_constants)]
 async fn backfill_without_vectors_reports_hint_not_empty_library() {
     let db = std::env::temp_dir().join("ki2b-dedup-novec.db");
     let conn = seed_db(&db);
@@ -226,7 +231,6 @@ async fn backfill_without_vectors_reports_hint_not_empty_library() {
         "{j}"
     );
 
-    // 默认批次上限存在且为正（不传 max_assets 时不会全量占锁）
     assert!(app_web::dedup_api::DEFAULT_BACKFILL_BATCH > 0);
 
     let (code, j) = get(app, "/api/dedup/groups").await;

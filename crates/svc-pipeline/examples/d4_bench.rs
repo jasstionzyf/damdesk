@@ -353,7 +353,7 @@ fn main() {
                 let report = run_tag_queue(&conn, &p, &cancel, &mut |ev| {
                     std::thread::sleep(std::time::Duration::from_millis(slow_ms));
                     i += 1;
-                    if i % 25 == 0 {
+                    if i.is_multiple_of(25) {
                         println!(
                             "run.progress: n={i} asset={} total={}",
                             ev.assetId, ev.total

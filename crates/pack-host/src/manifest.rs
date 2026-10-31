@@ -244,10 +244,7 @@ impl Manifest {
                 expected: API_VERSION.to_string(),
             });
         }
-        for (name, value) in [
-            ("id", &self.id),
-            ("version", &self.version),
-        ] {
+        for (name, value) in [("id", &self.id), ("version", &self.version)] {
             if value.trim().is_empty() {
                 return Err(ManifestError::Invalid(format!("{name} 不能为空")));
             }

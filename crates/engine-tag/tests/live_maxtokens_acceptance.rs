@@ -30,8 +30,8 @@ fn spec() -> core_config::ModelSpec {
 }
 
 fn corpus(limit: usize) -> Vec<PathBuf> {
-    let dir = std::env::var("DAM_LIVE_TAG_CORPUS")
-        .unwrap_or_else(|_| "/data".into());
+    let dir =
+        std::env::var("DAM_LIVE_TAG_CORPUS").unwrap_or_else(|_| "/data".into());
     let mut imgs: Vec<PathBuf> = std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("读语料目录 {dir}: {e}"))
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -49,12 +49,13 @@ fn corpus(limit: usize) -> Vec<PathBuf> {
 
 fn provider(max_tokens: u32) -> OpenAiCompatTagProvider {
     let key = std::env::var("DAM_LIVE_TAG_KEY").expect("需要 DAM_LIVE_TAG_KEY");
-    let base = std::env::var("DAM_LIVE_TAG_BASE")
-        .unwrap_or_else(|_| "https://api.deepseek.com/v1".into());
-    let model =
-        std::env::var("DAM_LIVE_TAG_MODEL").unwrap_or_else(|_| "deepseek-flash".into());
+    let base =
+        std::env::var("DAM_LIVE_TAG_BASE").unwrap_or_else(|_| "https://api.deepseek.com/v1".into());
+    let model = std::env::var("DAM_LIVE_TAG_MODEL").unwrap_or_else(|_| "deepseek-flash".into());
     // 默认直连（Some("")）：容器 env 代理常把 TLS 拦掉
-    let proxy = std::env::var("DAM_LIVE_TAG_PROXY").ok().or(Some(String::new()));
+    let proxy = std::env::var("DAM_LIVE_TAG_PROXY")
+        .ok()
+        .or(Some(String::new()));
     let cfg = TagSettings {
         enabled: true,
         provider: core_config::TAG_PROVIDER_DEEPSEEK.into(),
@@ -138,12 +139,19 @@ fn live_deepseek_maxtokens_acceptance() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(25);
     let imgs = corpus(limit);
-    assert!(imgs.len() >= 20, "语料不足 20 张（卡要求 20+）: {}", imgs.len());
+    assert!(
+        imgs.len() >= 20,
+        "语料不足 20 张（卡要求 20+）: {}",
+        imgs.len()
+    );
     println!("语料 {} 张：{:?}", imgs.len(), imgs.first());
 
     // ---- 口径 1：默认 2048（本次修复的默认值）→ 期望 0 失败 ----
     let p_default = provider(TagSettings::DEFAULT_MAX_TOKENS);
-    println!("\n=== max_tokens={} (默认) ===", TagSettings::DEFAULT_MAX_TOKENS);
+    println!(
+        "\n=== max_tokens={} (默认) ===",
+        TagSettings::DEFAULT_MAX_TOKENS
+    );
     let a = run(&p_default, &imgs);
     println!(
         "结果：ok={} repaired={} truncated={} other={} 平均标签数={:.1}",
@@ -163,7 +171,8 @@ fn live_deepseek_maxtokens_acceptance() {
         "每张图都要有明确结果"
     );
     assert_eq!(
-        a.truncated_failed, 0,
+        a.truncated_failed,
+        0,
         "默认 {} 下不应再有截断失败：{:?}",
         TagSettings::DEFAULT_MAX_TOKENS,
         a.errors
@@ -199,6 +208,10 @@ fn live_deepseek_maxtokens_acceptance() {
     if b.repaired == 0 {
         println!("注意：本轮 1024 未触发可补齐的截断（模型输出长度有波动），mock 单测兜底该路径");
     } else {
-        println!("1024 下补齐救回 {}/{} 张（不再整张失败）", b.repaired, imgs.len());
+        println!(
+            "1024 下补齐救回 {}/{} 张（不再整张失败）",
+            b.repaired,
+            imgs.len()
+        );
     }
 }

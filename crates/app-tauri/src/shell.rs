@@ -18,7 +18,11 @@ const DEFAULT_EMBEDDER: &str = "siglip2-base-p224-onnx";
 pub(crate) fn boot_log(msg: &str) {
     use std::io::Write;
     let path = std::env::temp_dir().join("damdesk-boot.log");
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
         let _ = writeln!(f, "[{}][{}] {}", chrono_now(), std::process::id(), msg);
     }
 }
@@ -36,10 +40,7 @@ pub fn boot(app: AppHandle) {
     boot_log("boot: enter");
     // 1. 数据目录：与旧桌面版同一布局（{appData}/dam.db + thumbs/ + models/），
     //    老用户升级后库资产无缝延续。
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .expect("resolve app data dir");
+    let data_dir = app.path().app_data_dir().expect("resolve app data dir");
     std::fs::create_dir_all(&data_dir).expect("create app data dir");
     boot_log(&format!("boot: data_dir={}", data_dir.display()));
 
@@ -90,9 +91,7 @@ pub fn boot(app: AppHandle) {
     };
     boot_log("boot: prepare ok");
     // tokio::from_std 要求非阻塞 fd（且必须在 runtime 上下文内转换——见线程内）
-    std_listener
-        .set_nonblocking(true)
-        .expect("set nonblocking");
+    std_listener.set_nonblocking(true).expect("set nonblocking");
     let thread_result = std::thread::Builder::new()
         .name("dam-web".into())
         .spawn(move || {
@@ -104,14 +103,13 @@ pub fn boot(app: AppHandle) {
             boot_log("dam-web: rt ok");
             let serve_res = rt.block_on(async move {
                 // from_std 必须在 runtime 上下文内调用（否则 panic: no reactor running）
-                let listener =
-                    match tokio::net::TcpListener::from_std(std_listener) {
-                        Ok(l) => l,
-                        Err(e) => {
-                            boot_log(&format!("dam-web: from_std FAILED: {e}"));
-                            panic!("tokio listener: {e}");
-                        }
-                    };
+                let listener = match tokio::net::TcpListener::from_std(std_listener) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        boot_log(&format!("dam-web: from_std FAILED: {e}"));
+                        panic!("tokio listener: {e}");
+                    }
+                };
                 boot_log("dam-web: listening");
                 app_web::serve_prepared(listener, router).await
             });
@@ -156,10 +154,7 @@ pub(crate) fn boot_url(port: u16, token: &str) -> Result<tauri::Url, String> {
 
 /// 建主窗口（boot 与 WebView2 崩溃重建**共用同一套**标题/尺寸/调试参数 ——
 /// 重建后的窗口行为必须与首建一致，否则崩溃恢复会把 CDP 尾巴一起丢）。
-pub(crate) fn build_main_window(
-    app: &AppHandle,
-    url: &tauri::Url,
-) -> tauri::Result<WebviewWindow> {
+pub(crate) fn build_main_window(app: &AppHandle, url: &tauri::Url) -> tauri::Result<WebviewWindow> {
     let wb = WebviewWindowBuilder::new(app, MAIN_LABEL, WebviewUrl::External(url.clone()))
         .title("DAMDesk")
         .inner_size(1280.0, 800.0)
@@ -283,9 +278,8 @@ fn resolve_models(
             None => {}
         }
     }
-    let bundle_covers_all = resource_dir.is_some_and(|res| {
-        bundled.iter().all(|name| root_has_model(res, name))
-    });
+    let bundle_covers_all =
+        resource_dir.is_some_and(|res| bundled.iter().all(|name| root_has_model(res, name)));
     let base = if total > 0 && from_local == total {
         data_dir.to_path_buf()
     } else if total > 0 && (from_bundle == total || bundle_covers_all) {
@@ -324,21 +318,19 @@ fn models_bootstrap(
         } else {
             "ok"
         };
-        boot_log(&format!("boot: model {name} -> {} ({state})", dir.display()));
+        boot_log(&format!(
+            "boot: model {name} -> {} ({state})",
+            dir.display()
+        ));
     }
     boot_log(&format!(
         "boot: models base={} missing={:?}",
         plan.base.display(),
         plan.missing
     ));
-    let engine_root = apply_engine_models_root(
-        std::env::var("DAM_MODELS_ROOT").ok().as_deref(),
-        &plan.base,
-    );
-    boot_log(&format!(
-        "boot: DAM_MODELS_ROOT={}",
-        engine_root.display()
-    ));
+    let engine_root =
+        apply_engine_models_root(std::env::var("DAM_MODELS_ROOT").ok().as_deref(), &plan.base);
+    boot_log(&format!("boot: DAM_MODELS_ROOT={}", engine_root.display()));
     plan.base
 }
 
@@ -449,7 +441,10 @@ mod tests {
         seed_model(&bundled, "dinov3-vits16-onnx");
         let reg = reg();
         let base = resolve_models_base(&appdata, Some(&bundled), Some(&reg));
-        assert_eq!(base, bundled, "资源目录带模型时用它当根（不是 …/bundle/models）");
+        assert_eq!(
+            base, bundled,
+            "资源目录带模型时用它当根（不是 …/bundle/models）"
+        );
         assert!(
             assert_weight_dir(&base, "dinov3-vits16-onnx").is_dir(),
             "解析出的权重目录必须真实存在"
@@ -503,7 +498,8 @@ mod tests {
         let bundled = resolve_model_dir(&appdata, Some(&res), "only-bundle").expect("资源有");
         assert_eq!(bundled, core_config::model_dir(&res, "only-bundle"));
 
-        let from_res = resolve_model_dir(&appdata, Some(&res), "empty-local").expect("空目录不算有");
+        let from_res =
+            resolve_model_dir(&appdata, Some(&res), "empty-local").expect("空目录不算有");
         assert_eq!(from_res, core_config::model_dir(&res, "empty-local"));
 
         assert_eq!(
@@ -531,10 +527,18 @@ mod tests {
         }
         let plan = resolve_models(&appdata, Some(&res), BUNDLED_MODELS);
         assert_eq!(plan.base, res, "appData 只覆盖部分内置模型 → 用包内资源根");
-        assert!(plan.missing.is_empty(), "资源根覆盖全部内置模型：{:?}", plan.missing);
+        assert!(
+            plan.missing.is_empty(),
+            "资源根覆盖全部内置模型：{:?}",
+            plan.missing
+        );
         assert_eq!(plan.per_model.len(), BUNDLED_MODELS.len());
         for (name, dir) in &plan.per_model {
-            assert_eq!(dir, &core_config::model_dir(&res, name), "每模型按生效根取目录");
+            assert_eq!(
+                dir,
+                &core_config::model_dir(&res, name),
+                "每模型按生效根取目录"
+            );
             assert!(dir.is_dir(), "{name} 的目录必须真实存在");
         }
         let _ = std::fs::remove_dir_all(&tmp);
@@ -582,9 +586,16 @@ mod tests {
         std::fs::create_dir_all(&res).unwrap();
         let plan = resolve_models(&appdata, Some(&res), BUNDLED_MODELS);
         assert_eq!(plan.base, appdata, "兜底 appData（首启下载落点）");
-        assert_eq!(plan.missing.len(), BUNDLED_MODELS.len(), "缺的模型必须逐条报出来");
+        assert_eq!(
+            plan.missing.len(),
+            BUNDLED_MODELS.len(),
+            "缺的模型必须逐条报出来"
+        );
         for name in BUNDLED_MODELS {
-            assert!(plan.missing.iter().any(|m| m == name), "{name} 应在 missing 里");
+            assert!(
+                plan.missing.iter().any(|m| m == name),
+                "{name} 应在 missing 里"
+            );
         }
         // 连资源目录都没有（resource_dir=None）同样兜底 appData 并报缺
         let plan_none = resolve_models(&appdata, None, &["ppocrv6-medium-det"]);
@@ -783,7 +794,10 @@ models:
         let conf = include_str!("../tauri.conf.json");
         for name in BUNDLED_MODELS {
             let key = format!("\"resources/models/{name}/**/*\": \"models/{name}/\"");
-            assert!(conf.contains(&key), "tauri.conf.json 缺 resources 条目：{key}");
+            assert!(
+                conf.contains(&key),
+                "tauri.conf.json 缺 resources 条目：{key}"
+            );
         }
         assert_eq!(
             conf.matches("\"resources/models/").count(),

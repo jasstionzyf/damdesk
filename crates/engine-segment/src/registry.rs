@@ -53,12 +53,11 @@ struct FgRatioParams {
 pub fn required_model(detector: &str, params: &serde_yaml::Value) -> SegResult<String> {
     match detector {
         "fg_ratio" => {
-            let p: FgRatioParams = serde_yaml::from_value(params.clone()).map_err(|e| {
-                SegmentError::BadParams {
+            let p: FgRatioParams =
+                serde_yaml::from_value(params.clone()).map_err(|e| SegmentError::BadParams {
                     detector: "fg_ratio",
                     msg: e.to_string(),
-                }
-            })?;
+                })?;
             Ok(p.model.unwrap_or_else(|| U2NET.to_string()))
         }
         other => Err(SegmentError::InputMismatch {
@@ -82,12 +81,11 @@ pub fn params_error(id: &str, params: &serde_yaml::Value) -> Option<String> {
 }
 
 fn run_fg_ratio(input: &SegmentInput, params: &serde_yaml::Value) -> SegResult<SegmentOutput> {
-    let p: FgRatioParams = serde_yaml::from_value(params.clone()).map_err(|e| {
-        SegmentError::BadParams {
+    let p: FgRatioParams =
+        serde_yaml::from_value(params.clone()).map_err(|e| SegmentError::BadParams {
             detector: "fg_ratio",
             msg: e.to_string(),
-        }
-    })?;
+        })?;
     if !(p.min >= 0.0 && p.max <= 1.0 && p.min < p.max) {
         return Err(SegmentError::BadParams {
             detector: "fg_ratio",
@@ -129,15 +127,15 @@ pub fn lookup(id: &str) -> Option<&'static DetectorEntry> {
 
 /// 已知检测器 id 列表（错误信息用）。
 pub fn known_ids() -> String {
-    DETECTORS.iter().map(|e| e.id).collect::<Vec<_>>().join(", ")
+    DETECTORS
+        .iter()
+        .map(|e| e.id)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// 顶层分发：未知 id 显式报错（不静默跳过）。
-pub fn run(
-    id: &str,
-    input: &SegmentInput,
-    params: &serde_yaml::Value,
-) -> SegResult<SegmentOutput> {
+pub fn run(id: &str, input: &SegmentInput, params: &serde_yaml::Value) -> SegResult<SegmentOutput> {
     let entry = lookup(id).ok_or_else(|| SegmentError::InputMismatch {
         detector: "registry",
         msg: format!("未知检测器: {id}（已知: {}）", known_ids()),
@@ -164,7 +162,7 @@ mod tests {
         assert!(err.to_string().contains("fg_ratio"));
         assert!(lookup("fg_ratio").is_some());
         assert!(lookup("nope").is_none());
-        assert_eq!(required_model("nope", &serde_yaml::Value::Null).is_err(), true);
+        assert!(required_model("nope", &serde_yaml::Value::Null).is_err());
     }
 
     #[test]
@@ -177,8 +175,11 @@ mod tests {
         let err = required_model("fg_ratio", &serde_yaml::from_str("{}").unwrap()).unwrap_err();
         assert!(err.to_string().contains("参数错误"));
         // model 可省略 → u2net 默认
-        let m = required_model("fg_ratio", &serde_yaml::from_str("{min: 0.1, max: 0.9}").unwrap())
-            .unwrap();
+        let m = required_model(
+            "fg_ratio",
+            &serde_yaml::from_str("{min: 0.1, max: 0.9}").unwrap(),
+        )
+        .unwrap();
         assert_eq!(m, U2NET);
         let m = required_model(
             "fg_ratio",
@@ -202,7 +203,10 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            matches!(err, SegmentError::NoModelsRoot | SegmentError::ModelMissing(_)),
+            matches!(
+                err,
+                SegmentError::NoModelsRoot | SegmentError::ModelMissing(_)
+            ),
             "got {err:?}"
         );
     }

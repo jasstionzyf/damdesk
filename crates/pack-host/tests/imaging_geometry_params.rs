@@ -66,7 +66,10 @@ fn fragment_parses_with_host_parser() {
     }
     assert_eq!(schema.groups().len(), 1);
     assert_eq!(schema.groups()[0].key, "geometry");
-    assert!(schema.required().is_empty(), "几何组参数全有默认值，不应 required");
+    assert!(
+        schema.required().is_empty(),
+        "几何组参数全有默认值，不应 required"
+    );
 }
 
 #[test]
@@ -82,21 +85,41 @@ fn defaults_resolve_and_prune_invisible() {
     assert_eq!(effective.get("cropAnchor"), Some(&json!("center")));
     assert_eq!(effective.get("cropPadding"), Some(&json!(0.05)));
     assert_eq!(effective.get("resizeAllowUpscale"), Some(&json!(false)));
-    for pruned in ["resizeShortEdge", "resizeWidth", "resizeHeight", "resizeScale",
-                   "cropAspectCustom"] {
-        assert!(!effective.contains_key(pruned), "{pruned} 应在 when 不成立时被剔掉");
+    for pruned in [
+        "resizeShortEdge",
+        "resizeWidth",
+        "resizeHeight",
+        "resizeScale",
+        "cropAspectCustom",
+    ] {
+        assert!(
+            !effective.contains_key(pruned),
+            "{pruned} 应在 when 不成立时被剔掉"
+        );
     }
 
     // 规格层切到 short_edge：反过来剔掉 long_edge，短边参数生效
-    let spec = map(&[("resizeMode", json!("short_edge")), ("resizeShortEdge", json!(1200))]);
+    let spec = map(&[
+        ("resizeMode", json!("short_edge")),
+        ("resizeShortEdge", json!(1200)),
+    ]);
     let effective = schema
-        .resolve_json(&[("plugin-default", None), ("spec", Some(&Value::Object(spec)))])
+        .resolve_json(&[
+            ("plugin-default", None),
+            ("spec", Some(&Value::Object(spec))),
+        ])
         .expect("规格层合并失败");
     assert_eq!(effective.get("resizeShortEdge"), Some(&json!(1200)));
-    assert!(!effective.contains_key("resizeLongEdge"), "切模式后长边参数应被剔掉");
+    assert!(
+        !effective.contains_key("resizeLongEdge"),
+        "切模式后长边参数应被剔掉"
+    );
 
     // custom 比例：自定义串才可见
-    let spec = map(&[("cropAspect", json!("custom")), ("cropAspectCustom", json!("3:5"))]);
+    let spec = map(&[
+        ("cropAspect", json!("custom")),
+        ("cropAspectCustom", json!("3:5")),
+    ]);
     let effective = schema
         .resolve_json(&[("spec", Some(&Value::Object(spec)))])
         .expect("custom 比例合并失败");
@@ -108,22 +131,34 @@ fn out_of_range_and_unknown_keys_are_rejected() {
     let schema = load();
     // 留白越界（schema max=0.2）
     let bad = map(&[("cropPadding", json!(0.5))]);
-    assert!(schema
-        .resolve_json(&[("spec", Some(&Value::Object(bad)))])
-        .is_err(), "cropPadding=0.5 越界必须被拒");
+    assert!(
+        schema
+            .resolve_json(&[("spec", Some(&Value::Object(bad)))])
+            .is_err(),
+        "cropPadding=0.5 越界必须被拒"
+    );
     // 未知键（宿主整包拒装的那一类）
     let bad = map(&[("cropPaddingg", json!(0.1))]);
-    assert!(schema
-        .resolve_json(&[("spec", Some(&Value::Object(bad)))])
-        .is_err(), "未知参数键必须被拒");
+    assert!(
+        schema
+            .resolve_json(&[("spec", Some(&Value::Object(bad)))])
+            .is_err(),
+        "未知参数键必须被拒"
+    );
     // 枚举越界
     let bad = map(&[("resizeMode", json!("longest_edge"))]);
-    assert!(schema
-        .resolve_json(&[("spec", Some(&Value::Object(bad)))])
-        .is_err(), "resizeMode 不在 options 内必须被拒");
+    assert!(
+        schema
+            .resolve_json(&[("spec", Some(&Value::Object(bad)))])
+            .is_err(),
+        "resizeMode 不在 options 内必须被拒"
+    );
     // 比例把 0.05..0.2 的边界值放行
     let good = map(&[("cropPadding", json!(0.2))]);
-    assert!(schema
-        .resolve_json(&[("spec", Some(&Value::Object(good)))])
-        .is_ok(), "cropPadding=0.2 是合法上界");
+    assert!(
+        schema
+            .resolve_json(&[("spec", Some(&Value::Object(good)))])
+            .is_ok(),
+        "cropPadding=0.2 是合法上界"
+    );
 }

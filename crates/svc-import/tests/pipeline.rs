@@ -25,8 +25,7 @@ fn make_png(path: &Path, brighten: f64) {
 }
 
 fn setup_db(dir: &Path) -> Connection {
-    let conn = core_storage::open(&dir.join("test.db")).unwrap();
-    conn
+    core_storage::open(&dir.join("test.db")).unwrap()
 }
 
 fn fixture(root: &Path) {
@@ -152,7 +151,7 @@ fn missing_and_relink() {
     // 移走文件 → watcher 语义：missing=1
     let moved = tmp.path().join("moved/x_renamed.png");
     std::fs::create_dir_all(moved.parent().unwrap()).unwrap();
-    std::fs::rename(&root.join("x.png"), &moved).unwrap();
+    std::fs::rename(root.join("x.png"), &moved).unwrap();
     let ev = handle_file_removed(&conn, &root.join("x.png")).unwrap();
     assert_eq!(ev.kind, "missing");
     let missing: i64 = conn

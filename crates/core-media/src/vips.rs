@@ -18,8 +18,8 @@ fn ensure_init() -> Result<&'static VipsApp> {
         point_vips_libdir_at_bundle();
         VipsApp::default("damdesk").map_err(|_| ())
     })
-        .as_ref()
-        .map_err(|_| MediaError::Init)
+    .as_ref()
+    .map_err(|_| MediaError::Init)
 }
 
 /// 自包含发行包（macOS .app，D13）：libvips 在**编译期 prefix/lib**（/opt/homebrew/
@@ -40,15 +40,19 @@ fn point_vips_libdir_at_bundle() {
     let Some(exe) = std::env::current_exe().ok() else {
         return;
     };
-    let Some(macos_dir) = exe.parent() else { return };
+    let Some(macos_dir) = exe.parent() else {
+        return;
+    };
     // exe 在 .app/Contents/MacOS/，Contents 是 libvips 期望的 $prefix
     let Ok(contents) = macos_dir.join("..").canonicalize() else {
         return;
     };
-    let has_modules = std::fs::read_dir(contents.join("lib")).ok().is_some_and(|rd| {
-        rd.flatten()
-            .any(|e| e.file_name().to_string_lossy().starts_with("vips-modules-"))
-    });
+    let has_modules = std::fs::read_dir(contents.join("lib"))
+        .ok()
+        .is_some_and(|rd| {
+            rd.flatten()
+                .any(|e| e.file_name().to_string_lossy().starts_with("vips-modules-"))
+        });
     if has_modules {
         std::env::set_var("VIPSHOME", &contents);
     }
@@ -156,7 +160,8 @@ pub fn vl_jpeg(path: &Path, target_long_side: i32) -> Result<Vec<u8>> {
 /// - EXIF 方向不在此处旋转（由调用方用 `encode::orient_rgba` 摆正），与 `rgb8` 一致。
 pub fn rgba8(path: &Path) -> Result<(i32, i32, Vec<u8>)> {
     let app = ensure_init()?;
-    let img = libvips::VipsImage::new_from_file(&path.to_string_lossy()).map_err(|_| vips_err(app))?;
+    let img =
+        libvips::VipsImage::new_from_file(&path.to_string_lossy()).map_err(|_| vips_err(app))?;
     let img = ops::colourspace(&img, Interpretation::Srgb).map_err(|_| vips_err(app))?;
     let (w, h) = (img.get_width(), img.get_height());
     let bands = img.get_bands();
@@ -183,7 +188,7 @@ pub fn rgba8(path: &Path) -> Result<(i32, i32, Vec<u8>)> {
                 )));
             }
             let mut out = Vec::with_capacity(n * 4);
-            for px in buf.chunks_exact(3) {
+            for px in buf.as_chunks::<3>().0 {
                 out.extend_from_slice(&[px[0], px[1], px[2], 255]);
             }
             Ok((w, h, out))
@@ -218,7 +223,8 @@ pub fn rgba8(path: &Path) -> Result<(i32, i32, Vec<u8>)> {
 /// - 灰度源复制三通道；其余 band 数显式报错（响亮失败）。
 pub fn rgb8(path: &Path) -> Result<(i32, i32, Vec<u8>)> {
     let app = ensure_init()?;
-    let img = libvips::VipsImage::new_from_file(&path.to_string_lossy()).map_err(|_| vips_err(app))?;
+    let img =
+        libvips::VipsImage::new_from_file(&path.to_string_lossy()).map_err(|_| vips_err(app))?;
     let img = ops::colourspace(&img, Interpretation::Srgb).map_err(|_| vips_err(app))?;
     let (w, h) = (img.get_width(), img.get_height());
     let bands = img.get_bands();
@@ -325,7 +331,8 @@ pub fn scale_to(path: &Path, dest: &Path, long_side: i32) -> Result<(i32, i32)> 
         .unwrap_or("")
         .to_ascii_lowercase();
     let scale = long_side as f64 / ow.max(oh).max(1) as f64;
-    let img = libvips::VipsImage::new_from_file(&path.to_string_lossy()).map_err(|_| vips_err(app))?;
+    let img =
+        libvips::VipsImage::new_from_file(&path.to_string_lossy()).map_err(|_| vips_err(app))?;
     let img = ops::resize(&img, scale).map_err(|_| vips_err(app))?;
     let (w, h) = (img.get_width(), img.get_height());
     match ext.as_str() {

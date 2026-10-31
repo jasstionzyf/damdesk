@@ -221,9 +221,7 @@ pub async fn tag_scan(Query(q): Query<TagScanQuery>) -> impl IntoResponse {
 /// POST /api/settings/tag/test：用表单里的 TagSettings 真实装配 provider 并测试。
 /// damai → GET /v1/models（零 token 探活）；openai_compat → chat/completions「回复 OK」。
 /// 不落库、不吃缓存；成功时回写 enabled 语义由前端决定（本接口只测连接）。
-pub async fn test_tag(
-    Json(mut tag): Json<core_config::TagSettings>,
-) -> impl IntoResponse {
+pub async fn test_tag(Json(mut tag): Json<core_config::TagSettings>) -> impl IntoResponse {
     normalize_base_url(&mut tag.base_url);
     if !core_config::tag_provider_preset(&tag.provider).is_some() {
         return err(
@@ -288,7 +286,8 @@ pub async fn test_embed(State(state): State<AppState>) -> impl IntoResponse {
     let res = tokio::task::spawn_blocking(move || {
         let conn = core_storage::open(&infer::db_path(&st.data_dir)).map_err(|e| e.to_string())?;
         let settings = infer::load_settings(&conn);
-        let (model_key, dims, endpoint_model) = st.provider.test_connection(&conn, &st.models_root)?;
+        let (model_key, dims, endpoint_model) =
+            st.provider.test_connection(&conn, &st.models_root)?;
         Ok::<_, String>(json!({
             "ok": true,
             "modelKey": model_key,

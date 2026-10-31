@@ -96,11 +96,9 @@ mod tests {
     }
 
     fn missing_of(conn: &Connection, id: i64) -> i64 {
-        conn.query_row(
-            "SELECT missing FROM assets WHERE assetId=?1",
-            [id],
-            |r| r.get(0),
-        )
+        conn.query_row("SELECT missing FROM assets WHERE assetId=?1", [id], |r| {
+            r.get(0)
+        })
         .unwrap()
     }
 
@@ -141,8 +139,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("a.jpg");
         std::fs::write(&f, b"x").unwrap();
-        conn.execute("UPDATE assets SET absPath=?1 WHERE assetId=1", [f.to_string_lossy()])
-            .unwrap();
+        conn.execute(
+            "UPDATE assets SET absPath=?1 WHERE assetId=1",
+            [f.to_string_lossy()],
+        )
+        .unwrap();
         // 之前被标失联（文件其实在）→ 读成功即清标
         assert_eq!(probe_and_note(&conn, 1, &f), Presence::Present);
         assert_eq!(missing_of(&conn, 1), 0);
@@ -165,8 +166,11 @@ mod tests {
         let blocker = dir.join("sub");
         std::fs::write(&blocker, b"not a dir").unwrap();
         let f = blocker.join("a.jpg"); // 中间段是普通文件 → ENOTDIR
-        conn.execute("UPDATE assets SET absPath=?1 WHERE assetId=2", [f.to_string_lossy()])
-            .unwrap();
+        conn.execute(
+            "UPDATE assets SET absPath=?1 WHERE assetId=2",
+            [f.to_string_lossy()],
+        )
+        .unwrap();
         assert_eq!(probe_and_note(&conn, 2, &f), Presence::Gone);
         assert_eq!(missing_of(&conn, 2), 1, "目录整体消失/被替换也算失联");
         let _ = std::fs::remove_dir_all(&dir);

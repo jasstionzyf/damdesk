@@ -10,13 +10,16 @@
 //! 末行：`C3B_DUMP_RESULT {"n":N,"total_s":..}`
 
 fn main() {
-    let list = std::env::var("SEG_DUMP_LIST").unwrap_or_else(|_| "/tmp/c3b-out/compare8.txt".into());
+    let list =
+        std::env::var("SEG_DUMP_LIST").unwrap_or_else(|_| "/tmp/c3b-out/compare8.txt".into());
     let out_dir = std::env::var("SEG_DUMP_OUT").unwrap_or_else(|_| "/tmp/c3b-out/rust".into());
-    let model = std::env::var("SEG_DUMP_MODEL").unwrap_or_else(|_| "/models/u2net/u2net.onnx".into());
+    let model =
+        std::env::var("SEG_DUMP_MODEL").unwrap_or_else(|_| "/models/u2net/u2net.onnx".into());
     std::fs::create_dir_all(&out_dir).expect("create out dir");
 
     let t0 = std::time::Instant::now();
-    let seg = engine_segment::Segmenter::load(std::path::Path::new(&model)).expect("load u2net onnx");
+    let seg =
+        engine_segment::Segmenter::load(std::path::Path::new(&model)).expect("load u2net onnx");
 
     let paths: Vec<String> = std::fs::read_to_string(&list)
         .expect("read list")
@@ -37,7 +40,7 @@ fn main() {
             .to_string();
         let m = &seg_.mask;
         assert_eq!(m.side, 320);
-        let mut buf = format!("P5\n320 320\n255\n").into_bytes();
+        let mut buf = "P5\n320 320\n255\n".to_string().into_bytes();
         buf.extend(m.data.iter().map(|&v| if v == 1 { 255u8 } else { 0u8 }));
         std::fs::write(format!("{out_dir}/{name}.pgm"), &buf).expect("write pgm");
         recs.push(format!(

@@ -32,9 +32,7 @@ use core_types::{ComplianceStateFilter, ImportFilter, TagRunReport};
 use engine_tag::TagProvider;
 use rusqlite::Connection;
 use svc_library::compliance_view::{asset_ids_by_state, states_summary, AssetComplianceState};
-use svc_library::export::{
-    run_export, ExportContent, ExportSource, ExportSpec, ExportTarget,
-};
+use svc_library::export::{run_export, ExportContent, ExportSource, ExportSpec, ExportTarget};
 use svc_pipeline::compliance_queue::{compliance_enq, compliance_enq_group, run_compliance_queue};
 use svc_pipeline::EmbedScope;
 
@@ -304,7 +302,7 @@ mod mock {
     fn write_response(stream: &mut TcpStream, status: u16, body: &str) -> std::io::Result<()> {
         let resp = format!(
             "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.as_bytes().len()
+            body.len()
         );
         stream.write_all(resp.as_bytes())?;
         stream.flush()
@@ -466,7 +464,14 @@ fn main_pack() -> Pack {
 }
 
 fn isolate_pack() -> Pack {
-    Pack::from_yaml_strs("journeyB", TAXONOMY, RULES_ISOLATE, PIPELINE_ISOLATE, REPORT).unwrap()
+    Pack::from_yaml_strs(
+        "journeyB",
+        TAXONOMY,
+        RULES_ISOLATE,
+        PIPELINE_ISOLATE,
+        REPORT,
+    )
+    .unwrap()
 }
 
 // ===========================================================================
@@ -486,9 +491,24 @@ fn journey_1_happy_path() {
     env.write("bad.jpg", &broken_bytes());
     env.write("huge.png", &scene_png(4200, 2800, 3));
     let (_bid, out) = env.import();
-    st!("S1 导入", out.total == 5, "扫描到 5 个文件，实际 {}", out.total);
-    st!("S1 导入", out.imported == 4, "4 张入库（坏图解不出），实际 {}", out.imported);
-    st!("S1 导入", out.failed == 1, "坏图必须计入失败，实际 {}", out.failed);
+    st!(
+        "S1 导入",
+        out.total == 5,
+        "扫描到 5 个文件，实际 {}",
+        out.total
+    );
+    st!(
+        "S1 导入",
+        out.imported == 4,
+        "4 张入库（坏图解不出），实际 {}",
+        out.imported
+    );
+    st!(
+        "S1 导入",
+        out.failed == 1,
+        "坏图必须计入失败，实际 {}",
+        out.failed
+    );
     st!(
         "S1 导入",
         out.failedItems.len() == 1 && out.failedItems[0].fileName == "bad.jpg",
@@ -501,12 +521,21 @@ fn journey_1_happy_path() {
         "失败原因不许为空（任务中心要显示为什么失败）"
     );
     let ids = env.ids();
-    st!("S1 导入", ids.len() == 4, "库内可见资产 4 条，实际 {}", ids.len());
+    st!(
+        "S1 导入",
+        ids.len() == 4,
+        "库内可见资产 4 条，实际 {}",
+        ids.len()
+    );
 
     // 缩略图两档都落盘（回收站/导出/彻底删都依赖这一事实）
     let square_id = env.id_of("square.png");
     for size in core_media::THUMB_SIZES {
-        let tp = env.thumbs.join(size.to_string()).join(format!("{:02}", square_id % 100)).join(format!("{square_id}_{size}.webp"));
+        let tp = env
+            .thumbs
+            .join(size.to_string())
+            .join(format!("{:02}", square_id % 100))
+            .join(format!("{square_id}_{size}.webp"));
         st!("S1 导入", tp.is_file(), "缩略图缺失 {tp:?}");
     }
 
@@ -522,9 +551,20 @@ fn journey_1_happy_path() {
     let cancel = AtomicBool::new(false);
     let queued = svc_pipeline::enq_untagged(&env.conn).unwrap();
     st!("S2 管线", queued == 4, "4 张未打标图入队，实际 {queued}");
-    let tag_report = svc_pipeline::run_tag_queue(&env.conn, &provider, &cancel, &mut |_p| {}).unwrap();
-    st!("S2 管线", tag_report.done == 4, "4 张打标完成，实际 {:?}", tag_report);
-    st!("S2 管线", tag_report.failed == 0, "打标无失败，实际 {:?}", tag_report.errors);
+    let tag_report =
+        svc_pipeline::run_tag_queue(&env.conn, &provider, &cancel, &mut |_p| {}).unwrap();
+    st!(
+        "S2 管线",
+        tag_report.done == 4,
+        "4 张打标完成，实际 {:?}",
+        tag_report
+    );
+    st!(
+        "S2 管线",
+        tag_report.failed == 0,
+        "打标无失败，实际 {:?}",
+        tag_report.errors
+    );
     st!(
         "S2 管线",
         env.count("SELECT COUNT(*) FROM tag WHERE origin='auto'") == 4,
@@ -538,7 +578,8 @@ fn journey_1_happy_path() {
     );
 
     let embedder = FakeEmbedder::new();
-    let eq = svc_pipeline::enq_unembedded(&env.conn, FakeEmbedder::MODEL, EmbedScope::Semantic).unwrap();
+    let eq =
+        svc_pipeline::enq_unembedded(&env.conn, FakeEmbedder::MODEL, EmbedScope::Semantic).unwrap();
     st!("S2 管线", eq == 4, "4 张未嵌入图入队，实际 {eq}");
     let emb = svc_pipeline::run_embed_queue(
         &env.conn,
@@ -559,10 +600,17 @@ fn journey_1_happy_path() {
 
     svc_pipeline::exif_enqueue_missing(&env.conn, None, None).unwrap();
     let exif = svc_pipeline::run_exif_queue(&env.conn, &cancel, &mut |_a, _b, _c, _d| {}).unwrap();
-    st!("S2 管线", exif.failed == 0, "EXIF 解析无失败，实际 {:?}", exif.errors);
     st!(
         "S2 管线",
-        env.count("SELECT COUNT(*) FROM job_queue WHERE kind='exif' AND status IN ('pending','running')") == 0,
+        exif.failed == 0,
+        "EXIF 解析无失败，实际 {:?}",
+        exif.errors
+    );
+    st!(
+        "S2 管线",
+        env.count(
+            "SELECT COUNT(*) FROM job_queue WHERE kind='exif' AND status IN ('pending','running')"
+        ) == 0,
         "EXIF 队列无残留（pending/running 必须归零）"
     );
 
@@ -576,12 +624,16 @@ fn journey_1_happy_path() {
             eprintln!("   skip: OCR 引擎未就绪（{m}）—— 显式报错，不是静默跳过");
             st!(
                 "S2 管线",
-                env.count("SELECT COUNT(*) FROM job_queue WHERE kind='ocr' AND status='pending'") == 4,
+                env.count("SELECT COUNT(*) FROM job_queue WHERE kind='ocr' AND status='pending'")
+                    == 4,
                 "OCR 未就绪时 4 个 job 必须留在 pending（不许丢任务）"
             );
         }
         Ok(rep) => {
-            eprintln!("   OCR 引擎就绪：processed={} done={}", rep.processed, rep.done);
+            eprintln!(
+                "   OCR 引擎就绪：processed={} done={}",
+                rep.processed, rep.done
+            );
             st!(
                 "S2 管线",
                 rep.processed == 4 && rep.done == 4 && rep.failed == 0,
@@ -594,24 +646,42 @@ fn journey_1_happy_path() {
                 "OCR 队列无残留（pending/running 必须归零）"
             );
         }
-        other => panic!("[S2 管线] OCR 只允许「显式 ProviderNotReady」或「全部完成」，实际 {other:?}"),
+        other => {
+            panic!("[S2 管线] OCR 只允许「显式 ProviderNotReady」或「全部完成」，实际 {other:?}")
+        }
     }
 
     // ---------- S3 合规：三态 + 资产级/组级分族 ----------
     stage!("S3 合规");
     let pack = main_pack();
     let group_jobs = compliance_enq_group(&env.conn, &pack, &ids, None).unwrap();
-    st!("S3 合规", group_jobs >= 1, "组级 job 至少 1 个（folder 作用域），实际 {group_jobs}");
+    st!(
+        "S3 合规",
+        group_jobs >= 1,
+        "组级 job 至少 1 个（folder 作用域），实际 {group_jobs}"
+    );
     let asset_jobs = compliance_enq(&env.conn, &ids, pack.id.as_str(), None).unwrap();
-    st!("S3 合规", asset_jobs == 4, "资产级 job 4 个，实际 {asset_jobs}");
+    st!(
+        "S3 合规",
+        asset_jobs == 4,
+        "资产级 job 4 个，实际 {asset_jobs}"
+    );
     let rep = run_compliance_queue(&env.conn, &pack, &cancel, &mut |_p| {}).unwrap();
     st!("S3 合规", rep.done == 4, "4 张判定完成，实际 {:?}", rep);
-    st!("S3 合规", rep.failed == 0, "判定无 job 失败，实际 {:?}", rep.errors);
+    st!(
+        "S3 合规",
+        rep.failed == 0,
+        "判定无 job 失败，实际 {:?}",
+        rep.errors
+    );
 
     let summary = states_summary(&env.conn, &pack.id).unwrap();
     st!(
         "S3 合规",
-        summary.pass == 3 && summary.fail == 1 && summary.undetermined == 0 && summary.unjudged == 0,
+        summary.pass == 3
+            && summary.fail == 1
+            && summary.undetermined == 0
+            && summary.unjudged == 0,
         "主包三态分桶应为 pass3/fail1/undet0/unjudged0，实际 {summary:?}"
     );
     let failed_ids = asset_ids_by_state(&env.conn, &pack.id, AssetComplianceState::Fail).unwrap();
@@ -642,7 +712,11 @@ fn journey_1_happy_path() {
     let g_rows = env.count(
         "SELECT COUNT(*) FROM rule_verdict WHERE packId='journeyA' AND ruleId='G1_dup' AND judgementScope='per_group'",
     );
-    st!("S3 合规", g_rows == 4, "组级判定按成员展开 = 4 行，实际 {g_rows}");
+    st!(
+        "S3 合规",
+        g_rows == 4,
+        "组级判定按成员展开 = 4 行，实际 {g_rows}"
+    );
     let gkey: String = env
         .conn
         .query_row(
@@ -662,7 +736,11 @@ fn journey_1_happy_path() {
          WHERE packId='journeyA' AND ruleId IN ('R1_size','R2_white','R5_soft')
            AND judgementScope='per_asset'",
     );
-    st!("S3 合规", a_rows == 12, "资产级判定 = 4 图 × 3 规则 = 12 行，实际 {a_rows}");
+    st!(
+        "S3 合规",
+        a_rows == 12,
+        "资产级判定 = 4 图 × 3 规则 = 12 行，实际 {a_rows}"
+    );
 
     // ---------- S4 查询：标签 / 评分 / 目录 / 合规状态 / 字面检索 ----------
     stage!("S4 查询");
@@ -683,7 +761,11 @@ fn journey_1_happy_path() {
         st!("S4 查询", n == 1, "标签 {t} 应命中 1 张，实际 {n}");
         tag_total += n;
     }
-    st!("S4 查询", tag_total == 4, "四个标签各命中 1 张、合计 4，实际 {tag_total}");
+    st!(
+        "S4 查询",
+        tag_total == 4,
+        "四个标签各命中 1 张、合计 4，实际 {tag_total}"
+    );
 
     let one = ids[0];
     svc_library::set_rating(&env.conn, &[one], 5).unwrap();
@@ -710,7 +792,12 @@ fn journey_1_happy_path() {
         },
     )
     .unwrap();
-    st!("S4 查询", in_dir.len() == 4, "目录筛选命中 4 张，实际 {}", in_dir.len());
+    st!(
+        "S4 查询",
+        in_dir.len() == 4,
+        "目录筛选命中 4 张，实际 {}",
+        in_dir.len()
+    );
 
     let pass_n = svc_library::list_assets(
         &env.conn,
@@ -723,7 +810,12 @@ fn journey_1_happy_path() {
         },
     )
     .unwrap();
-    st!("S4 查询", pass_n.len() == 3, "合规 pass 筛选 3 张，实际 {}", pass_n.len());
+    st!(
+        "S4 查询",
+        pass_n.len() == 3,
+        "合规 pass 筛选 3 张，实际 {}",
+        pass_n.len()
+    );
     let fail_n = svc_library::list_assets(
         &env.conn,
         &ImportFilter {
@@ -735,7 +827,12 @@ fn journey_1_happy_path() {
         },
     )
     .unwrap();
-    st!("S4 查询", fail_n.len() == 1, "合规 fail 筛选 1 张，实际 {}", fail_n.len());
+    st!(
+        "S4 查询",
+        fail_n.len() == 1,
+        "合规 fail 筛选 1 张，实际 {}",
+        fail_n.len()
+    );
 
     // 字面通道检索：语义下限置 0.99（假向量不参与），命中只能来自字面证据
     let hits = svc_library::search_by_text(
@@ -767,27 +864,68 @@ fn journey_1_happy_path() {
         report: None,
         strip_gps: false,
     };
-    let rep = run_export(&env.conn, &spec, &env.thumbs, &AtomicBool::new(false), &mut |_p| {}).unwrap();
-    st!("S5 导出", rep.total == 4, "导出选择集 4 张，实际 {}", rep.total);
-    st!("S5 导出", rep.exported == 4, "实际写出 4 个文件，实际 {}", rep.exported);
-    st!("S5 导出", rep.errors.is_empty(), "导出无错误，实际 {:?}", rep.errors);
+    let rep = run_export(
+        &env.conn,
+        &spec,
+        &env.thumbs,
+        &AtomicBool::new(false),
+        &mut |_p| {},
+    )
+    .unwrap();
+    st!(
+        "S5 导出",
+        rep.total == 4,
+        "导出选择集 4 张，实际 {}",
+        rep.total
+    );
+    st!(
+        "S5 导出",
+        rep.exported == 4,
+        "实际写出 4 个文件，实际 {}",
+        rep.exported
+    );
+    st!(
+        "S5 导出",
+        rep.errors.is_empty(),
+        "导出无错误，实际 {:?}",
+        rep.errors
+    );
     st!("S5 导出", rep.manifest_written, "清单必须写出");
     let files: Vec<String> = std::fs::read_dir(&out_dir)
         .unwrap()
         .flatten()
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .collect();
-    st!("S5 导出", files.len() == 5, "导出目录 = 4 原图 + manifest.csv，实际 {files:?}");
+    st!(
+        "S5 导出",
+        files.len() == 5,
+        "导出目录 = 4 原图 + manifest.csv，实际 {files:?}"
+    );
     let manifest = std::fs::read_to_string(out_dir.join("manifest.csv")).unwrap();
     let rows = manifest.lines().filter(|l| !l.trim().is_empty()).count();
-    st!("S5 导出", rows == 6, "清单 = 表头 + 4 行 + excludedRejected 行，实际 {rows} 行");
-    st!("S5 导出", manifest.lines().last() == Some("excludedRejected,\"0\""),
-        "KI-15：清单末行恒记拒选排除数（本旅程无拒选=0）");
+    st!(
+        "S5 导出",
+        rows == 6,
+        "清单 = 表头 + 4 行 + excludedRejected 行，实际 {rows} 行"
+    );
+    st!(
+        "S5 导出",
+        manifest.lines().last() == Some("excludedRejected,\"0\""),
+        "KI-15：清单末行恒记拒选排除数（本旅程无拒选=0）"
+    );
     for name in ["wide.png", "tall.png", "square.png", "huge.png"] {
-        st!("S5 导出", files.iter().any(|f| f == name), "{name} 未出现在导出产物里：{files:?}");
+        st!(
+            "S5 导出",
+            files.iter().any(|f| f == name),
+            "{name} 未出现在导出产物里：{files:?}"
+        );
         let bytes = std::fs::read(out_dir.join(name)).unwrap();
         let src = std::fs::read(env.src.join(name)).unwrap();
-        st!("S5 导出", bytes == src, "{name} 导出字节必须与源一致（原图档不许重编码）");
+        st!(
+            "S5 导出",
+            bytes == src,
+            "{name} 导出字节必须与源一致（原图档不许重编码）"
+        );
     }
 
     let zip_path = env.dir.join("bundle.zip");
@@ -799,9 +937,25 @@ fn journey_1_happy_path() {
         report: None,
         strip_gps: false,
     };
-    let zrep = run_export(&env.conn, &spec_zip, &env.thumbs, &AtomicBool::new(false), &mut |_p| {}).unwrap();
-    st!("S5 导出", zrep.exported == 4, "zip 内 4 个文件，实际 {}", zrep.exported);
-    st!("S5 导出", zip_path.is_file(), "zip 产物必须存在 {zip_path:?}");
+    let zrep = run_export(
+        &env.conn,
+        &spec_zip,
+        &env.thumbs,
+        &AtomicBool::new(false),
+        &mut |_p| {},
+    )
+    .unwrap();
+    st!(
+        "S5 导出",
+        zrep.exported == 4,
+        "zip 内 4 个文件，实际 {}",
+        zrep.exported
+    );
+    st!(
+        "S5 导出",
+        zip_path.is_file(),
+        "zip 产物必须存在 {zip_path:?}"
+    );
     st!(
         "S5 导出",
         std::fs::metadata(&zip_path).unwrap().len() > 0,
@@ -826,11 +980,24 @@ fn journey_1_happy_path() {
     )
     .unwrap();
     st!("S5 导出", crep.cancelled, "取消旗置位必须回报 cancelled");
-    st!("S5 导出", crep.exported == 0, "取消后不许有产物，实际 {}", crep.exported);
+    st!(
+        "S5 导出",
+        crep.exported == 0,
+        "取消后不许有产物，实际 {}",
+        crep.exported
+    );
     let leftovers: Vec<String> = std::fs::read_dir(&cancel_dir)
-        .map(|it| it.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+        .map(|it| {
+            it.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
         .unwrap_or_default();
-    st!("S5 导出", leftovers.is_empty(), "取消路径不许残留文件：{leftovers:?}");
+    st!(
+        "S5 导出",
+        leftovers.is_empty(),
+        "取消路径不许残留文件：{leftovers:?}"
+    );
 
     // ---------- S6 回收站 → 恢复 ----------
     stage!("S6 回收站");
@@ -843,13 +1010,20 @@ fn journey_1_happy_path() {
     st!("S6 回收站", env.ids().len() == 3, "删除后图库可见 3 张");
     st!(
         "S6 回收站",
-        svc_library::list_deleted(&env.conn, 50).unwrap().iter().any(|a| a.asset.assetId == victim),
+        svc_library::list_deleted(&env.conn, 50)
+            .unwrap()
+            .iter()
+            .any(|a| a.asset.assetId == victim),
         "回收站必须能看到被删的图"
     );
     // 软删不是物理删：文件的库行/标签都还在（恢复才能原样回来）
     let tag_rows_hidden: i64 = env
         .conn
-        .query_row("SELECT COUNT(*) FROM tag WHERE assetId = ?1", [victim], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM tag WHERE assetId = ?1",
+            [victim],
+            |r| r.get(0),
+        )
         .unwrap();
     st!(
         "S6 回收站",
@@ -890,9 +1064,24 @@ fn journey_2_partial_import() {
     env.write("ok2.png", &stripes_png(800, 800));
     env.write("broken.jpg", &broken_bytes());
     let (bid, out) = env.import();
-    st!("P1 部分失败导入", out.total == 3, "3 个文件，实际 {}", out.total);
-    st!("P1 部分失败导入", out.imported == 2, "2 张入库，实际 {}", out.imported);
-    st!("P1 部分失败导入", out.failed == 1, "1 张失败，实际 {}", out.failed);
+    st!(
+        "P1 部分失败导入",
+        out.total == 3,
+        "3 个文件，实际 {}",
+        out.total
+    );
+    st!(
+        "P1 部分失败导入",
+        out.imported == 2,
+        "2 张入库，实际 {}",
+        out.imported
+    );
+    st!(
+        "P1 部分失败导入",
+        out.failed == 1,
+        "1 张失败，实际 {}",
+        out.failed
+    );
 
     stage!("P2 失败清单可见");
     let batch = svc_import::get_batch(&env.conn, bid).unwrap();
@@ -931,10 +1120,29 @@ fn journey_2_partial_import() {
         Ok::<(), String>(())
     })
     .unwrap();
-    st!("P3 只重跑失败项", retry.total == 1, "只处理 1 个文件，实际 {}", retry.total);
-    st!("P3 只重跑失败项", retry.imported == 1, "重跑后入库 1 张，实际 {}", retry.imported);
-    st!("P3 只重跑失败项", retry.failed == 0, "重跑无失败，实际 {:?}", retry.failedItems);
-    st!("P3 只重跑失败项", env.ids().len() == 3, "库内 3 张（无重复行）");
+    st!(
+        "P3 只重跑失败项",
+        retry.total == 1,
+        "只处理 1 个文件，实际 {}",
+        retry.total
+    );
+    st!(
+        "P3 只重跑失败项",
+        retry.imported == 1,
+        "重跑后入库 1 张，实际 {}",
+        retry.imported
+    );
+    st!(
+        "P3 只重跑失败项",
+        retry.failed == 0,
+        "重跑无失败，实际 {:?}",
+        retry.failedItems
+    );
+    st!(
+        "P3 只重跑失败项",
+        env.ids().len() == 3,
+        "库内 3 张（无重复行）"
+    );
     st!(
         "P3 只重跑失败项",
         env.count("SELECT COUNT(*) FROM assets WHERE fileName='broken.jpg'") == 1,
@@ -969,11 +1177,19 @@ fn journey_3_interrupt_resume() {
 
     stage!("R1 崩溃现场");
     for i in 0..4 {
-        env.write(&format!("r{i}.png"), &white_bg_png(1000, 700 + i as u32 * 10));
+        env.write(
+            &format!("r{i}.png"),
+            &white_bg_png(1000, 700 + i as u32 * 10),
+        );
     }
     env.import();
     let ids = env.ids();
-    st!("R1 崩溃现场", ids.len() == 4, "4 张入库，实际 {}", ids.len());
+    st!(
+        "R1 崩溃现场",
+        ids.len() == 4,
+        "4 张入库，实际 {}",
+        ids.len()
+    );
     let queued = svc_pipeline::enq_untagged(&env.conn).unwrap();
     st!("R1 崩溃现场", queued == 4, "4 个打标 job，实际 {queued}");
 
@@ -1010,13 +1226,25 @@ fn journey_3_interrupt_resume() {
         )
         .unwrap();
     let v = FakeEmbedder::vec_of("pre-existing");
-    core_storage::vecstore::ensure_table(&env.conn, FakeEmbedder::MODEL, FakeEmbedder::DIMS).unwrap();
-    core_storage::vecstore::upsert(&env.conn, FakeEmbedder::MODEL, &[(rid0, v.as_slice())]).unwrap();
+    core_storage::vecstore::ensure_table(&env.conn, FakeEmbedder::MODEL, FakeEmbedder::DIMS)
+        .unwrap();
+    core_storage::vecstore::upsert(&env.conn, FakeEmbedder::MODEL, &[(rid0, v.as_slice())])
+        .unwrap();
 
-    let running_tag = env.count("SELECT COUNT(*) FROM job_queue WHERE kind='tag' AND status='running'");
-    let running_embed = env.count("SELECT COUNT(*) FROM job_queue WHERE kind LIKE 'embed%' AND status='running'");
-    st!("R1 崩溃现场", running_tag == 2, "打标侧应留 2 条 running，实际 {running_tag}");
-    st!("R1 崩溃现场", running_embed == 1, "嵌入侧应留 1 条 running，实际 {running_embed}");
+    let running_tag =
+        env.count("SELECT COUNT(*) FROM job_queue WHERE kind='tag' AND status='running'");
+    let running_embed =
+        env.count("SELECT COUNT(*) FROM job_queue WHERE kind LIKE 'embed%' AND status='running'");
+    st!(
+        "R1 崩溃现场",
+        running_tag == 2,
+        "打标侧应留 2 条 running，实际 {running_tag}"
+    );
+    st!(
+        "R1 崩溃现场",
+        running_embed == 1,
+        "嵌入侧应留 1 条 running，实际 {running_embed}"
+    );
 
     stage!("R2 续跑");
     let counter = Arc::new(AtomicUsize::new(0));
@@ -1029,10 +1257,29 @@ fn journey_3_interrupt_resume() {
     let cancel = AtomicBool::new(false);
     let report: TagRunReport =
         svc_pipeline::run_tag_queue(&env.conn, &provider, &cancel, &mut |_p| {}).unwrap();
-    st!("R2 续跑", report.done == 4, "续跑把 4 张全部做完，实际 {:?}", report);
-    st!("R2 续跑", report.failed == 0, "续跑无失败，实际 {:?}", report.errors);
-    st!("R2 续跑", report.skipped == 0, "续跑不许丢项（skipped 必须为 0）");
-    st!("R2 续跑", srv.count() == 4, "每张图只调用一次 = 4 次，实际 {}", srv.count());
+    st!(
+        "R2 续跑",
+        report.done == 4,
+        "续跑把 4 张全部做完，实际 {:?}",
+        report
+    );
+    st!(
+        "R2 续跑",
+        report.failed == 0,
+        "续跑无失败，实际 {:?}",
+        report.errors
+    );
+    st!(
+        "R2 续跑",
+        report.skipped == 0,
+        "续跑不许丢项（skipped 必须为 0）"
+    );
+    st!(
+        "R2 续跑",
+        srv.count() == 4,
+        "每张图只调用一次 = 4 次，实际 {}",
+        srv.count()
+    );
 
     let embedder = FakeEmbedder::new();
     let emb = svc_pipeline::run_embed_queue(
@@ -1045,11 +1292,19 @@ fn journey_3_interrupt_resume() {
     .unwrap();
     st!("R2 续跑", emb.done == 4, "嵌入续跑 4 张，实际 {:?}", emb);
     let vecs = core_storage::vecstore::count(&env.conn, FakeEmbedder::MODEL).unwrap();
-    st!("R2 续跑", vecs == 4, "向量 4 行（已写的覆盖、不叠加），实际 {vecs}");
+    st!(
+        "R2 续跑",
+        vecs == 4,
+        "向量 4 行（已写的覆盖、不叠加），实际 {vecs}"
+    );
 
     stage!("R3 无重复 / 无残留");
     let auto_rows = env.count("SELECT COUNT(*) FROM tag WHERE origin='auto'");
-    st!("R3 无重复 / 无残留", auto_rows == 4, "自动标签仍是 4 行（崩溃前那行被 upsert），实际 {auto_rows}");
+    st!(
+        "R3 无重复 / 无残留",
+        auto_rows == 4,
+        "自动标签仍是 4 行（崩溃前那行被 upsert），实际 {auto_rows}"
+    );
     st!(
         "R3 无重复 / 无残留",
         env.count("SELECT COUNT(*) FROM assets WHERE COALESCE(title_ch,'')<>''") == 4,
@@ -1086,13 +1341,24 @@ fn journey_4_concurrent_same_asset() {
     env.write("c2.png", &stripes_png(820, 820));
     env.import();
     let ids = env.ids();
-    st!("C1 双任务入队", ids.len() == 2, "2 张入库，实际 {}", ids.len());
+    st!(
+        "C1 双任务入队",
+        ids.len() == 2,
+        "2 张入库，实际 {}",
+        ids.len()
+    );
     let t_material =
-        core_storage::custom_tasks::create_task(&env.conn, "材质", "这张图的材质是什么", true).unwrap();
+        core_storage::custom_tasks::create_task(&env.conn, "材质", "这张图的材质是什么", true)
+            .unwrap();
     let t_color =
-        core_storage::custom_tasks::create_task(&env.conn, "颜色", "这张图的主色是什么", true).unwrap();
+        core_storage::custom_tasks::create_task(&env.conn, "颜色", "这张图的主色是什么", true)
+            .unwrap();
     let n1 = core_storage::custom_tasks::enqueue_for_asset(&env.conn, ids[0]).unwrap();
-    st!("C1 双任务入队", n1 == 2, "同一资产 × 2 个启用任务 → 2 个 job，实际 {n1}");
+    st!(
+        "C1 双任务入队",
+        n1 == 2,
+        "同一资产 × 2 个启用任务 → 2 个 job，实际 {n1}"
+    );
     // 重复入队必须幂等（NOT EXISTS：同 kind + target + payload 且非 done）
     let n2 = core_storage::custom_tasks::enqueue_for_asset(&env.conn, ids[0]).unwrap();
     st!("C1 双任务入队", n2 == 0, "重复入队必须 0 新增，实际 {n2}");
@@ -1108,9 +1374,15 @@ fn journey_4_concurrent_same_asset() {
     stage!("C2 只写一次");
     let srv = mock::MockServer::start(move |body| {
         if body.contains("材质") {
-            (200, r#"{"choices":[{"message":{"content":"{\"value\":\"丝绒\"}"}}]}"#.to_string())
+            (
+                200,
+                r#"{"choices":[{"message":{"content":"{\"value\":\"丝绒\"}"}}]}"#.to_string(),
+            )
         } else if body.contains("主色") {
-            (200, r#"{"choices":[{"message":{"content":"{\"value\":\"红色\"}"}}]}"#.to_string())
+            (
+                200,
+                r#"{"choices":[{"message":{"content":"{\"value\":\"红色\"}"}}]}"#.to_string(),
+            )
         } else {
             (200, tag_body(0))
         }
@@ -1118,9 +1390,20 @@ fn journey_4_concurrent_same_asset() {
     let provider = tag_provider(&srv.base_url);
     let cancel = AtomicBool::new(false);
 
-    let custom = svc_pipeline::run_custom_queue(&env.conn, &provider, &cancel, &mut |_p| {}).unwrap();
-    st!("C2 只写一次", custom.done == 2, "两个任务各完成一次，实际 {:?}", custom);
-    st!("C2 只写一次", custom.failed == 0, "无推理失败，实际 {:?}", custom.errors);
+    let custom =
+        svc_pipeline::run_custom_queue(&env.conn, &provider, &cancel, &mut |_p| {}).unwrap();
+    st!(
+        "C2 只写一次",
+        custom.done == 2,
+        "两个任务各完成一次，实际 {:?}",
+        custom
+    );
+    st!(
+        "C2 只写一次",
+        custom.failed == 0,
+        "无推理失败，实际 {:?}",
+        custom.errors
+    );
     let rows_material = env.count("SELECT COUNT(*) FROM tag_result WHERE name='材质'");
     let rows_color = env.count("SELECT COUNT(*) FROM tag_result WHERE name='颜色'");
     st!(
@@ -1137,7 +1420,8 @@ fn journey_4_concurrent_same_asset() {
     st!(
         "C2 只写一次",
         env.count("SELECT COUNT(*) FROM tag WHERE value='材质-丝绒' AND origin='custom'") == 1
-            && env.count("SELECT COUNT(*) FROM tag WHERE value='颜色-红色' AND origin='custom'") == 1,
+            && env.count("SELECT COUNT(*) FROM tag WHERE value='颜色-红色' AND origin='custom'")
+                == 1,
         "两个维度的输出各扇出 1 个 key-val 标签（材质-丝绒/颜色-红色）"
     );
     let task_ids: Vec<i64> = {
@@ -1256,8 +1540,14 @@ fn journey_5_irreversible_purge() {
     svc_pipeline::run_tag_queue(&env.conn, &provider, &cancel, &mut |_p| {}).unwrap();
     let embedder = FakeEmbedder::new();
     svc_pipeline::enq_unembedded(&env.conn, FakeEmbedder::MODEL, EmbedScope::Semantic).unwrap();
-    svc_pipeline::run_embed_queue(&env.conn, &embedder, EmbedScope::Semantic, &cancel, &mut |_p| {})
-        .unwrap();
+    svc_pipeline::run_embed_queue(
+        &env.conn,
+        &embedder,
+        EmbedScope::Semantic,
+        &cancel,
+        &mut |_p| {},
+    )
+    .unwrap();
     let pack = main_pack();
     compliance_enq(&env.conn, &ids, pack.id.as_str(), None).unwrap();
     run_compliance_queue(&env.conn, &pack, &cancel, &mut |_p| {}).unwrap();
@@ -1302,20 +1592,52 @@ fn journey_5_irreversible_purge() {
         "前置：目标资产已有判定行（彻底删必须一并清掉），实际 {pre_verdicts}"
     );
 
-    st!("I1 回收站", svc_library::soft_delete_assets(&env.conn, &[victim]).unwrap() == 1, "软删 1 行");
     st!(
         "I1 回收站",
-        svc_library::list_deleted(&env.conn, 50).unwrap().iter().any(|a| a.asset.assetId == victim),
+        svc_library::soft_delete_assets(&env.conn, &[victim]).unwrap() == 1,
+        "软删 1 行"
+    );
+    st!(
+        "I1 回收站",
+        svc_library::list_deleted(&env.conn, 50)
+            .unwrap()
+            .iter()
+            .any(|a| a.asset.assetId == victim),
         "回收站可见"
     );
 
     stage!("I2 彻底删");
     let purge = svc_library::purge_assets(&env.conn, &env.thumbs, &[victim]).unwrap();
-    st!("I2 彻底删", purge.purged == vec![victim], "purged 只含目标，实际 {:?}", purge);
-    st!("I2 彻底删", purge.not_in_trash.is_empty(), "目标在回收站内应被接受，实际 {:?}", purge);
-    st!("I2 彻底删", purge.rows >= 3, "至少删掉 assets+resource+tag 等行，实际 {}", purge.rows);
-    st!("I2 彻底删", purge.vectors == 1, "向量行删 1，实际 {}", purge.vectors);
-    st!("I2 彻底删", purge.thumbs == 2, "两档缩略图文件都删，实际 {}", purge.thumbs);
+    st!(
+        "I2 彻底删",
+        purge.purged == vec![victim],
+        "purged 只含目标，实际 {:?}",
+        purge
+    );
+    st!(
+        "I2 彻底删",
+        purge.not_in_trash.is_empty(),
+        "目标在回收站内应被接受，实际 {:?}",
+        purge
+    );
+    st!(
+        "I2 彻底删",
+        purge.rows >= 3,
+        "至少删掉 assets+resource+tag 等行，实际 {}",
+        purge.rows
+    );
+    st!(
+        "I2 彻底删",
+        purge.vectors == 1,
+        "向量行删 1，实际 {}",
+        purge.vectors
+    );
+    st!(
+        "I2 彻底删",
+        purge.thumbs == 2,
+        "两档缩略图文件都删，实际 {}",
+        purge.thumbs
+    );
 
     stage!("I3 恢复必须失败");
     let again = svc_library::restore_assets_checked(&env.conn, &[victim]).unwrap();
@@ -1342,24 +1664,44 @@ fn journey_5_irreversible_purge() {
     stage!("I4 不可查");
     let asset_row: i64 = env
         .conn
-        .query_row("SELECT COUNT(*) FROM assets WHERE assetId = ?1", [victim], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM assets WHERE assetId = ?1",
+            [victim],
+            |r| r.get(0),
+        )
         .unwrap();
     st!("I4 不可查", asset_row == 0, "assets 行必须消失");
     let res_row: i64 = env
         .conn
-        .query_row("SELECT COUNT(*) FROM resource WHERE assetId = ?1", [victim], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM resource WHERE assetId = ?1",
+            [victim],
+            |r| r.get(0),
+        )
         .unwrap();
     st!("I4 不可查", res_row == 0, "resource 行必须消失");
     let tag_row: i64 = env
         .conn
-        .query_row("SELECT COUNT(*) FROM tag WHERE assetId = ?1", [victim], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM tag WHERE assetId = ?1",
+            [victim],
+            |r| r.get(0),
+        )
         .unwrap();
     st!("I4 不可查", tag_row == 0, "tag 行必须消失");
     let verdict_row: i64 = env
         .conn
-        .query_row("SELECT COUNT(*) FROM rule_verdict WHERE assetId = ?1", [victim], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM rule_verdict WHERE assetId = ?1",
+            [victim],
+            |r| r.get(0),
+        )
         .unwrap();
-    st!("I4 不可查", verdict_row == 0, "判定行必须消失（合规视图不许留幽灵）");
+    st!(
+        "I4 不可查",
+        verdict_row == 0,
+        "判定行必须消失（合规视图不许留幽灵）"
+    );
     let vec_row: i64 = env
         .conn
         .query_row(
@@ -1371,7 +1713,11 @@ fn journey_5_irreversible_purge() {
             |r| r.get(0),
         )
         .unwrap();
-    st!("I4 不可查", vec_row == 0, "向量行必须消失（查重/检索不许命中）");
+    st!(
+        "I4 不可查",
+        vec_row == 0,
+        "向量行必须消失（查重/检索不许命中）"
+    );
     for p in &thumb_paths {
         st!("I4 不可查", !p.exists(), "缩略图文件必须消失 {p:?}");
     }
@@ -1381,7 +1727,11 @@ fn journey_5_irreversible_purge() {
         "图库列表不许再出现该资产"
     );
     let still = env.ids();
-    st!("I4 不可查", still == vec![ids[1]], "另一张资产不受影响，实际 {still:?}");
+    st!(
+        "I4 不可查",
+        still == vec![ids[1]],
+        "另一张资产不受影响，实际 {still:?}"
+    );
 
     eprintln!(
         "JOURNEY_5_SUMMARY {{\"phases\":4,\"elapsed_ms\":{}}}",

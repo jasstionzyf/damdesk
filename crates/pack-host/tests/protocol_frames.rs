@@ -38,8 +38,8 @@ fn cfg(work: &Path) -> PackHostConfig {
 /// 读夹具落盘的原始帧行（去掉行尾换行；保留空行判断权交给断言）。
 fn frames(work: &Path) -> Vec<String> {
     let path = work.join("frames.log");
-    let raw = fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("夹具没有落盘帧记录 {path:?}：{e}"));
+    let raw =
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("夹具没有落盘帧记录 {path:?}：{e}"));
     raw.split_inclusive('\n').map(|l| l.to_string()).collect()
 }
 
@@ -60,9 +60,8 @@ fn request_frames(work: &Path) -> Vec<(String, Value)> {
                 1,
                 "一帧必须恰好一行（多行 JSON 会让插件按下标错位解析）：{line:?}"
             );
-            let value: Value = serde_json::from_str(line.trim_end()).unwrap_or_else(|e| {
-                panic!("宿主发出的不是单行合法 JSON：{line:?}（{e}）")
-            });
+            let value: Value = serde_json::from_str(line.trim_end())
+                .unwrap_or_else(|e| panic!("宿主发出的不是单行合法 JSON：{line:?}（{e}）"));
             assert!(
                 value.is_object(),
                 "帧必须是 JSON 对象（协议 §1 行式 JSON-RPC）：{line:?}"
@@ -95,7 +94,10 @@ fn host_encodes_one_line_frames_with_monotonic_ids() {
     let info = host.call("pack.info", json!({})).unwrap();
     assert_eq!(info["id"], "test.frame-recorder");
     let echo = host
-        .call("echo", json!({ "job_id": "job-1", "nested": { "k": [1, 2, 3] } }))
+        .call(
+            "echo",
+            json!({ "job_id": "job-1", "nested": { "k": [1, 2, 3] } }),
+        )
         .unwrap();
     assert_eq!(echo["echo"]["job_id"], "job-1");
     assert_eq!(
@@ -130,7 +132,10 @@ fn host_encodes_one_line_frames_with_monotonic_ids() {
     }
     // 请求帧不得带「result/error」（那是应答的形状）
     for (line, v) in &reqs {
-        assert!(v.get("result").is_none() && v.get("error").is_none(), "{line:?}");
+        assert!(
+            v.get("result").is_none() && v.get("error").is_none(),
+            "{line:?}"
+        );
     }
 
     host.shutdown();
@@ -148,7 +153,9 @@ fn host_survives_plugin_stdout_pollution_and_captures_notifications() {
 
     let stray = host.stray_stdout();
     assert!(
-        stray.iter().any(|l| l.contains("boot: this line is not a frame")),
+        stray
+            .iter()
+            .any(|l| l.contains("boot: this line is not a frame")),
         "非协议 stdout 行必须被记录下来（协议 §7 铁律 4 的证据面）：{stray:?}"
     );
 
@@ -177,7 +184,11 @@ fn timeout_sends_cancel_notification_without_id_and_keeps_job_id() {
     // slow 睡 400ms > 预算 150ms → 宿主发 cancel 通知、宽限 150ms 内无应答 → 杀进程
     let started = Instant::now();
     let err = host
-        .call_with_timeout("slow", json!({ "job_id": "job-slow-7" }), Duration::from_millis(150))
+        .call_with_timeout(
+            "slow",
+            json!({ "job_id": "job-slow-7" }),
+            Duration::from_millis(150),
+        )
         .unwrap_err();
     let elapsed = started.elapsed();
     match &err {
@@ -185,7 +196,10 @@ fn timeout_sends_cancel_notification_without_id_and_keeps_job_id() {
         other => panic!("超时必须落 Unavailable::Timeout，实得 {other:?}"),
     }
     assert_eq!(err.note(), Some("plugin_timeout"));
-    assert!(elapsed >= Duration::from_millis(150), "没有等够预算就报超时：{elapsed:?}");
+    assert!(
+        elapsed >= Duration::from_millis(150),
+        "没有等够预算就报超时：{elapsed:?}"
+    );
 
     // 帧面证据：slow 请求之后必须紧跟一条 **无 id** 的 cancel 通知，且 job_id 原样透传
     let all = frames(&work);
@@ -207,7 +221,10 @@ fn timeout_sends_cancel_notification_without_id_and_keeps_job_id() {
         cancel.get("id").is_none(),
         "cancel 必须是**无 id 通知**（协议 §2.1）：{cancel}"
     );
-    assert_eq!(cancel["params"]["job_id"], "job-slow-7", "取消必须按 job 归账：{cancel}");
+    assert_eq!(
+        cancel["params"]["job_id"], "job-slow-7",
+        "取消必须按 job 归账：{cancel}"
+    );
     // 插件侧确认：夹具把它当通知处理（没回帧），这正是「无 id」的行为证据
     assert!(
         all.iter().any(|l| l.starts_with("# notification cancel")),
@@ -245,7 +262,13 @@ fn reply_with_foreign_id_is_not_taken_as_result() {
         .call_with_timeout("ghost", json!({}), Duration::from_millis(300))
         .unwrap_err();
     assert!(
-        matches!(&err, PackHostError::Unavailable { kind: Unavailable::Timeout, .. }),
+        matches!(
+            &err,
+            PackHostError::Unavailable {
+                kind: Unavailable::Timeout,
+                ..
+            }
+        ),
         "id 不匹配的应答必须被忽略并落超时，实得 {err:?}"
     );
     assert!(started.elapsed() >= Duration::from_millis(300));

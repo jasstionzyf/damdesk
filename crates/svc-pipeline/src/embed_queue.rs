@@ -116,9 +116,11 @@ fn set_judge_state(conn: &Connection, key: &str, value: &str) -> Result<()> {
 
 fn judge_state_value(conn: &Connection, key: &str) -> Result<Option<String>> {
     Ok(conn
-        .query_row("SELECT value FROM dup_judge_state WHERE key = ?1", [key], |r| {
-            r.get::<_, String>(0)
-        })
+        .query_row(
+            "SELECT value FROM dup_judge_state WHERE key = ?1",
+            [key],
+            |r| r.get::<_, String>(0),
+        )
         .ok())
 }
 
@@ -141,11 +143,14 @@ pub struct DupJudgeStatus {
 
 /// 读判重进度。vectors == 0 → 未检测；backfill_done && !truncated → 已确认；其余 → 检测中。
 pub fn dup_judge_status(conn: &Connection, model: &str) -> Result<DupJudgeStatus> {
-    let vectors = core_storage::vecstore::tables(conn)?
+    let vectors = if core_storage::vecstore::tables(conn)?
         .iter()
         .any(|(m, _, _)| m == model)
-        .then(|| core_storage::vecstore::count(conn, model).unwrap_or(0))
-        .unwrap_or(0);
+    {
+        core_storage::vecstore::count(conn, model).unwrap_or(0)
+    } else {
+        0
+    };
     let edges: i64 = conn.query_row("SELECT COUNT(*) FROM dup_edges", [], |r| r.get(0))?;
     Ok(DupJudgeStatus {
         model: model.to_string(),
@@ -181,9 +186,11 @@ pub fn judge_asset_dup_edges(conn: &Connection, model: &str, asset_id: i64) -> R
     // 回收站里的资产不判（恢复后由补判/重新嵌入再判）——判了也进不了分组，
     // 只会在关系表里留下指向垃圾的边
     let deleted: i64 = conn
-        .query_row("SELECT deleted FROM assets WHERE assetId = ?1", [asset_id], |r| {
-            r.get(0)
-        })
+        .query_row(
+            "SELECT deleted FROM assets WHERE assetId = ?1",
+            [asset_id],
+            |r| r.get(0),
+        )
         .unwrap_or(0);
     if deleted != 0 {
         return Ok(0);
@@ -324,7 +331,6 @@ pub fn backfill_dup_edges(
     )?;
     Ok(report)
 }
-
 
 /// 未嵌入（状态 none/failed）入队。返回入队数。幂等（NOT EXISTS 防重复行）。
 pub fn enq_unembedded(conn: &Connection, model: &str, scope: EmbedScope) -> Result<usize> {
@@ -656,8 +662,7 @@ pub fn run_embed_queue(
                             if scope == EmbedScope::Dedup {
                                 if let Err(e) = judge_asset_dup_edges(conn, &model, *asset_id) {
                                     if report.errors.len() < 50 {
-                                        report.errors
-                                            .push(format!("{asset_id}: dedup judge: {e}"));
+                                        report.errors.push(format!("{asset_id}: dedup judge: {e}"));
                                     }
                                 }
                             }

@@ -124,7 +124,7 @@ fn normalize_values(values: Vec<String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for v in values {
         if let Some(n) = core_storage::tags::normalize_tag_value(&v) {
-            if !out.iter().any(|x| *x == n) {
+            if !out.contains(&n) {
                 out.push(n);
             }
         }
@@ -332,7 +332,8 @@ pub fn run_custom_queue_review_with_limit(
                 if !std::path::Path::new(&path).is_file() {
                     return Err(PipelineError::NoImage(*asset_id, path));
                 }
-                let values = provider.tag_inline_values(std::path::Path::new(&path), &task.prompt)?;
+                let values =
+                    provider.tag_inline_values(std::path::Path::new(&path), &task.prompt)?;
                 stage_custom_values(conn, &model, *asset_id, task.id, &values)?;
                 Ok(())
             })();
@@ -696,9 +697,7 @@ pub fn review_commit(
                             (model.as_deref(), score)
                         };
                         for v in core_storage::tags::split_values(&name) {
-                            core_storage::tags::upsert_tag(
-                                &tx, *asset_id, &v, origin, m, None, s,
-                            )?;
+                            core_storage::tags::upsert_tag(&tx, *asset_id, &v, origin, m, None, s)?;
                         }
                     }
                     rep.tags += 1;

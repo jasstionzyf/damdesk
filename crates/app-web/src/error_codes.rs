@@ -17,7 +17,12 @@ use axum::Json;
 use serde_json::Value;
 
 /// 带码错误响应：`{"error": 中文原句, "code": 稳定码, "params": 插值参数（空则省略）}`。
-pub fn err_coded(status: StatusCode, code: &str, params: Value, msg: impl Into<String>) -> Response {
+pub fn err_coded(
+    status: StatusCode,
+    code: &str,
+    params: Value,
+    msg: impl Into<String>,
+) -> Response {
     let mut body = serde_json::Map::new();
     body.insert("error".to_string(), Value::String(msg.into()));
     body.insert("code".to_string(), Value::String(code.to_string()));

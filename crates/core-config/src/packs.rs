@@ -472,14 +472,7 @@ pub const PACK_FILES: [&str; 4] = [
 ];
 
 /// **宿主消费**的插件规则键：写了就一定被读进 `Rule`。
-pub const HOST_RULE_KEYS: [&str; 6] = [
-    "id",
-    "name",
-    "executor",
-    "fixer",
-    "on_fail",
-    "fail_label",
-];
+pub const HOST_RULE_KEYS: [&str; 6] = ["id", "name", "executor", "fixer", "on_fail", "fail_label"];
 
 /// **插件私有**的规则键：宿主按设计**不解释**，由插件自己的代码读。
 ///
@@ -741,7 +734,11 @@ impl Pack {
         let summary = {
             let v = str_list("summary");
             if v.is_empty() {
-                vec!["合格".to_string(), "不合格".to_string(), "未判定".to_string()]
+                vec![
+                    "合格".to_string(),
+                    "不合格".to_string(),
+                    "未判定".to_string(),
+                ]
             } else {
                 v
             }
@@ -928,7 +925,10 @@ impl Pack {
 fn merge_taxonomy(t: &mut Taxonomy, v: &serde_json::Value) {
     let Some(obj) = v.as_object() else { return };
     for (k, val) in obj {
-        if matches!(k.as_str(), "note" | "pack" | "version" | "api_version" | "require_all") {
+        if matches!(
+            k.as_str(),
+            "note" | "pack" | "version" | "api_version" | "require_all"
+        ) {
             continue;
         }
         let Some(arr) = val.as_array() else { continue };
@@ -941,7 +941,11 @@ fn merge_taxonomy(t: &mut Taxonomy, v: &serde_json::Value) {
         if vals.is_empty() {
             continue;
         }
-        let key = if k == "scene_options" { "scene" } else { k.as_str() };
+        let key = if k == "scene_options" {
+            "scene"
+        } else {
+            k.as_str()
+        };
         t.fields.entry(key.to_string()).or_insert(vals);
     }
 }
@@ -1004,8 +1008,7 @@ steps:
 recheck_max: 1
 "#;
 
-    const REPORT: &str =
-        "summary: [合格, 不合格, 未判定]\ndetail_columns: [imageSN, R1, R2]\n";
+    const REPORT: &str = "summary: [合格, 不合格, 未判定]\ndetail_columns: [imageSN, R1, R2]\n";
 
     fn sample_pack(id: &str) -> Result<Pack> {
         Pack::from_yaml_strs(id, TAXONOMY, RULES, PIPELINE, REPORT)
@@ -1097,7 +1100,12 @@ steps:
         assert_eq!(gb.asset_field(), None);
         // 同 source 不同 field = 不同作用域键（各自一个组级 job）
         assert_eq!(
-            p.rule("F4_scene").unwrap().group_by.as_ref().unwrap().scope_key(),
+            p.rule("F4_scene")
+                .unwrap()
+                .group_by
+                .as_ref()
+                .unwrap()
+                .scope_key(),
             "asset_field:cameraModel"
         );
         // serde roundtrip（激活包快照/UI 预览）
@@ -1169,7 +1177,10 @@ steps:
             "steps:\n  - {kind: judge, rule: R_g}\n",
         )
         .unwrap_err();
-        assert!(e.to_string().contains("group_by") || e.to_string().contains("keys"), "{e}");
+        assert!(
+            e.to_string().contains("group_by") || e.to_string().contains("keys"),
+            "{e}"
+        );
     }
 
     /// IP-K16：生产侧唯一装载入口 = 插件包自带的元数据（内置 YAML 行业包已删）。
@@ -1186,14 +1197,21 @@ steps:
             .name
             .pick("zh-Hans")
             .is_empty());
-        assert_eq!(ec.taxonomy.fields.len(), 3, "电商词表三字段（taxonomy.json）");
+        assert_eq!(
+            ec.taxonomy.fields.len(),
+            3,
+            "电商词表三字段（taxonomy.json）"
+        );
         assert_eq!(ec.report.summary.len(), 3, "三态口径：合格/不合格/未判定");
         assert!(
             ec.report.detail_columns.contains(&"R1_size".to_string()),
             "{:?}",
             ec.report.detail_columns
         );
-        assert!((ec.low_confidence() - 0.7).abs() < 1e-9, "阈值来自包内 report");
+        assert!(
+            (ec.low_confidence() - 0.7).abs() < 1e-9,
+            "阈值来自包内 report"
+        );
 
         let re = Pack::from_plugin_dir(&root.join("realestate")).expect("房产插件元数据装载");
         assert_eq!(re.id, "com.soujpg.pack.realestate");
@@ -1210,7 +1228,10 @@ steps:
             ],
             "房产插件六条规则（F0~F5）按包内声明顺序"
         );
-        assert!(!re.taxonomy.fields.is_empty(), "房产词表（scenes.json）必须读进来");
+        assert!(
+            !re.taxonomy.fields.is_empty(),
+            "房产词表（scenes.json）必须读进来"
+        );
         assert_eq!(
             re.report.detail_columns.len(),
             10,
@@ -1229,7 +1250,12 @@ steps:
             "领域 gate 判不合格"
         );
         assert_eq!(
-            re.rule("F5_min_size").unwrap().fixer.as_ref().unwrap().plugin,
+            re.rule("F5_min_size")
+                .unwrap()
+                .fixer
+                .as_ref()
+                .unwrap()
+                .plugin,
             "upscale"
         );
         assert_eq!(
@@ -1314,11 +1340,8 @@ steps:
         let e = Pack::from_plugin_json(manifest, r#"{"pack":"x","rules":[]}"#).unwrap_err();
         assert!(e.to_string().contains("未声明任何规则"), "{e}");
         // 缺 id
-        let e = Pack::from_plugin_json(
-            r#"{"name":"x"}"#,
-            r#"{"rules":[{"id":"R1"}]}"#,
-        )
-        .unwrap_err();
+        let e =
+            Pack::from_plugin_json(r#"{"name":"x"}"#, r#"{"rules":[{"id":"R1"}]}"#).unwrap_err();
         assert!(e.to_string().contains("缺 id"), "{e}");
         // 规则缺 id
         let e = Pack::from_plugin_json(manifest, r#"{"rules":[{"name":"n"}]}"#).unwrap_err();
@@ -1335,7 +1358,6 @@ steps:
         assert!(p.report.detail_columns.is_empty());
         assert!((p.low_confidence() - 0.7).abs() < 1e-9);
     }
-
 
     #[test]
     fn from_dir_atomic_four_files() {
@@ -1428,22 +1450,18 @@ steps:
     #[test]
     fn unknown_enums_fail_loudly() {
         // 未知枚举值 → 解析失败（不静默兜底，pack 作者必须改）
-        assert!(
-            serde_yaml::from_str::<Vec<Rule>>(
-                "- {id: X, executor: quantum, check: {detector: d}, on_fail: pass}"
-            )
-            .is_err()
-        );
+        assert!(serde_yaml::from_str::<Vec<Rule>>(
+            "- {id: X, executor: quantum, check: {detector: d}, on_fail: pass}"
+        )
+        .is_err());
         assert!(serde_yaml::from_str::<Vec<Rule>>(
             "- {id: X, executor: classic, check: {detector: d}, fixer: {type: t, tier: instant}, on_fail: pass}"
         )
         .is_err());
-        assert!(
-            serde_yaml::from_str::<Vec<Rule>>(
-                "- {id: X, executor: classic, check: {detector: d}, on_fail: maybe}"
-            )
-            .is_err()
-        );
+        assert!(serde_yaml::from_str::<Vec<Rule>>(
+            "- {id: X, executor: classic, check: {detector: d}, on_fail: maybe}"
+        )
+        .is_err());
     }
 
     // ---- i18n-F（卡 task）：LocalizedText 两形态 + 回退链 ----

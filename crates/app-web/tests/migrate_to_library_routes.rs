@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)] // vips 全局锁刻意贯穿 await：测试间串行化 libvips（非 DB 锁，无死锁面）
 //! DT6 路由钉（卡 task）：`POST /api/library/migrate-to-library`（后台跑 + 立即返回）
 //! + `GET .../status` 进度快照 + `GET /api/library/migrate-audit` 审计 dump。
 //!
@@ -78,13 +79,17 @@ impl Fx {
 
     fn abs_path(&self, id: i64) -> String {
         self.conn
-            .query_row("SELECT absPath FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row("SELECT absPath FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
             .unwrap()
     }
 
     fn store_mode(&self, id: i64) -> String {
         self.conn
-            .query_row("SELECT storeMode FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row("SELECT storeMode FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
             .unwrap()
     }
 }
@@ -103,7 +108,9 @@ async fn post_json(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_jso
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -117,7 +124,9 @@ async fn get_json(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -185,16 +194,26 @@ async fn migrate_http_copies_files_and_reports_progress() {
     }
 
     // 审计 dump：3 项审计要素（人 / 字节数 / 原目录→库根）都在
-    let (st, j) = get_json(&fx.app, &format!("/api/library/migrate-audit?batchId={batch}")).await;
+    let (st, j) = get_json(
+        &fx.app,
+        &format!("/api/library/migrate-audit?batchId={batch}"),
+    )
+    .await;
     assert_eq!(st, 200);
     assert_eq!(j["count"], 2, "{j}");
     let rows = j["rows"].as_array().unwrap();
-    assert!(rows.iter().all(|r| r["status"] == "done" && r["kind"] == "copyin"));
-    assert!(rows.iter().all(|r| r["operator"] == "local" && r["at"].as_i64().unwrap() > 0));
+    assert!(rows
+        .iter()
+        .all(|r| r["status"] == "done" && r["kind"] == "copyin"));
+    assert!(rows
+        .iter()
+        .all(|r| r["operator"] == "local" && r["at"].as_i64().unwrap() > 0));
     assert!(rows
         .iter()
         .all(|r| r["from"].as_str().unwrap().contains("/external/")));
-    assert!(rows.iter().all(|r| r["to"].as_str().unwrap().contains("/library/")));
+    assert!(rows
+        .iter()
+        .all(|r| r["to"].as_str().unwrap().contains("/library/")));
 }
 
 #[tokio::test]
@@ -214,7 +233,11 @@ async fn delete_source_flag_and_operator_pass_through() {
     assert_eq!(fin["migrated"], 1, "{fin}");
     assert!(!pa.exists(), "deleteSource:true 应删源");
     assert!(PathBuf::from(fx.abs_path(a)).is_file());
-    let (_, j) = get_json(&fx.app, &format!("/api/library/migrate-audit?batchId={batch}")).await;
+    let (_, j) = get_json(
+        &fx.app,
+        &format!("/api/library/migrate-audit?batchId={batch}"),
+    )
+    .await;
     assert_eq!(j["rows"][0]["operator"], "bob");
 }
 
@@ -337,7 +360,11 @@ async fn concurrent_batch_is_rejected_with_409() {
 async fn status_is_idle_for_unknown_or_stale_batch_id() {
     let _g = serial();
     let fx = make_fx("statusidle");
-    let (st, j) = get_json(&fx.app, "/api/library/migrate-to-library/status?batchId=nope").await;
+    let (st, j) = get_json(
+        &fx.app,
+        "/api/library/migrate-to-library/status?batchId=nope",
+    )
+    .await;
     assert_eq!(st, 200);
     assert_eq!(j["state"], "idle");
 

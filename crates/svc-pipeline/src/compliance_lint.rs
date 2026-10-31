@@ -74,7 +74,9 @@ pub fn lint_pack(pack: &Pack) -> Vec<LintIssue> {
                         if group_scoped {
                             // 组级 classic 检测器（L2 注册表：phash_dup 等）
                             if compliance_group::lookup(&check.detector).is_none() {
-                                let msg = if engine_classic::registry::lookup(&check.detector).is_some() {
+                                let msg = if engine_classic::registry::lookup(&check.detector)
+                                    .is_some()
+                                {
                                     format!(
                                         "规则 {rid}: 检测器 \"{}\" 是逐图检测器（per_asset 专用）—— \
                                          组级规则需用组级检测器（已知组级: {}）",
@@ -88,7 +90,13 @@ pub fn lint_pack(pack: &Pack) -> Vec<LintIssue> {
                                         compliance_group::known_ids()
                                     )
                                 };
-                                out.push(issue("rules.yaml", base.clone(), "unknown_detector", msg, Some(rid)));
+                                out.push(issue(
+                                    "rules.yaml",
+                                    base.clone(),
+                                    "unknown_detector",
+                                    msg,
+                                    Some(rid),
+                                ));
                             } else if let Some(msg) =
                                 compliance_group::params_error(&check.detector, &check.params)
                             {
@@ -115,7 +123,13 @@ pub fn lint_pack(pack: &Pack) -> Vec<LintIssue> {
                                     engine_classic::registry::known_ids()
                                 )
                             };
-                            out.push(issue("rules.yaml", base.clone(), "unknown_detector", msg, Some(rid)));
+                            out.push(issue(
+                                "rules.yaml",
+                                base.clone(),
+                                "unknown_detector",
+                                msg,
+                                Some(rid),
+                            ));
                         } else if let Some(msg) =
                             engine_classic::registry::params_error(&check.detector, &check.params)
                         {
@@ -154,10 +168,9 @@ pub fn lint_pack(pack: &Pack) -> Vec<LintIssue> {
                                 ),
                                 Some(rid),
                             ));
-                        } else if let Some(msg) = engine_segment::registry::params_error(
-                            &check.detector,
-                            &check.params,
-                        ) {
+                        } else if let Some(msg) =
+                            engine_segment::registry::params_error(&check.detector, &check.params)
+                        {
                             out.push(issue(
                                 "rules.yaml",
                                 base.clone(),
@@ -370,7 +383,10 @@ pub fn lint_pack(pack: &Pack) -> Vec<LintIssue> {
                     "pipeline.yaml",
                     format!("pipeline.steps[{i}].plugin"),
                     "unknown_plugin",
-                    format!("do 步骤 {sid}: 未知插件 \"{pid}\"（已知: {}）", plugin_known_ids()),
+                    format!(
+                        "do 步骤 {sid}: 未知插件 \"{pid}\"（已知: {}）",
+                        plugin_known_ids()
+                    ),
                     None,
                 ));
             }
@@ -393,35 +409,26 @@ pub fn lint_dir(dir: &Path) -> Vec<LintIssue> {
     let mut out = core_config::lint::lint_dir(dir);
     // L0 有 issue 时 from_dir 会拒（这是设计），但注册表层仍要能报 —— 直接读四文件文本解析
     let read = |f: &str| std::fs::read_to_string(dir.join(f)).ok();
-    match (
+    if let (Some(t), Some(r), Some(p), Some(rep)) = (
         read("taxonomy.yaml"),
         read("rules.yaml"),
         read("pipeline.yaml"),
         read("report.yaml"),
     ) {
-        (Some(t), Some(r), Some(p), Some(rep)) => {
-            let id = dir
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
-            match Pack::from_yaml_strs(&id, &t, &r, &p, &rep) {
-                Ok(pack) => out.extend(lint_pack(&pack)),
-                Err(e) => {
-                    // 解析/校验失败：不重复 L0 已报的键问题，只补一条装载错误（含原因）
-                    let msg = e.to_string();
-                    if !out.iter().any(|i| msg.contains(&i.message)) {
-                        out.push(issue(
-                            "pack",
-                            String::new(),
-                            "load_error",
-                            msg,
-                            None,
-                        ));
-                    }
+        let id = dir
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        match Pack::from_yaml_strs(&id, &t, &r, &p, &rep) {
+            Ok(pack) => out.extend(lint_pack(&pack)),
+            Err(e) => {
+                // 解析/校验失败：不重复 L0 已报的键问题，只补一条装载错误（含原因）
+                let msg = e.to_string();
+                if !out.iter().any(|i| msg.contains(&i.message)) {
+                    out.push(issue("pack", String::new(), "load_error", msg, None));
                 }
             }
         }
-        _ => {}
     }
     out
 }
@@ -471,9 +478,19 @@ mod tests {
                         - {kind: judge, rule: X4_group_by_inside_params}\n";
         let pack = Pack::from_yaml_strs("x", "", rules, pipeline, "").unwrap();
         let issues = lint_pack(&pack);
-        let joined = issues.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(" | ");
-        assert!(joined.contains("phash_dup") && joined.contains("per_group"), "{joined}");
-        assert!(joined.contains("sharpness") && joined.contains("逐图检测器"), "{joined}");
+        let joined = issues
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(" | ");
+        assert!(
+            joined.contains("phash_dup") && joined.contains("per_group"),
+            "{joined}"
+        );
+        assert!(
+            joined.contains("sharpness") && joined.contains("逐图检测器"),
+            "{joined}"
+        );
         assert!(joined.contains("vl_set_judge"), "{joined}");
         assert!(joined.contains("group_by"), "{joined}");
         // 每条都挂到对应规则（规则级隔离的依据）
@@ -551,7 +568,11 @@ mod tests {
                         - {kind: judge, rule: X3_group_self_report}\n";
         let pack = Pack::from_yaml_strs("x", "", rules, pipeline, "").unwrap();
         let issues = lint_pack(&pack);
-        let joined = issues.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(" | ");
+        let joined = issues
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(" | ");
         assert!(
             joined.contains("unsupported_confidence") && joined.contains("X1_classic_self_report"),
             "{joined}"
@@ -580,9 +601,20 @@ mod tests {
   fixer: null
   on_fail: fail
 "#;
-        let pack = Pack::from_yaml_strs("x", "", rules, "steps:\n  - {kind: judge, rule: F0_no_conf}\n", "").unwrap();
+        let pack = Pack::from_yaml_strs(
+            "x",
+            "",
+            rules,
+            "steps:\n  - {kind: judge, rule: F0_no_conf}\n",
+            "",
+        )
+        .unwrap();
         let issues = lint_pack(&pack);
-        let joined = issues.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(" | ");
+        let joined = issues
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(" | ");
         assert!(joined.contains("missing_confidence"), "{joined}");
         assert!(joined.contains("F0_no_conf"), "{joined}");
     }
@@ -609,7 +641,11 @@ mod tests {
         )
         .unwrap();
         let issues = lint_pack(&pack);
-        let joined = issues.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(" | ");
+        let joined = issues
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(" | ");
         assert!(joined.contains("unknown_detector"), "{joined}");
         assert!(joined.contains("vl_domain_gate"), "{joined}");
         // 规则级隔离依据
@@ -634,7 +670,11 @@ mod tests {
         )
         .unwrap();
         let issues = lint_pack(&pack);
-        let joined = issues.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(" | ");
+        let joined = issues
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(" | ");
         assert!(joined.contains("min_var"), "{joined}");
         assert!(joined.contains("no_such_fixer"), "{joined}");
         assert!(joined.contains("no_such_plugin"), "{joined}");
@@ -647,7 +687,8 @@ mod tests {
     #[test]
     fn probe_fixtures_are_rejected_at_load() {
         // 5 个故意写错的探针包：装载前 lint 必须全部报错（键级 + 注册表层一起看）
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/c7-fixtures/schema-probes");
+        let dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/c7-fixtures/schema-probes");
         let mut entries: Vec<_> = std::fs::read_dir(&dir)
             .unwrap()
             .filter_map(|e| e.ok().map(|e| e.path()))

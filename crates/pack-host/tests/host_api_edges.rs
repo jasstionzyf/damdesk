@@ -73,7 +73,11 @@ fn verify_pack_info_reports_version_and_capability_drift() {
     manifest["version"] = json!("9.9.9");
     manifest["capabilities"] = json!(["io.read", "vl.judge"]);
     manifest["timeout_secs"] = json!(42);
-    fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
 
     let dir = tempfile::tempdir().unwrap();
     let work = dir.path().join("work");

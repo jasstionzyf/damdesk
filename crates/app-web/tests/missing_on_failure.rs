@@ -29,9 +29,9 @@ fn tmp_dir() -> PathBuf {
 /// 最小合法 PNG（1×1 RGBA）
 const PNG_1X1: [u8; 70] = [
     0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52, 0, 0, 0,
-    1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0x0D, 0x49, 0x44, 0x41, 0x54,
-    0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0, 5, 0, 1, 0, 0xFF, 0x89, 0x99, 0x3D, 0x1D, 0, 0,
-    0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78,
+    0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0, 5, 0, 1, 0, 0xFF, 0x89, 0x99, 0x3D, 0x1D, 0, 0, 0,
+    0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
 ];
 
 fn touch(p: &Path) -> PathBuf {
@@ -79,7 +79,9 @@ async fn call(app: &axum::Router, uri: &str) -> (StatusCode, Value) {
         .await
         .unwrap();
     let status = res.status();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let body: Value = if bytes.is_empty() {
         Value::Null
     } else {
@@ -96,7 +98,10 @@ async fn original_read_failure_marks_missing_and_return_clears_it() {
     // 0) 读之前：DB 撒谎（missing=0），筛选拿不到任何失联
     let (st, list) = call(&app, "/api/library/assets?missing=1&limit=10").await;
     assert_eq!(st, StatusCode::OK, "{list}");
-    assert_eq!(list["total"], 0, "删文件不经过 watcher → 还没人记账: {list}");
+    assert_eq!(
+        list["total"], 0,
+        "删文件不经过 watcher → 还没人记账: {list}"
+    );
 
     // 1) 原图链接（分享出去的就是这条）读失败 → 404
     let (st, body) = call(&app, "/api/media/original/2").await;
@@ -131,9 +136,9 @@ async fn original_read_failure_marks_missing_and_return_clears_it() {
     assert_eq!(list["total"], 0, "读成功顺手清标: {list}");
 
     // 4) 权限/其它 IO 错误不折进失联（只测口径函数，DAC 在 root 下构造不出来）
-    assert!(!core_storage::presence::is_gone(
-        &std::io::Error::from(std::io::ErrorKind::PermissionDenied)
-    ));
+    assert!(!core_storage::presence::is_gone(&std::io::Error::from(
+        std::io::ErrorKind::PermissionDenied
+    )));
 
     let _ = std::fs::remove_dir_all(&dir);
 }

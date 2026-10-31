@@ -9,6 +9,7 @@
 //! 4. `kill -9` 后自动重启
 //! 5. 连续崩溃 → 冷却（plugin_crash），冷却期不再拉起
 //! 6. manifest 未知键 / api_version 不匹配 → 拒装
+//!
 //! 附加：启动器 import 失败 → plugin_load_failed(<原因>) 可读
 
 use std::fs;

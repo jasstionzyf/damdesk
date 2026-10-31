@@ -60,7 +60,13 @@ fn seed(path: &PathBuf) -> Connection {
         .unwrap();
     };
     add(1, "R1_size", "fail", 0.30, Some(r#"{"threshold":700}"#));
-    add(2, "R1_size", "undetermined", 0.90, Some(r#"{"reason":"vl_timeout"}"#));
+    add(
+        2,
+        "R1_size",
+        "undetermined",
+        0.90,
+        Some(r#"{"reason":"vl_timeout"}"#),
+    );
     add(3, "R1_size", "pass", 0.95, None);
     conn
 }
@@ -72,22 +78,40 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null))
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
+    )
 }
 
-async fn send(app: &axum::Router, method: &str, uri: &str, body: Option<&str>) -> (u16, serde_json::Value) {
+async fn send(
+    app: &axum::Router,
+    method: &str,
+    uri: &str,
+    body: Option<&str>,
+) -> (u16, serde_json::Value) {
     let mut req = Request::builder().method(method).uri(uri);
     if body.is_some() {
         req = req.header("content-type", "application/json");
     }
     let req = req
-        .body(body.map(|b| Body::from(b.to_string())).unwrap_or_else(Body::empty))
+        .body(
+            body.map(|b| Body::from(b.to_string()))
+                .unwrap_or_else(Body::empty),
+        )
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null))
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 fn library_ids(v: &serde_json::Value) -> Vec<i64> {
@@ -120,15 +144,24 @@ async fn human_review_full_flow_over_http() {
     let (code, moved) = get(&app, "/api/library/assets?compliance=pass").await;
     assert_eq!(code, 400, "图库与 job 解耦: {moved}");
     assert!(
-        moved["error"].as_str().unwrap_or_default().contains("compliance_filter_moved"),
+        moved["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("compliance_filter_moved"),
         "{moved}"
     );
     let (_, lib) = get(&app, "/api/library/assets").await;
-    assert_eq!(library_ids(&lib), vec![1, 2, 3, 4], "图库列表与判定无关（全部资产）: {lib}");
+    assert_eq!(
+        library_ids(&lib),
+        vec![1, 2, 3, 4],
+        "图库列表与判定无关（全部资产）: {lib}"
+    );
 
     // ---------- 1) 校验矩阵：reason 必填 / humanStatus 白名单 ----------
     let low_conf_body = |extra: &str| {
-        format!(r#"{{"assetId":1,"ruleId":"R1_size","humanStatus":"pass","reason":"阈值过严，人工确认尺寸达标"{extra}}}"#)
+        format!(
+            r#"{{"assetId":1,"ruleId":"R1_size","humanStatus":"pass","reason":"阈值过严，人工确认尺寸达标"{extra}}}"#
+        )
     };
     // reason 纯空白
     let (code, r) = send(
@@ -140,7 +173,10 @@ async fn human_review_full_flow_over_http() {
     .await;
     assert_eq!(code, 400, "{r}");
     assert_eq!(r["error"], "review_reason_required", "{r}");
-    assert!(r["message"].as_str().unwrap_or_default().contains("理由"), "{r}");
+    assert!(
+        r["message"].as_str().unwrap_or_default().contains("理由"),
+        "{r}"
+    );
     // humanStatus 非法
     let (code, r) = send(
         &app,
@@ -166,7 +202,13 @@ async fn human_review_full_flow_over_http() {
     assert_eq!(hist["total"], 0, "{hist}");
 
     // ---------- 2) 低置信度改判（0.30 < 0.70，免 force）：fail → pass ----------
-    let (code, r) = send(&app, "POST", "/api/compliance/review", Some(&low_conf_body(""))).await;
+    let (code, r) = send(
+        &app,
+        "POST",
+        "/api/compliance/review",
+        Some(&low_conf_body("")),
+    )
+    .await;
     assert_eq!(code, 200, "{r}");
     // DECouple-BE：回执只给行级生效结论（资产级合成结论已从资产视图下线，只在 job 域给）
     assert_eq!(r["effectiveStatus"], "pass", "{r}");
@@ -175,7 +217,10 @@ async fn human_review_full_flow_over_http() {
     assert!(r.get("finalStatus").is_none(), "finalStatus 已废弃: {r}");
     assert!(r.get("assetState").is_none(), "assetState 已下线: {r}");
     assert_eq!(r["humanReview"]["humanStatus"], "pass", "{r}");
-    eprintln!("EVIDENCE-POST-REVIEW: {}", serde_json::to_string(&r).unwrap());
+    eprintln!(
+        "EVIDENCE-POST-REVIEW: {}",
+        serde_json::to_string(&r).unwrap()
+    );
     // 分桶联动（合规页）：不合格 1 → 0，合格 1 → 2
     let (_, st) = get(&app, "/api/compliance/status").await;
     assert_eq!(st["states"]["fail"], 0, "{st}");
@@ -188,7 +233,10 @@ async fn human_review_full_flow_over_http() {
     let (code, vd) = get(&app, "/api/compliance/verdicts?assetId=1").await;
     assert_eq!(code, 200, "{vd}");
     // 资产视图只回判定行原文（资产级合成结论 state/machineState/finalStatus 已下线）
-    assert!(vd.get("state").is_none() && vd.get("machineState").is_none(), "{vd}");
+    assert!(
+        vd.get("state").is_none() && vd.get("machineState").is_none(),
+        "{vd}"
+    );
     let item = vd["items"]
         .as_array()
         .unwrap()
@@ -202,7 +250,11 @@ async fn human_review_full_flow_over_http() {
     eprintln!("EVIDENCE-VERDICTS: {}", serde_json::to_string(&vd).unwrap());
 
     // ---------- 4) 复核队列：卡片自带 effectiveStatus + reviewed 过滤 ----------
-    let (code, q) = get(&app, "/api/compliance/queue?lowConfidence=true&onlyUnresolved=false").await;
+    let (code, q) = get(
+        &app,
+        "/api/compliance/queue?lowConfidence=true&onlyUnresolved=false",
+    )
+    .await;
     assert_eq!(code, 200, "{q}");
     let card = q["items"]
         .as_array()
@@ -212,19 +264,43 @@ async fn human_review_full_flow_over_http() {
         .expect("资产 1 在低置信度队列里");
     assert_eq!(card["reviewed"], true, "{card}");
     assert_eq!(card["rules"][0]["result"], "fail", "{card}");
-    assert_eq!(card["rules"][0]["effectiveStatus"], "pass", "卡片直接给生效结论: {card}");
-    assert_eq!(card["rules"][0]["humanReview"]["humanStatus"], "pass", "{card}");
-    assert_eq!(card["thumbPath"], "/thumbs/1.webp", "复核卡片自带缩略图: {card}");
-    eprintln!("EVIDENCE-QUEUE-CARD: {}", serde_json::to_string(&card).unwrap());
+    assert_eq!(
+        card["rules"][0]["effectiveStatus"], "pass",
+        "卡片直接给生效结论: {card}"
+    );
+    assert_eq!(
+        card["rules"][0]["humanReview"]["humanStatus"], "pass",
+        "{card}"
+    );
+    assert_eq!(
+        card["thumbPath"], "/thumbs/1.webp",
+        "复核卡片自带缩略图: {card}"
+    );
+    eprintln!(
+        "EVIDENCE-QUEUE-CARD: {}",
+        serde_json::to_string(&card).unwrap()
+    );
     // 只看未复核 → 资产 1 已不再出现（其余资产仍在）
-    let (_, q2) = get(&app, "/api/compliance/queue?lowConfidence=true&reviewed=false").await;
+    let (_, q2) = get(
+        &app,
+        "/api/compliance/queue?lowConfidence=true&reviewed=false",
+    )
+    .await;
     assert!(
-        !q2["items"].as_array().unwrap().iter().any(|c| c["assetId"] == 1),
+        !q2["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["assetId"] == 1),
         "{q2}"
     );
 
     // 排序：confidence 升序（最没把握的排最前）；非法 sort 值 400（不静默）
-    let (code, q3) = get(&app, "/api/compliance/queue?lowConfidence=true&sort=confidence").await;
+    let (code, q3) = get(
+        &app,
+        "/api/compliance/queue?lowConfidence=true&sort=confidence",
+    )
+    .await;
     assert_eq!(code, 200, "{q3}");
     let confs: Vec<f64> = q3["items"]
         .as_array()
@@ -232,11 +308,18 @@ async fn human_review_full_flow_over_http() {
         .iter()
         .map(|c| c["rules"][0]["confidence"].as_f64().unwrap_or(-1.0))
         .collect();
-    assert!(confs.windows(2).all(|w| w[0] <= w[1]), "置信度升序: {confs:?}");
+    assert!(
+        confs.windows(2).all(|w| w[0] <= w[1]),
+        "置信度升序: {confs:?}"
+    );
     let (code, r) = get(&app, "/api/compliance/queue?sort=bogus").await;
     assert_eq!(code, 400, "{r}");
     assert_eq!(r["error"], "bad_sort", "{r}");
-    let (code, list) = get(&app, "/api/compliance/review?lowConfidence=false&sort=confidence").await;
+    let (code, list) = get(
+        &app,
+        "/api/compliance/review?lowConfidence=false&sort=confidence",
+    )
+    .await;
     assert_eq!(code, 200, "{list}");
     let confs: Vec<f64> = list["items"]
         .as_array()
@@ -244,7 +327,10 @@ async fn human_review_full_flow_over_http() {
         .iter()
         .map(|i| i["machineConfidence"].as_f64().unwrap_or(-1.0))
         .collect();
-    assert!(confs.windows(2).all(|w| w[0] <= w[1]), "/review 置信度升序: {confs:?}");
+    assert!(
+        confs.windows(2).all(|w| w[0] <= w[1]),
+        "/review 置信度升序: {confs:?}"
+    );
 
     // ---------- 5) 高置信度门槛：不给 force 拒收，给 force 才落 ----------
     let (code, r) = send(
@@ -256,7 +342,10 @@ async fn human_review_full_flow_over_http() {
     .await;
     assert_eq!(code, 400, "{r}");
     assert_eq!(r["error"], "review_not_low_confidence", "{r}");
-    assert!(r["message"].as_str().unwrap_or_default().contains("0.95"), "{r}");
+    assert!(
+        r["message"].as_str().unwrap_or_default().contains("0.95"),
+        "{r}"
+    );
     let (code, r) = send(
         &app,
         "POST",
@@ -267,7 +356,11 @@ async fn human_review_full_flow_over_http() {
     assert_eq!(code, 200, "{r}");
     assert_eq!(r["effectiveStatus"], "fail", "{r}");
     let (_, st) = get(&app, "/api/compliance/status").await;
-    assert_eq!((st["states"]["fail"].as_i64(), st["states"]["pass"].as_i64()), (Some(1), Some(1)), "{st}");
+    assert_eq!(
+        (st["states"]["fail"].as_i64(), st["states"]["pass"].as_i64()),
+        (Some(1), Some(1)),
+        "{st}"
+    );
 
     // ---------- 6) 重复改判覆盖：只留一条生效，历史保留 superseded ----------
     let (code, r) = send(
@@ -281,10 +374,7 @@ async fn human_review_full_flow_over_http() {
     assert_eq!(r["effectiveStatus"], "fail", "{r}");
     let (_, list) = get(&app, "/api/compliance/review?assetId=1&lowConfidence=false").await;
     let items = list["items"].as_array().unwrap();
-    let r1: Vec<&serde_json::Value> = items
-        .iter()
-        .filter(|i| i["ruleId"] == "R1_size")
-        .collect();
+    let r1: Vec<&serde_json::Value> = items.iter().filter(|i| i["ruleId"] == "R1_size").collect();
     assert_eq!(r1.len(), 1, "同一 (asset, rule) 只有一条生效改判: {list}");
     assert_eq!(r1[0]["humanReview"]["humanStatus"], "fail", "{list}");
     assert_eq!(r1[0]["machineResult"], "fail", "{list}");
@@ -298,7 +388,13 @@ async fn human_review_full_flow_over_http() {
     assert_eq!(h[1]["active"], true, "{hist}");
 
     // ---------- 7) 撤销 → 回机器结论 ----------
-    let (code, r) = send(&app, "DELETE", "/api/compliance/review?assetId=1&ruleId=R1_size", None).await;
+    let (code, r) = send(
+        &app,
+        "DELETE",
+        "/api/compliance/review?assetId=1&ruleId=R1_size",
+        None,
+    )
+    .await;
     assert_eq!(code, 200, "{r}");
     assert_eq!(r["revoked"], 1, "{r}");
     assert!(r.get("assetState").is_none(), "资产级合成结论已下线: {r}");
@@ -306,23 +402,41 @@ async fn human_review_full_flow_over_http() {
     let (code, vd) = get(&app, "/api/compliance/verdicts?assetId=1").await;
     assert_eq!(code, 200, "{vd}");
     assert!(vd.get("state").is_none(), "资产视图不下发资产级结论: {vd}");
-    let item = vd["items"].as_array().unwrap().iter().find(|i| i["ruleId"] == "R1_size").unwrap();
+    let item = vd["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["ruleId"] == "R1_size")
+        .unwrap();
     assert!(item["humanReview"].is_null(), "撤销后没有生效改判: {item}");
     assert_eq!(item["effectiveStatus"], "fail", "{item}");
     let (_, st) = get(&app, "/api/compliance/status").await;
-    assert_eq!((st["states"]["fail"].as_i64(), st["states"]["pass"].as_i64()), (Some(2), Some(0)), "{st}");
+    assert_eq!(
+        (st["states"]["fail"].as_i64(), st["states"]["pass"].as_i64()),
+        (Some(2), Some(0)),
+        "{st}"
+    );
     // 图库侧不参与判定（撤销后判定维度仍被拒）
     let (code, moved) = get(&app, "/api/library/assets?compliance=fail").await;
     assert_eq!(code, 400, "{moved}");
     // 重复撤销 → 404（语义明确，不静默成功）
-    let (code, r) = send(&app, "DELETE", "/api/compliance/review?assetId=1&ruleId=R1_size", None).await;
+    let (code, r) = send(
+        &app,
+        "DELETE",
+        "/api/compliance/review?assetId=1&ruleId=R1_size",
+        None,
+    )
+    .await;
     assert_eq!(code, 404, "{r}");
     assert_eq!(r["error"], "review_not_found", "{r}");
     // 历史两条都在（pass 被覆盖 / fail 被撤销），且都 active=false
     let (_, hist) = get(&app, "/api/compliance/review/history?assetId=1").await;
     let h = hist["items"].as_array().unwrap();
     assert_eq!(h.len(), 2, "{hist}");
-    assert!(h.iter().all(|r| r["active"] == false), "撤销后无生效改判: {hist}");
+    assert!(
+        h.iter().all(|r| r["active"] == false),
+        "撤销后无生效改判: {hist}"
+    );
 
     // ---------- 8) 资产级改判（ruleId 缺省）：整张图一条结论 ----------
     let (code, r) = send(
@@ -335,10 +449,16 @@ async fn human_review_full_flow_over_http() {
     assert_eq!(code, 200, "{r}");
     assert!(r["ruleId"].is_null(), "资产级改判 ruleId = null: {r}");
     assert_eq!(r["effectiveStatus"], "pass", "{r}");
-    assert!(r.get("assetState").is_none() && r.get("machineState").is_none(), "{r}");
+    assert!(
+        r.get("assetState").is_none() && r.get("machineState").is_none(),
+        "{r}"
+    );
     // 资产视图不再合成资产级结论（assetHumanReview 已下线）；资产级裁决只在 job 域/复核列表可见
     let (_, vd) = get(&app, "/api/compliance/verdicts?assetId=2").await;
-    assert!(vd.get("state").is_none() && vd.get("assetHumanReview").is_none(), "{vd}");
+    assert!(
+        vd.get("state").is_none() && vd.get("assetHumanReview").is_none(),
+        "{vd}"
+    );
     // 资产级行单独出现在复核列表里（ruleId = null）
     let (_, list) = get(&app, "/api/compliance/review?assetId=2&lowConfidence=false").await;
     let asset_row = list["items"]
@@ -351,7 +471,11 @@ async fn human_review_full_flow_over_http() {
     assert_eq!(asset_row["machineResult"], "undetermined", "{list}");
 
     // ---------- 9) reviewed=false：只剩没改判的行 ----------
-    let (code, list) = get(&app, "/api/compliance/review?lowConfidence=false&reviewed=false").await;
+    let (code, list) = get(
+        &app,
+        "/api/compliance/review?lowConfidence=false&reviewed=false",
+    )
+    .await;
     assert_eq!(code, 200, "{list}");
     assert!(
         list["items"]

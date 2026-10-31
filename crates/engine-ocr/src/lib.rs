@@ -55,6 +55,9 @@ pub enum OcrError {
 
 pub type Result<T> = std::result::Result<T, OcrError>;
 
+/// 识别框：`(x0, y0, x1, y1, score)`，图内像素坐标。
+pub type RecBoxes = Vec<(i64, i64, i64, i64, f32)>;
+
 /// PP-OCRv6_medium_det（registry/models.yaml `kind: ocr` 条目名 = manifest 名 = 目录名）。
 pub const DET_MODEL: &str = "ppocrv6-medium-det";
 /// PP-OCRv6_medium_rec（同上；目录内含 ppocrv6_dict.txt）。
@@ -138,13 +141,7 @@ pub fn models_ready() -> bool {
 
 /// bilinear resize（对齐 cv2.INTER_LINEAR：src = (dst+0.5)*scale-0.5，边缘 clamp）。
 /// RGB 交错 u8 进出；w/h 任一为 0 响亮报错。
-pub fn resize_bilinear_rgb(
-    pixels: &[u8],
-    w: u32,
-    h: u32,
-    tw: u32,
-    th: u32,
-) -> Result<Vec<u8>> {
+pub fn resize_bilinear_rgb(pixels: &[u8], w: u32, h: u32, tw: u32, th: u32) -> Result<Vec<u8>> {
     let (w, h, tw, th) = (w as usize, h as usize, tw as usize, th as usize);
     if w == 0 || h == 0 || tw == 0 || th == 0 {
         return Err(OcrError::InputMismatch {
@@ -155,7 +152,11 @@ pub fn resize_bilinear_rgb(
     if pixels.len() != w * h * 3 {
         return Err(OcrError::InputMismatch {
             step: "resize",
-            msg: format!("RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}", w * h * 3, pixels.len()),
+            msg: format!(
+                "RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}",
+                w * h * 3,
+                pixels.len()
+            ),
         });
     }
     if tw == w && th == h {
@@ -181,7 +182,8 @@ pub fn resize_bilinear_rgb(
                 let p11 = pixels[(y1 * w + x1) * 3 + c] as f32;
                 let top = p00 + (p01 - p00) * lx;
                 let bot = p10 + (p11 - p10) * lx;
-                out[(dy * tw + dx) * 3 + c] = (top + (bot - top) * ly).round().clamp(0.0, 255.0) as u8;
+                out[(dy * tw + dx) * 3 + c] =
+                    (top + (bot - top) * ly).round().clamp(0.0, 255.0) as u8;
             }
         }
     }
@@ -228,7 +230,11 @@ pub fn det_normalize(w: u32, h: u32, rgb: &[u8]) -> Result<Vec<f32>> {
     const STD: [f32; 3] = [0.229, 0.224, 0.225];
     let mut out = vec![0f32; 3 * n];
     for i in 0..n {
-        let (r, g, b) = (rgb[i * 3] as f32 / 255.0, rgb[i * 3 + 1] as f32 / 255.0, rgb[i * 3 + 2] as f32 / 255.0);
+        let (r, g, b) = (
+            rgb[i * 3] as f32 / 255.0,
+            rgb[i * 3 + 1] as f32 / 255.0,
+            rgb[i * 3 + 2] as f32 / 255.0,
+        );
         out[i] = (b - MEAN[0]) / STD[0];
         out[n + i] = (g - MEAN[1]) / STD[1];
         out[2 * n + i] = (r - MEAN[2]) / STD[2];
@@ -261,7 +267,7 @@ pub fn db_boxes(
     src_w: u32,
     src_h: u32,
     box_limit: usize,
-) -> Result<Vec<(i64, i64, i64, i64, f32)>> {
+) -> Result<RecBoxes> {
     let (mw, mh) = (mw as usize, mh as usize);
     if map.len() != mw * mh {
         return Err(OcrError::InputMismatch {
@@ -358,19 +364,32 @@ pub fn db_boxes(
         boxes.push((sx0, sy0, sx1, sy1, score));
     }
     // 阅读序：按 y0（行）再 x0（列），确定性
-    boxes.sort_by(|a, b| (a.1, a.0).cmp(&(b.1, b.0)));
+    boxes.sort_by_key(|a| (a.1, a.0));
     Ok(boxes)
 }
 
 /// rec 预处理（官方 OCRReisizeNormImg 口径）：源图裁剪 [x0..x1, y0..y1] → 高 48 等比
 /// 双线性缩 → /255 偏 0.5 除 0.5（CHW）→ 右 Padding 0.0 到 imgW =
 /// min(int(48 * max(320/48, w/h)), 3200)。返回 (data, imgW, resized_w)。
-pub fn rec_prepare(w: u32, h: u32, rgb: &[u8], x0: i64, y0: i64, x1: i64, y1: i64) -> Result<(Vec<f32>, u32, u32)> {
+pub fn rec_prepare(
+    w: u32,
+    h: u32,
+    rgb: &[u8],
+    x0: i64,
+    y0: i64,
+    x1: i64,
+    y1: i64,
+) -> Result<(Vec<f32>, u32, u32)> {
     let (w, h) = (w as i64, h as i64);
     if rgb.len() != (w * h * 3) as usize {
         return Err(OcrError::InputMismatch {
             step: "rec_prepare",
-            msg: format!("RGB 缓冲 {}x{h} 期望 {} 字节，实际 {}", w, (w * h * 3), rgb.len()),
+            msg: format!(
+                "RGB 缓冲 {}x{h} 期望 {} 字节，实际 {}",
+                w,
+                (w * h * 3),
+                rgb.len()
+            ),
         });
     }
     if x1 < 0 || y1 < 0 || x0 >= w || y0 >= h {
@@ -397,7 +416,8 @@ pub fn rec_prepare(w: u32, h: u32, rgb: &[u8], x0: i64, y0: i64, x1: i64, y1: i6
         crop[dst..dst + (cw as usize) * 3].copy_from_slice(&rgb[src..src + (cw as usize) * 3]);
     }
     let ratio = cw as f64 / ch as f64;
-    let img_w = ((REC_HEIGHT as f64 * ratio.max(REC_BASE_WH_RATIO)) as u32).min(REC_MAX_WIDTH).max(REC_HEIGHT);
+    let img_w = ((REC_HEIGHT as f64 * ratio.max(REC_BASE_WH_RATIO)) as u32)
+        .clamp(REC_HEIGHT, REC_MAX_WIDTH);
     let resized_w = ((REC_HEIGHT as f64 * ratio).ceil() as u32)
         .clamp(32, img_w)
         .min(REC_MAX_WIDTH);
@@ -449,7 +469,11 @@ pub fn ctc_decode(probs: &[f32], steps: usize, n_classes: usize, dict: &[String]
         }
         prev = idx;
     }
-    let score = if kept == 0 { 0.0 } else { score_sum / kept as f32 };
+    let score = if kept == 0 {
+        0.0
+    } else {
+        score_sum / kept as f32
+    };
     (text.trim().to_string(), score)
 }
 
@@ -501,7 +525,7 @@ mod tests {
         // 1x1 → 3x3：全部 clamp 到同色
         let px = vec![10u8, 20, 30];
         let out = resize_bilinear_rgb(&px, 1, 1, 3, 3).unwrap();
-        assert_eq!(out, vec![10u8, 20, 30].repeat(9));
+        assert_eq!(out, [10u8, 20, 30].repeat(9));
         // 2x2 灰阶放大 2x：角点保持，中心为均值
         let mut px = vec![0u8; 2 * 2 * 3];
         for (i, v) in [0u8, 100].iter().enumerate() {
@@ -514,7 +538,7 @@ mod tests {
         // 左列 0，右列 100，中间双线性
         assert_eq!(out[0], 0);
         assert_eq!(out[((3 * 4) + 3) * 3], 100, "右下角像素应保持 100");
-        let mid = out[(1 * 4 + 1) * 3] as f32;
+        let mid = out[(4 + 1) * 3] as f32;
         assert!((25.0..=40.0).contains(&mid), "mid={mid}");
         // 缓冲长度不符 → 响亮
         assert!(resize_bilinear_rgb(&[0u8; 3], 2, 2, 4, 4).is_err());
@@ -596,7 +620,9 @@ mod tests {
                 weak[y * 100 + x] = 0.44;
             }
         }
-        assert!(db_boxes(&weak, 100, 50, 1000, 500, DB_MAX_CANDIDATES).unwrap().is_empty());
+        assert!(db_boxes(&weak, 100, 50, 1000, 500, DB_MAX_CANDIDATES)
+            .unwrap()
+            .is_empty());
         // box_limit 截断
         let limited = db_boxes(&map, mw, mh, 1000, 500, 1).unwrap();
         assert_eq!(limited.len(), 1);
@@ -610,7 +636,9 @@ mod tests {
         map[10 * 100 + 11] = 0.99;
         map[11 * 100 + 10] = 0.99;
         map[11 * 100 + 11] = 0.99; // 2x2 → sside 2 < 3 丢弃
-        assert!(db_boxes(&map, 100, 50, 1000, 500, DB_MAX_CANDIDATES).unwrap().is_empty());
+        assert!(db_boxes(&map, 100, 50, 1000, 500, DB_MAX_CANDIDATES)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -668,7 +696,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("d.txt");
         std::fs::write(&p, "A\nB\n").unwrap();
-        assert_eq!(load_dict(&p).unwrap(), vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(
+            load_dict(&p).unwrap(),
+            vec!["A".to_string(), "B".to_string()]
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

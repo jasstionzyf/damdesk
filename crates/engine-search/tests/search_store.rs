@@ -164,7 +164,7 @@ fn seed_500(c: &Connection) -> Vec<(i64, i64)> {
             ext,
             200 + i,
             300 + i,
-            1_700_000_000 + (i as i64) * 1000,
+            1_700_000_000 + i * 1000,
             dir,
         );
         ids.push((a, r));
@@ -243,7 +243,7 @@ fn filter_ext_boundary_500() {
         },
     )
     .unwrap();
-    assert!(hits.len() > 0 && hits.len() < 500);
+    assert!(!hits.is_empty() && hits.len() < 500);
     for h in &hits {
         let p: String = c
             .query_row(
@@ -434,7 +434,7 @@ fn find_duplicates_bands_near_and_variant() {
     let cos45 = engine_search::cosine(&rows[4].1, &rows[5].1);
     assert!(cos01 >= NEAR_DUP_THRESHOLD, "构造自检 cos01={cos01}");
     assert!(
-        cos23 >= 0.90 && cos23 < NEAR_DUP_THRESHOLD,
+        (0.90..NEAR_DUP_THRESHOLD).contains(&cos23),
         "构造自检 cos23={cos23}"
     );
     assert!(cos45 < 0.90, "构造自检 cos45={cos45}");
@@ -631,7 +631,8 @@ fn unfiltered_delivers_k_with_trashed_vectors() {
     let hits = search_by_vector(&c, "model-a", qn, &q, 24, &SearchFilter::default()).unwrap();
     assert_eq!(hits.len(), 12, "k 大于存活数时交付全部存活命中");
     assert!(
-        hits.iter().all(|h| live.iter().any(|(_, r)| *r == h.resourceId)),
+        hits.iter()
+            .all(|h| live.iter().any(|(_, r)| *r == h.resourceId)),
         "回收站资产不得出现在结果里"
     );
 
@@ -642,7 +643,10 @@ fn unfiltered_delivers_k_with_trashed_vectors() {
     }
     let hits = search_by_vector(&c, "model-a", qn, &q, 24, &SearchFilter::default()).unwrap();
     assert_eq!(hits.len(), 24, "恢复后回收站资产重新参与召回");
-    assert!((hits[0].score - 0.99).abs() < 1e-3, "恢复后最近的那张回到首位");
+    assert!(
+        (hits[0].score - 0.99).abs() < 1e-3,
+        "恢复后最近的那张回到首位"
+    );
 }
 
 #[test]
@@ -675,7 +679,11 @@ fn unfiltered_delivers_k_with_orphan_vectors() {
         &SearchFilter::default(),
     )
     .unwrap();
-    assert_eq!(hits.len(), 3, "孤儿向量不得占名额（修复前 top-3 全是孤儿 → 0 条）");
+    assert_eq!(
+        hits.len(),
+        3,
+        "孤儿向量不得占名额（修复前 top-3 全是孤儿 → 0 条）"
+    );
     for (i, h) in hits.iter().enumerate() {
         assert_eq!(h.resourceId, ids[3 + i].1, "只剩存活且仍有 primary 的 3 张");
     }
@@ -719,7 +727,8 @@ fn unfiltered_large_live_set_falls_back_to_exact_scan() {
     .unwrap();
     assert_eq!(hits.len(), 10, "过采样窗口全被回收站占满时必须精确兜底");
     assert!(
-        hits.iter().all(|h| live.iter().any(|(_, r)| *r == h.resourceId)),
+        hits.iter()
+            .all(|h| live.iter().any(|(_, r)| *r == h.resourceId)),
         "结果里不得出现回收站资产"
     );
     // 降序自检

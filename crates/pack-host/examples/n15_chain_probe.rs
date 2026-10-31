@@ -220,7 +220,11 @@ fn run_step(
             });
         }
     };
-    let rows = reply.get("rows").and_then(Value::as_array).cloned().unwrap_or_default();
+    let rows = reply
+        .get("rows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     if rows.len() != 1 {
         return Err(format!("应答 rows 数量 {} != 1：{reply}", rows.len()));
     }
@@ -230,7 +234,11 @@ fn run_step(
         Ok(_) => (true, String::new()),
         Err(v) => (false, format!("{}: {v}", v.code())),
     };
-    let art = row.get("artifacts").and_then(Value::as_array).cloned().unwrap_or_default();
+    let art = row
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let out_path = art
         .first()
         .and_then(|a| a.get("path"))
@@ -391,11 +399,9 @@ fn main() {
     let mut totals: BTreeMap<String, (u32, u32)> = BTreeMap::new();
 
     for chain in ["resize_webp", "compress", "white_bg_fill"] {
-        let labels: Value = match std::fs::read(
-            args.corpus.join("labels").join(labels_file(chain)),
-        )
-        .ok()
-        .and_then(|raw| serde_json::from_slice(&raw).ok())
+        let labels: Value = match std::fs::read(args.corpus.join("labels").join(labels_file(chain)))
+            .ok()
+            .and_then(|raw| serde_json::from_slice(&raw).ok())
         {
             Some(v) => v,
             None => {
@@ -435,7 +441,12 @@ fn main() {
                     continue;
                 }
             };
-            check(&mut asserts, "契约关(step1)", step1.contract_ok, &step1.contract_detail);
+            check(
+                &mut asserts,
+                "契约关(step1)",
+                step1.contract_ok,
+                &step1.contract_detail,
+            );
             say(format!(
                 ".. {chain}[{idx}] step1 返回（ok={}）",
                 step1.contract_ok
@@ -443,7 +454,9 @@ fn main() {
             // 已白底跳过（守卫①）是**正确语义**：输入本来就是要的形态，不产生产物。
             // 这条路径必须显式认账，否则探针把「对的行为」记成 FAIL（N19 容器基线实测：
             // wbf_09/wbf_10 两张纯白图就卡在这条断言上）。
-            let skipped_already_white = step1.row.get("evidence")
+            let skipped_already_white = step1
+                .row
+                .get("evidence")
                 .and_then(|e| e.get("skipReason").or_else(|| e.get("skip_reason")))
                 .and_then(Value::as_str)
                 .map(|s| s == "already_white")
@@ -454,11 +467,10 @@ fn main() {
                     &mut asserts,
                     "已白底跳过(step1，按契约不产生产物)",
                     step1.out_path.is_none(),
-                    if step1.out_path.is_none() {
-                        "输入已满足目标底色 → result=ok + skipReason=already_white".to_string()
-                    } else {
-                        format!("声称跳过却落盘了：{}", step1.out_path.as_ref().unwrap().display())
-                    },
+                    step1.out_path.as_ref().map_or_else(
+                        || "输入已满足目标底色 → result=ok + skipReason=already_white".to_string(),
+                        |p| format!("声称跳过却落盘了：{}", p.display()),
+                    ),
                 );
             } else {
                 check(
@@ -490,7 +502,12 @@ fn main() {
                         conv.clone(),
                     ) {
                         Ok(s2) => {
-                            check(&mut asserts, "契约关(step2)", s2.contract_ok, &s2.contract_detail);
+                            check(
+                                &mut asserts,
+                                "契约关(step2)",
+                                s2.contract_ok,
+                                &s2.contract_detail,
+                            );
                             check(
                                 &mut asserts,
                                 "产物落盘(step2)",
@@ -535,9 +552,10 @@ fn main() {
                 match chain {
                     "resize_webp" => {
                         // 第一步：长边 == 1600（expect.out_size），且不放大
-                        if let (Some(d1), Some(exp)) =
-                            (dims(step1.out_path.as_ref().unwrap_or(&out)).ok(), expect.get("out_size"))
-                        {
+                        if let (Some(d1), Some(exp)) = (
+                            dims(step1.out_path.as_ref().unwrap_or(&out)).ok(),
+                            expect.get("out_size"),
+                        ) {
                             let exp_w = exp[0].as_u64().unwrap_or(0) as u32;
                             let exp_h = exp[1].as_u64().unwrap_or(0) as u32;
                             check(
@@ -559,7 +577,9 @@ fn main() {
                         }
                     }
                     "compress" => {
-                        let target = expect["target_max_bytes"].as_u64().unwrap_or(COMPRESS_MAX_BYTES);
+                        let target = expect["target_max_bytes"]
+                            .as_u64()
+                            .unwrap_or(COMPRESS_MAX_BYTES);
                         check(
                             &mut asserts,
                             "体积<=target",
@@ -568,29 +588,30 @@ fn main() {
                         );
                         let want = expect["out_format"].as_str().unwrap_or("jpg");
                         let fmt = magic_format(&out);
-                        check(&mut asserts, "格式==expect.out_format", fmt == want, format!("{fmt} vs {want}"));
+                        check(
+                            &mut asserts,
+                            "格式==expect.out_format",
+                            fmt == want,
+                            format!("{fmt} vs {want}"),
+                        );
                     }
-                    "white_bg_fill" => {
-                        match border_dev_max(&out, BG_BAND_PX) {
-                            Ok(dev) => {
-                                let lim = expect["out_bg_dev_max"].as_f64().unwrap_or(BG_MAX_DEV);
-                                check(
-                                    &mut asserts,
-                                    "白底4px带偏差<=上限",
-                                    dev <= lim,
-                                    format!("dev={dev:.2} <= {lim:.2}"),
-                                );
-                            }
-                            Err(e) => check(&mut asserts, "白底4px带偏差", false, e),
+                    "white_bg_fill" => match border_dev_max(&out, BG_BAND_PX) {
+                        Ok(dev) => {
+                            let lim = expect["out_bg_dev_max"].as_f64().unwrap_or(BG_MAX_DEV);
+                            check(
+                                &mut asserts,
+                                "白底4px带偏差<=上限",
+                                dev <= lim,
+                                format!("dev={dev:.2} <= {lim:.2}"),
+                            );
                         }
-                    }
+                        Err(e) => check(&mut asserts, "白底4px带偏差", false, e),
+                    },
                     _ => {}
                 }
             }
 
-            let ok = asserts
-                .iter()
-                .all(|a| a["ok"].as_bool().unwrap_or(false));
+            let ok = asserts.iter().all(|a| a["ok"].as_bool().unwrap_or(false));
             if ok {
                 pass += 1;
             } else {
@@ -604,7 +625,10 @@ fn main() {
                 if ok {
                     "ok".to_string()
                 } else {
-                    format!("失败断言 {}", serde_json::to_string(&asserts).unwrap_or_default())
+                    format!(
+                        "失败断言 {}",
+                        serde_json::to_string(&asserts).unwrap_or_default()
+                    )
                 }
             ));
             chain_rows.push(json!({

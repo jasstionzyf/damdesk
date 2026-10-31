@@ -23,7 +23,10 @@ use crate::library_api::humanize_fs_error;
 use crate::{is_desktop_form, AppState};
 
 /// 被禁用能力的人话原因（复用 ② 的文案口径：指向桌面版 / copy-in，不说黑话）。
-fn reasons(is_desktop: bool, roots: &[svc_library::capabilities::RootInfo]) -> BTreeMap<String, String> {
+fn reasons(
+    is_desktop: bool,
+    roots: &[svc_library::capabilities::RootInfo],
+) -> BTreeMap<String, String> {
     let feats = svc_library::capabilities::evaluate_features(is_desktop, roots);
     let mut m = BTreeMap::new();
     let mut put = |k: &str, v: String| {

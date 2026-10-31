@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)] // vips 全局锁刻意贯穿 await：测试间串行化 libvips（非 DB 锁，无死锁面）
 //! KI-2 / KI-7（卡 task）：「库外文件夹只读查重」端到端（真图片 + 真 HTTP 路由）。
 //!
 //! 单独一个测试二进制的原因：形态判定读进程级环境变量（`DAM_WEB_FORM=desktop`），
@@ -116,7 +117,9 @@ async fn post_json(app: axum::Router, uri: &str, body: &str) -> (u16, serde_json
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
@@ -134,7 +137,9 @@ async fn get_raw(app: axum::Router, uri: &str) -> (u16, String, String) {
         .get("content-type")
         .map(|v| v.to_str().unwrap_or("").to_string())
         .unwrap_or_default();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, ctype, String::from_utf8_lossy(&bytes).to_string())
 }
 
@@ -229,7 +234,10 @@ async fn scan_external_folder_is_read_only_and_finds_groups() {
     );
 
     // 算法/阈值元数据进报告（模型名只在这里，不进 UI）
-    assert!(rep["algorithm"].as_str().unwrap().contains("SHA-256"), "{rep}");
+    assert!(
+        rep["algorithm"].as_str().unwrap().contains("SHA-256"),
+        "{rep}"
+    );
     assert!(rep["thresholds"].as_str().unwrap().contains("8"), "{rep}");
     let scan_id = rep["scanId"].as_str().unwrap().to_string();
 
@@ -242,7 +250,10 @@ async fn scan_external_folder_is_read_only_and_finds_groups() {
     assert_eq!(st, 200, "scan 导出失败: {csv}");
     assert!(ctype.starts_with("text/csv"), "{ctype}");
     assert!(csv.contains("groupNo,kind,size,keep"), "缺表头: {csv}");
-    assert!(csv.contains("a1.png") && csv.contains("b2.png"), "缺成员行: {csv}");
+    assert!(
+        csv.contains("a1.png") && csv.contains("b2.png"),
+        "缺成员行: {csv}"
+    );
     assert!(csv.contains("# path="), "缺目录元数据: {csv}");
 
     let (st, _ctype, md) = get_raw(
@@ -257,7 +268,10 @@ async fn scan_external_folder_is_read_only_and_finds_groups() {
     {
         let conn2 = core_storage::open(&db_path).unwrap();
         let after = app_web::dedup_api::table_counts(&conn2);
-        assert_eq!(before, after, "库外扫描不许改库: before={before:?} after={after:?}");
+        assert_eq!(
+            before, after,
+            "库外扫描不许改库: before={before:?} after={after:?}"
+        );
     }
 
     // 参数校验：相对路径 / 不存在目录 / 空路径

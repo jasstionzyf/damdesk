@@ -97,11 +97,7 @@ pub fn retry_failed(conn: &Connection) -> Result<usize> {
 
 /// 单资产识别 + 落库（返回识别文本；空图/无字 → ''）。local-infer 专用。
 #[cfg(feature = "local-infer")]
-pub fn ocr_one(
-    conn: &Connection,
-    engine: &engine_ocr::OcrEngine,
-    asset_id: i64,
-) -> Result<String> {
+pub fn ocr_one(conn: &Connection, engine: &engine_ocr::OcrEngine, asset_id: i64) -> Result<String> {
     let path: String = conn.query_row(
         "SELECT absPath FROM assets WHERE assetId = ?1 AND deleted = 0",
         [asset_id],
@@ -270,7 +266,11 @@ pub fn run_ocr_queue_with_limit(
                         report.retry += 1;
                     }
                     progress(
-                        if status == "failed" { "failed" } else { "retry" },
+                        if status == "failed" {
+                            "failed"
+                        } else {
+                            "retry"
+                        },
                         Some(msg),
                         &mut report,
                     );

@@ -56,7 +56,9 @@ async fn get(app: axum::Router, uri: &str, cookie: Option<&str>) -> axum::respon
     if let Some(c) = cookie {
         builder = builder.header("cookie", c);
     }
-    app.oneshot(builder.body(Body::empty()).unwrap()).await.unwrap()
+    app.oneshot(builder.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -77,7 +79,12 @@ async fn api_blocked_without_boot() {
 async fn boot_wrong_token_forbidden_and_not_burning_valid_token() {
     let token = auth::generate_token();
     let app = router_with(state_with(tmp_dir(), Some(token.clone())));
-    let res = get(app.clone(), &format!("/auth/boot?token={token}x&next=/"), None).await;
+    let res = get(
+        app.clone(),
+        &format!("/auth/boot?token={token}x&next=/"),
+        None,
+    )
+    .await;
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
     // 错误 token 不得烧掉正确 token
     let res = get(app, &format!("/auth/boot?token={token}&next=/"), None).await;
@@ -97,10 +104,21 @@ async fn boot_success_sets_cookie_and_grants_access() {
     let token = auth::generate_token();
     let app = router_with(state_with(tmp_dir(), Some(token.clone())));
     // 引导成功：302 + Set-Cookie
-    let res = get(app.clone(), &format!("/auth/boot?token={token}&next=/"), None).await;
+    let res = get(
+        app.clone(),
+        &format!("/auth/boot?token={token}&next=/"),
+        None,
+    )
+    .await;
     assert_eq!(res.status(), StatusCode::SEE_OTHER);
     assert_eq!(res.headers().get("location").unwrap(), "/");
-    let set_cookie = res.headers().get("set-cookie").expect("set-cookie").to_str().unwrap().to_string();
+    let set_cookie = res
+        .headers()
+        .get("set-cookie")
+        .expect("set-cookie")
+        .to_str()
+        .unwrap()
+        .to_string();
     assert!(set_cookie.starts_with("dam_session="));
     assert!(set_cookie.contains("HttpOnly"));
     let cookie = set_cookie.split(';').next().unwrap().to_string();
@@ -117,7 +135,12 @@ async fn open_redirect_next_is_sanitized() {
     let token = auth::generate_token();
     let app = router_with(state_with(tmp_dir(), Some(token.clone())));
     // 站外 next 被归一为 "/"
-    let res = get(app, &format!("/auth/boot?token={token}&next=https://evil.example"), None).await;
+    let res = get(
+        app,
+        &format!("/auth/boot?token={token}&next=https://evil.example"),
+        None,
+    )
+    .await;
     assert_eq!(res.headers().get("location").unwrap(), "/");
 }
 

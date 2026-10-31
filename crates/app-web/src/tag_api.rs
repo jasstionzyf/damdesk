@@ -1,3 +1,4 @@
+#![allow(non_snake_case)] // 本模块 DTO 字段 = 前端 JSON camelCase 契约，勿改
 //! W4 打标 API：模板打标队列（dam-ai /v1/tagging 默认 + 可切 provider）+ 自定义打标任务。
 //!
 //! 复用 svc-pipeline：模板队列 `job_queue(kind='tag')`、自定义任务队列
@@ -766,6 +767,7 @@ pub struct ReviewSelection {
     pub all: bool,
 }
 
+#[allow(clippy::result_large_err)] // 错误即 Response（axum handler 惯例）
 fn validate_selection(req: &ReviewSelection) -> Result<(), axum::response::Response> {
     if !req.all && req.assetIds.is_empty() {
         return Err(err(

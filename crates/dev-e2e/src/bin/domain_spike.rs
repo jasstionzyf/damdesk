@@ -36,6 +36,7 @@ fn env_or(k: &str, d: &str) -> String {
         .unwrap_or_else(|| d.to_string())
 }
 
+#[allow(dead_code)] // 保留：spike 桩 env 读取器
 fn env_opt(k: &str) -> Option<String> {
     std::env::var(k).ok()
 }
@@ -205,7 +206,12 @@ fn main() {
     let pack = core_config::Pack::from_dir(&pack_dir).expect("pack 装载失败（lint 不过）");
 
     // 4) 入队 + 真跑
-    let out_s = db.parent().unwrap().join("fixes").to_string_lossy().to_string();
+    let out_s = db
+        .parent()
+        .unwrap()
+        .join("fixes")
+        .to_string_lossy()
+        .to_string();
     std::fs::create_dir_all(&out_s).ok();
     let mut asset_jobs = 0usize;
     let mut group_jobs = 0usize;

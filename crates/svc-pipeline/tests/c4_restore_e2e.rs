@@ -48,7 +48,8 @@ fn models_root() -> Option<PathBuf> {
             if !ok {
                 return None;
             }
-            let root = std::env::temp_dir().join(format!("dam-c4-models-root-{}", std::process::id()));
+            let root =
+                std::env::temp_dir().join(format!("dam-c4-models-root-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&root);
             std::fs::create_dir_all(root.join("models")).unwrap();
             for m in ["u2net", "realesr-general-x4v3", "lama-fp32"] {
@@ -72,6 +73,7 @@ fn write_jpg(path: &Path, w: u32, h: u32, paint: impl Fn(u32, u32) -> [u8; 3]) {
 }
 
 /// 灰底 220 + 中央暗色主体（u2net 显著性应收敛到主体）。
+#[allow(dead_code)] // 保留：掩码夹具桩（当前断言路径未消费）
 fn gray_with_subject(path: &Path, w: u32, h: u32) {
     write_jpg(path, w, h, |x, y| {
         let in_subject = x > w / 4 && x < w * 3 / 4 && y > h / 4 && y < h * 3 / 4;
@@ -138,10 +140,19 @@ fn replace_bg_fixer_chain_with_real_u2net() {
         return;
     };
     let ctx = Ctx::new("rb");
-    let id = ctx.add_asset("IMG_bg.jpg", |x, y| {
-        let subject = x > 80 && x < 240 && y > 60 && y < 180;
-        if subject { [40, 40, 45] } else { [220, 220, 220] }
-    }, 320, 240);
+    let id = ctx.add_asset(
+        "IMG_bg.jpg",
+        |x, y| {
+            let subject = x > 80 && x < 240 && y > 60 && y < 180;
+            if subject {
+                [40, 40, 45]
+            } else {
+                [220, 220, 220]
+            }
+        },
+        320,
+        240,
+    );
     let pack = core_config::Pack::from_yaml_strs(
         "c4-rb",
         "category: [x]\n",
@@ -158,7 +169,13 @@ fn replace_bg_fixer_chain_with_real_u2net() {
     )
     .unwrap();
     let out_dir = ctx.dir.join("out");
-    compliance_enq(&ctx.conn, &[id], pack.id.as_str(), Some(&out_dir.to_string_lossy())).unwrap();
+    compliance_enq(
+        &ctx.conn,
+        &[id],
+        pack.id.as_str(),
+        Some(&out_dir.to_string_lossy()),
+    )
+    .unwrap();
     let cancel = AtomicBool::new(false);
     let report = run_compliance_queue(&ctx.conn, &pack, &cancel, &mut |_| {}).expect("run");
     assert_eq!(report.done, 1, "{report:?}");
@@ -188,9 +205,12 @@ fn upscale_fixer_chain_with_real_x4v3() {
         return;
     };
     let ctx = Ctx::new("up");
-    let id = ctx.add_asset("IMG_small.jpg", |x, y| {
-        [((x * 7 + y * 3) % 200 + 40) as u8, 90, 120]
-    }, 200, 200);
+    let id = ctx.add_asset(
+        "IMG_small.jpg",
+        |x, y| [((x * 7 + y * 3) % 200 + 40) as u8, 90, 120],
+        200,
+        200,
+    );
     let pack = core_config::Pack::from_yaml_strs(
         "c4-up",
         "category: [x]\n",
@@ -207,7 +227,13 @@ fn upscale_fixer_chain_with_real_x4v3() {
     )
     .unwrap();
     let out_dir = ctx.dir.join("out");
-    compliance_enq(&ctx.conn, &[id], pack.id.as_str(), Some(&out_dir.to_string_lossy())).unwrap();
+    compliance_enq(
+        &ctx.conn,
+        &[id],
+        pack.id.as_str(),
+        Some(&out_dir.to_string_lossy()),
+    )
+    .unwrap();
     let cancel = AtomicBool::new(false);
     let report = run_compliance_queue(&ctx.conn, &pack, &cancel, &mut |_| {}).expect("run");
     assert_eq!(report.done, 1, "{report:?}");
@@ -222,7 +248,10 @@ fn upscale_fixer_chain_with_real_x4v3() {
     assert_eq!(ev["fix"]["output"]["width"], 800);
     assert_eq!(ev["fix"]["output"]["height"], 800);
     let fixed = ev["fix"]["output"]["path"].as_str().unwrap().to_string();
-    assert_eq!(core_media::image_size(Path::new(&fixed)).unwrap(), (800, 800));
+    assert_eq!(
+        core_media::image_size(Path::new(&fixed)).unwrap(),
+        (800, 800)
+    );
 }
 
 #[test]
@@ -232,10 +261,19 @@ fn inpaint_do_step_paste_back_with_real_lama() {
     };
     let ctx = Ctx::new("ip");
     // 均匀亮底 + 中央红块（box 覆盖红块；lama 补回亮底）
-    let id = ctx.add_asset("IMG_red.jpg", |x, y| {
-        let red = x > 96 && x < 160 && y > 96 && y < 160;
-        if red { [200, 30, 30] } else { [235, 235, 232] }
-    }, 256, 256);
+    let id = ctx.add_asset(
+        "IMG_red.jpg",
+        |x, y| {
+            let red = x > 96 && x < 160 && y > 96 && y < 160;
+            if red {
+                [200, 30, 30]
+            } else {
+                [235, 235, 232]
+            }
+        },
+        256,
+        256,
+    );
     let pack = core_config::Pack::from_yaml_strs(
         "c4-ip",
         "category: [x]\n",
@@ -249,7 +287,13 @@ recheck_max: 1
     )
     .unwrap();
     let out_dir = ctx.dir.join("out");
-    compliance_enq(&ctx.conn, &[id], pack.id.as_str(), Some(&out_dir.to_string_lossy())).unwrap();
+    compliance_enq(
+        &ctx.conn,
+        &[id],
+        pack.id.as_str(),
+        Some(&out_dir.to_string_lossy()),
+    )
+    .unwrap();
     let cancel = AtomicBool::new(false);
     let report = run_compliance_queue(&ctx.conn, &pack, &cancel, &mut |_| {}).expect("run");
     if report.done != 1 {
@@ -284,7 +328,11 @@ recheck_max: 1
     // paste-back：掩码外保真（角落 = 原色 ±3；buffer 级逐字节保真由 engine-restore
     // smoke 断言，此处产物经 JPEG 重编码有 ±1 量级 codec 抖动）
     let corner = ((8 * w + 8) as usize) * 3;
-    for (got, expect) in [(px[corner], 235u8), (px[corner + 1], 235), (px[corner + 2], 232)] {
+    for (got, expect) in [
+        (px[corner], 235u8),
+        (px[corner + 1], 235),
+        (px[corner + 2], 232),
+    ] {
         assert!(
             (i32::from(got) - i32::from(expect)).abs() <= 3,
             "掩码外必须保真: 角落=({}, {}, {}) 原色≈(235,235,232)",

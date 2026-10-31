@@ -26,7 +26,9 @@ fn main() {
         };
         let p = &path.to_string_lossy().to_string();
         let (w, h, px) = core_media::rgb8(std::path::Path::new(p)).expect("decode");
-        let (Ok(w), Ok(h)) = (u32::try_from(w), u32::try_from(h)) else { continue };
+        let (Ok(w), Ok(h)) = (u32::try_from(w), u32::try_from(h)) else {
+            continue;
+        };
         if resized {
             println!("[resized] {p}: {w}x{h}");
         }
@@ -56,10 +58,8 @@ fn main() {
         let mut edge_fg = 0usize;
         for y in 0..hu {
             for x in 0..wu {
-                if x < b || y < b || x >= wu - b || y >= hu - b {
-                    if exp[y * wu + x] == 255 {
-                        edge_fg += 1;
-                    }
+                if (x < b || y < b || x >= wu - b || y >= hu - b) && exp[y * wu + x] == 255 {
+                    edge_fg += 1;
                 }
             }
         }

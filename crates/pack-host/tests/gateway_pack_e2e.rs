@@ -57,7 +57,8 @@ fn install_models_root() -> Option<PathBuf> {
                 return None;
             }
             // 一次性建在固定的临时根（不再每次重建）：pid 隔离并发跑的不同测试进程
-            let root = std::env::temp_dir().join(format!("pack-host-e2e-models-{}", std::process::id()));
+            let root =
+                std::env::temp_dir().join(format!("pack-host-e2e-models-{}", std::process::id()));
             std::fs::create_dir_all(root.join("models")).unwrap();
             for name in needed {
                 #[cfg(unix)]
@@ -117,7 +118,9 @@ fn pack_cfg(gw: &Gateway, work: &Path) -> PackHostConfig {
 }
 
 fn start_gateway(work: &Path) -> Gateway {
-    let manifest = pack_host::load_pack(&repo_root().join(GOOD_PACK)).expect("参考包 manifest").0;
+    let manifest = pack_host::load_pack(&repo_root().join(GOOD_PACK))
+        .expect("参考包 manifest")
+        .0;
     Gateway::start(
         GatewayConfig::from_manifest(&manifest, work)
             .with_token("e2e-token")
@@ -228,15 +231,20 @@ fn real_models_serve_detect_endpoints() {
     assert!(bx1 < bx2 && by1 < by2, "框退化：{bbox:?}");
     assert!(bx2 <= 600 && by2 <= 400, "框越界：{bbox:?}");
     let dominant = bbox_body["dominant_bbox"].as_array().expect("主主体框");
-    assert!(dominant[0].as_u64() >= bbox[0].as_u64() && dominant[2].as_u64() <= bbox[2].as_u64(),
-            "主主体框必须落在全掩码框内：{bbox:?} vs {dominant:?}");
+    assert!(
+        dominant[0].as_u64() >= bbox[0].as_u64() && dominant[2].as_u64() <= bbox[2].as_u64(),
+        "主主体框必须落在全掩码框内：{bbox:?} vs {dominant:?}"
+    );
     // 窗：贴主体、落在画布内、占比接近目标（网格级误差）
     let window = &bbox_body["window"];
     assert!(window.is_object(), "给 target_ratio 必须回窗：{bbox_body}");
     let win = window["box"].as_array().expect("window.box");
     let (wx1, wy1) = (win[0].as_u64().unwrap(), win[1].as_u64().unwrap());
     let (wx2, wy2) = (win[2].as_u64().unwrap(), win[3].as_u64().unwrap());
-    assert!(wx1 < wx2 && wy1 < wy2 && wx2 <= 600 && wy2 <= 400, "窗越界：{win:?}");
+    assert!(
+        wx1 < wx2 && wy1 < wy2 && wx2 <= 600 && wy2 <= 400,
+        "窗越界：{win:?}"
+    );
     let win_ratio = window["ratio"].as_f64().expect("window.ratio");
     eprintln!(
         "detect/bbox 实测：fg={same_ratio:.4} bbox={bbox:?} dominant={dominant:?} window={win:?} window_ratio={win_ratio:.4}"
@@ -248,7 +256,8 @@ fn real_models_serve_detect_endpoints() {
     // 主体（若真探测到）必须整块落在窗内：这是 KI-24 的验收口径
     if same_ratio > 0.0 {
         assert!(
-            dominant[0].as_u64().unwrap() >= wx1 && dominant[1].as_u64().unwrap() >= wy1
+            dominant[0].as_u64().unwrap() >= wx1
+                && dominant[1].as_u64().unwrap() >= wy1
                 && dominant[2].as_u64().unwrap() <= wx2
                 && dominant[3].as_u64().unwrap() <= wy2,
             "窗必须覆盖主主体紧框：win={win:?} dominant={dominant:?}"
@@ -328,8 +337,8 @@ fn real_plugin_judge_and_repair_through_real_gateway() {
     std::fs::create_dir_all(&work).unwrap();
     let gw = start_gateway(&work);
 
-    let host = PackHost::open(repo_root().join(GOOD_PACK), pack_cfg(&gw, &work))
-        .expect("打开参考包失败");
+    let host =
+        PackHost::open(repo_root().join(GOOD_PACK), pack_cfg(&gw, &work)).expect("打开参考包失败");
 
     // --- judge（只走 io.read 的 A2 规则：与模型无关，任何机器都必须成立）---
     let big = dir.path().join("main_1600x1600.png");
@@ -404,7 +413,9 @@ fn real_plugin_judge_and_repair_through_real_gateway() {
     // 参考实现：crop 1000x1000 → letterbox ratio=1（不变）→ upscale ×2 = 2000x2000
     assert_eq!((w, h), (2000, 2000), "闭环几何尺寸不对：{path:?}");
     assert!(repair_dir.join("A2_min_short_side-1-crop.png").is_file());
-    assert!(repair_dir.join("A2_min_short_side-2-letterbox.png").is_file());
+    assert!(repair_dir
+        .join("A2_min_short_side-2-letterbox.png")
+        .is_file());
     assert_eq!(out["verdicts"][0]["fixed"], true);
     host.shutdown();
 
@@ -493,9 +504,13 @@ fn conformance_suite_passes_against_real_gateway() {
     );
 
     // 真网关侧账本：参考包 judge 时按 job 上报（check 02~10 都跑过 judge）
-    assert!(
-        !gw.emit_jobs().is_empty(),
-        "真网关没有收到任何 report/emit，插件没走网关"
-    );
+    // 无模型降级跑法：A4/A5 在 /detect/* 处 capability_missing，judge 到不了 emit，
+    // 账本必然为空 → 该断言只在有模型（judge 完整跑完）时才有意义（同上文 only 口径）。
+    if has_models {
+        assert!(
+            !gw.emit_jobs().is_empty(),
+            "真网关没有收到任何 report/emit，插件没走网关"
+        );
+    }
     gw.stop();
 }

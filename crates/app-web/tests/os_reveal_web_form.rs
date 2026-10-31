@@ -49,7 +49,9 @@ async fn post(app: &axum::Router, body: Value) -> (u16, Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -64,7 +66,9 @@ async fn caps(app: &axum::Router) -> Value {
         )
         .await
         .unwrap();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     serde_json::from_slice(&raw).unwrap()
 }
 
@@ -88,7 +92,12 @@ async fn reveal_gate_matches_capabilities_open_in_os() {
         // 桌面形态（workspace 构建特性统一）：库内路径必须真的走到执行器
         assert_eq!(status, 200, "能力位为真时不该被门控：{body}");
         assert_eq!(body["ok"], json!(true));
-        let plans = PLANS.lock().unwrap().iter().filter(|p| p.path == path).count();
+        let plans = PLANS
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|p| p.path == path)
+            .count();
         assert_eq!(plans, 1, "执行器应被调一次");
     } else {
         // 容器形态：400 feature_disabled，人话同 featureReasons.openInOS，且零系统调用
@@ -96,7 +105,11 @@ async fn reveal_gate_matches_capabilities_open_in_os() {
         assert_eq!(body["code"], json!("feature_disabled"));
         let reason = caps["featureReasons"]["openInOS"].as_str().unwrap();
         assert!(reason.contains("系统文件管理器"), "特征原因口径：{reason}");
-        assert_eq!(body["error"], json!(reason), "接口文案与能力位原因必须同一句");
+        assert_eq!(
+            body["error"],
+            json!(reason),
+            "接口文案与能力位原因必须同一句"
+        );
         assert!(
             PLANS.lock().unwrap().iter().all(|p| p.path != path),
             "容器形态不得尝试系统调用"

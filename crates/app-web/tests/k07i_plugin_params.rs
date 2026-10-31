@@ -18,7 +18,9 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -39,7 +41,9 @@ async fn post(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_json::Va
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
@@ -90,13 +94,17 @@ async fn schema_endpoint_returns_declared_schema_for_official_pack() {
     );
     let schema = &st["schema"];
     assert_eq!(schema["schemaVersion"], 1, "{st}");
-    let props = schema["properties"].as_object().expect("properties 必须是对象");
+    let props = schema["properties"]
+        .as_object()
+        .expect("properties 必须是对象");
     assert!(props.contains_key("shortSideMin"), "{schema}");
     assert_eq!(props["shortSideMin"]["default"], 1600);
     assert_eq!(props["shortSideMin"]["type"], "integer");
     // 分组也要透出来（界面靠它分区 + 高级折叠）
     let groups = schema["groups"].as_array().expect("groups 必须是数组");
-    assert!(groups.iter().any(|g| g["key"] == "adv" && g["collapsed"] == true));
+    assert!(groups
+        .iter()
+        .any(|g| g["key"] == "adv" && g["collapsed"] == true));
     let _ = dir;
 }
 
@@ -180,7 +188,10 @@ async fn schema_endpoint_rejects_pack_whose_identity_does_not_match() {
     assert_eq!(code, 404, "{st}");
     assert_eq!(st["error"], "plugin_not_found", "{st}");
     assert!(
-        st["message"].as_str().unwrap().contains("com.example.actual"),
+        st["message"]
+            .as_str()
+            .unwrap()
+            .contains("com.example.actual"),
         "错误里要说清解析到的是哪个包：{st}"
     );
 }
@@ -205,7 +216,10 @@ async fn judge_rejects_invalid_params_before_enqueue() {
     }
     assert_eq!(code, 400, "{st}");
     assert_eq!(st["error"], "params_type", "{st}");
-    assert!(st["message"].as_str().unwrap().contains("shortSideMin"), "{st}");
+    assert!(
+        st["message"].as_str().unwrap().contains("shortSideMin"),
+        "{st}"
+    );
 
     // b) 越界
     let (code, st) = post(
@@ -255,7 +269,10 @@ async fn judge_rejects_invalid_params_before_enqueue() {
     )
     .await;
     assert_eq!(code, 400, "{st}");
-    assert_ne!(st["error"], "already_running", "参数错误不许占用 running 槽：{st}");
+    assert_ne!(
+        st["error"], "already_running",
+        "参数错误不许占用 running 槽：{st}"
+    );
 }
 
 /// 5：legacy 引擎不消费 options —— 带了也不 400（协议 v1.1 的 body 兼容）。

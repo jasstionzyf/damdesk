@@ -165,10 +165,7 @@ fn two_tasks_over_images_tag_and_filter_names() {
         .unwrap()
         .map(|r| r.unwrap())
         .collect();
-    assert!(
-        vals.contains(&"拍摄地点-海边_日落".to_string()),
-        "{vals:?}"
-    );
+    assert!(vals.contains(&"拍摄地点-海边_日落".to_string()), "{vals:?}");
     assert!(
         !vals.contains(&"海边_日落".to_string()),
         "裸值不进 tag：{vals:?}"

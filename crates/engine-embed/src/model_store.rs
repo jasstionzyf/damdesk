@@ -207,6 +207,8 @@ pub fn manifest_for(name: &str) -> Option<ModelManifest> {
 }
 
 /// 单文件实测状态。
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FileCheck {
     pub name: String,
@@ -222,6 +224,8 @@ pub struct FileCheck {
 }
 
 /// 下载/校验事件（上层转成 app 事件推前端）。
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DownloadEvent {
     /// downloading / verifying / skipped / done / failed
@@ -237,6 +241,8 @@ pub struct DownloadEvent {
 }
 
 /// 下载结果汇总。
+// totalBytes 同为线上 camelCase 契约字段。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct DownloadOutcome {
     pub model: String,

@@ -22,16 +22,100 @@ use rusqlite::Connection;
 
 /// 夹具：5+ 条历史判定行（覆盖四种旧判定词），外加其它列的真实取值（证据/修复/组键/包来源），
 /// 迁移后这些列必须逐字不变 —— 只拆判定词，不动业务数据。
-const SEED: &[(i64, &str, &str, &str, f64, &str, Option<&str>, Option<&str>)] = &[
+type ColsRow = (i64, Option<String>, Option<String>, Option<String>);
+
+type SeedRow = (
+    i64,
+    &'static str,
+    &'static str,
+    &'static str,
+    f64,
+    &'static str,
+    Option<&'static str>,
+    Option<&'static str>,
+);
+const SEED: &[SeedRow] = &[
     // (assetId, ruleId, 旧 result, packId, confidence, evidence, fixAction, groupKey)
-    (101, "R1_size", "pass", "com.soujpg.pack.ecommerce", 0.93, r#"{"min":800}"#, None, None),
-    (102, "R1_size", "fail", "com.soujpg.pack.ecommerce", 0.88, r#"{"w":640}"#, None, None),
-    (103, "R1_size", "undetermined", "com.soujpg.pack.ecommerce", 1.0, r#"{"reason":"vl_timeout"}"#, None, None),
-    (104, "R1_size", "skipped", "com.soujpg.pack.ecommerce", 1.0, r#"{"reason":"depends_on"}"#, None, None),
-    (105, "R2_white_bg", "pass", "com.soujpg.pack.ecommerce", 0.75, r#"{"dev":0.02}"#, None, None),
-    (106, "R2_white_bg", "fail", "com.soujpg.pack.ecommerce", 0.66, r#"{"dev":0.31}"#, Some("bg_replace"), None),
-    (201, "G1_dup", "undetermined", "com.soujpg.pack.realestate", 0.5, r#"{"reason":"group_key_missing"}"#, None, Some("/房源/房间A")),
-    (202, "G1_dup", "pass", "com.soujpg.pack.realestate", 0.99, r#"{"dup":1}"#, None, Some("/房源/房间B")),
+    (
+        101,
+        "R1_size",
+        "pass",
+        "com.soujpg.pack.ecommerce",
+        0.93,
+        r#"{"min":800}"#,
+        None,
+        None,
+    ),
+    (
+        102,
+        "R1_size",
+        "fail",
+        "com.soujpg.pack.ecommerce",
+        0.88,
+        r#"{"w":640}"#,
+        None,
+        None,
+    ),
+    (
+        103,
+        "R1_size",
+        "undetermined",
+        "com.soujpg.pack.ecommerce",
+        1.0,
+        r#"{"reason":"vl_timeout"}"#,
+        None,
+        None,
+    ),
+    (
+        104,
+        "R1_size",
+        "skipped",
+        "com.soujpg.pack.ecommerce",
+        1.0,
+        r#"{"reason":"depends_on"}"#,
+        None,
+        None,
+    ),
+    (
+        105,
+        "R2_white_bg",
+        "pass",
+        "com.soujpg.pack.ecommerce",
+        0.75,
+        r#"{"dev":0.02}"#,
+        None,
+        None,
+    ),
+    (
+        106,
+        "R2_white_bg",
+        "fail",
+        "com.soujpg.pack.ecommerce",
+        0.66,
+        r#"{"dev":0.31}"#,
+        Some("bg_replace"),
+        None,
+    ),
+    (
+        201,
+        "G1_dup",
+        "undetermined",
+        "com.soujpg.pack.realestate",
+        0.5,
+        r#"{"reason":"group_key_missing"}"#,
+        None,
+        Some("/房源/房间A"),
+    ),
+    (
+        202,
+        "G1_dup",
+        "pass",
+        "com.soujpg.pack.realestate",
+        0.99,
+        r#"{"dup":1}"#,
+        None,
+        Some("/房源/房间B"),
+    ),
 ];
 
 fn main() {
@@ -60,7 +144,10 @@ fn main() {
     let pre = pre_rows(&conn).unwrap_or_else(|e| fail(&format!("读迁移前快照失败：{e}")));
     println!("[db]   {db}");
     println!("[pre ] version={pre_version} rows={}", pre.len());
-    println!("[pre ] dist(旧 result)={}", dist_str(&pre.iter().map(|r| r.1.clone()).collect::<Vec<_>>()));
+    println!(
+        "[pre ] dist(旧 result)={}",
+        dist_str(&pre.iter().map(|r| r.1.clone()).collect::<Vec<_>>())
+    );
     for r in pre.iter().take(5) {
         println!("[pre ] assetId={} ruleId={} result={}", r.3, r.2, r.1);
     }
@@ -76,7 +163,9 @@ fn main() {
     let d2 = print_run("run2", &conn, &run2);
 
     if run1.1 != run2.1 || d1 != d2 {
-        fail(&format!("幂等失败：两遍行内容不同（{d1:016x} vs {d2:016x}）"));
+        fail(&format!(
+            "幂等失败：两遍行内容不同（{d1:016x} vs {d2:016x}）"
+        ));
     }
     println!("[idem ] 两次 digest 一致：{d1:016x}");
 
@@ -138,11 +227,9 @@ fn main() {
     }
 
     // ---- 其它业务列逐字不变 ----
-    let cols: Vec<(i64, Option<String>, Option<String>, Option<String>)> = {
+    let cols: Vec<ColsRow> = {
         let mut stmt = conn
-            .prepare(
-                "SELECT id, evidence, fixAction, groupKey FROM rule_verdict ORDER BY id",
-            )
+            .prepare("SELECT id, evidence, fixAction, groupKey FROM rule_verdict ORDER BY id")
             .expect("prepare");
         let it = stmt
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
@@ -156,7 +243,11 @@ fn main() {
     println!(
         "[keep ] evidence/fixAction/groupKey 行数={}（搬迁不动业务列；夹具校验 {}）",
         cols.len(),
-        if seed { "通过" } else { "跳过（非夹具库）" }
+        if seed {
+            "通过"
+        } else {
+            "跳过（非夹具库）"
+        }
     );
 
     // ---- schema 落地证据 ----
@@ -245,14 +336,16 @@ fn prepare_legacy(conn: &Connection) {
         )
         .unwrap_or_else(|e| fail(&format!("插历史判定行失败：{e}")));
     }
-    println!("[seed ] 0027 形态夹具就绪：{} 行历史判定（pass/fail/undetermined/skipped 全覆盖）", SEED.len());
+    println!(
+        "[seed ] 0027 形态夹具就绪：{} 行历史判定（pass/fail/undetermined/skipped 全覆盖）",
+        SEED.len()
+    );
 }
 
 /// 迁移前快照：(id, 旧判定词, ruleId, assetId)，按 id 升序。
 fn pre_rows(conn: &Connection) -> rusqlite::Result<Vec<(i64, String, String, i64)>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, result, ruleId, assetId FROM rule_verdict ORDER BY id",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT id, result, ruleId, assetId FROM rule_verdict ORDER BY id")?;
     let it = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
     it.collect()
 }
@@ -267,7 +360,8 @@ fn snapshot(conn: &Connection) -> rusqlite::Result<(usize, String)> {
     let mut lines: Vec<String> = Vec::new();
     let rows = stmt.query_map([], |r| {
         let s = |i: usize| -> rusqlite::Result<String> {
-            Ok(r.get::<_, Option<String>>(i)?.unwrap_or_else(|| "<null>".into()))
+            Ok(r.get::<_, Option<String>>(i)?
+                .unwrap_or_else(|| "<null>".into()))
         };
         let f = |i: usize| -> rusqlite::Result<String> {
             Ok(r.get::<_, Option<f64>>(i)?

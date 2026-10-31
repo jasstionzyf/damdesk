@@ -51,9 +51,15 @@ async fn send(app: &axum::Router, method: &str, uri: &str, body: Option<Value>) 
         }
         None => Body::empty(),
     };
-    let res = app.clone().oneshot(builder.body(body).unwrap()).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(builder.body(body).unwrap())
+        .await
+        .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 24).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 24)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -82,7 +88,10 @@ fn build_archive_as(out_dir: &Path, id: &str) -> PathBuf {
                 .expect("相对路径")
                 .to_string_lossy()
                 .replace('\\', "/");
-            if rel.split('/').any(|part| part == "tests" || part == "__pycache__") {
+            if rel
+                .split('/')
+                .any(|part| part == "tests" || part == "__pycache__")
+            {
                 continue;
             }
             if path.is_dir() {
@@ -94,7 +103,10 @@ fn build_archive_as(out_dir: &Path, id: &str) -> PathBuf {
     }
     walk(&src, &src, &mut entries);
     entries.sort_by(|a, b| a.0.cmp(&b.0));
-    assert!(entries.iter().any(|(n, _)| n == "manifest.json"), "归档必须含 manifest.json");
+    assert!(
+        entries.iter().any(|(n, _)| n == "manifest.json"),
+        "归档必须含 manifest.json"
+    );
     if id != PACK_ID {
         let pos = entries
             .iter()
@@ -166,14 +178,18 @@ async fn install_then_schema_endpoint_and_plugin_list() {
     assert_eq!(body["version"], "1.0.0", "{body}");
 
     // ---- schema 接口（卡面要求「贴原文」：整段打到 stdout，报告里粘的就是它）
-    let (code, schema_body) = send(&app, "GET", &format!("/api/plugins/{PACK_ID}/schema"), None).await;
+    let (code, schema_body) =
+        send(&app, "GET", &format!("/api/plugins/{PACK_ID}/schema"), None).await;
     assert_eq!(code, 200, "schema 接口失败：{schema_body}");
     println!(
         "---- GET /api/plugins/{PACK_ID}/schema ----\n{}",
         serde_json::to_string_pretty(&schema_body).unwrap()
     );
     assert_eq!(schema_body["pluginId"], PACK_ID);
-    assert_eq!(schema_body["declared"], true, "必须声明参数 schema：{schema_body}");
+    assert_eq!(
+        schema_body["declared"], true,
+        "必须声明参数 schema：{schema_body}"
+    );
     assert_eq!(schema_body["schemaFile"], "resources/params.schema.json");
     assert_eq!(
         schema_body["pluginHash"].as_str().map(str::len),
@@ -190,14 +206,25 @@ async fn install_then_schema_endpoint_and_plugin_list() {
         .iter()
         .map(|g| g["key"].as_str().unwrap_or(""))
         .collect();
-    assert_eq!(groups, vec!["basic", "geometry", "codec", "overlay"], "{schema_body}");
+    assert_eq!(
+        groups,
+        vec!["basic", "geometry", "codec", "overlay"],
+        "{schema_body}"
+    );
 
     // 动作参数：六个动作、默认 resize（装配层「一个插件多动作」的入口）
     let action = &schema["properties"]["action"];
     assert_eq!(action["type"], "enum", "{action}");
     assert_eq!(
         action["options"],
-        serde_json::json!(["resize", "crop", "convert", "compress", "watermark", "rename"]),
+        serde_json::json!([
+            "resize",
+            "crop",
+            "convert",
+            "compress",
+            "watermark",
+            "rename"
+        ]),
         "{action}"
     );
     assert_eq!(action["default"], "resize");
@@ -229,7 +256,10 @@ async fn install_then_schema_endpoint_and_plugin_list() {
     assert_eq!(code, 200, "{list}");
     let rows = imaging_entries(&list);
     assert_eq!(rows.len(), 1, "列表里应只有一个 imaging 包：{list}");
-    assert_eq!(rows[0]["currentVersion"], "1.0.0", "activate=true 后应生效：{list}");
+    assert_eq!(
+        rows[0]["currentVersion"], "1.0.0",
+        "activate=true 后应生效：{list}"
+    );
     assert_eq!(present_versions(&list), vec!["1.0.0"], "{list}");
 }
 
@@ -240,7 +270,13 @@ async fn uninstall_and_reinstall_round_trip() {
     let archive = build_archive(&dir);
     assert_eq!(install(&app, &archive).await.0, 200);
 
-    let (code, body) = send(&app, "DELETE", &format!("/api/compliance/packs/{PACK_ID}"), None).await;
+    let (code, body) = send(
+        &app,
+        "DELETE",
+        &format!("/api/compliance/packs/{PACK_ID}"),
+        None,
+    )
+    .await;
     assert_eq!(code, 200, "卸载失败：{body}");
     let (_, list) = send(&app, "GET", "/api/compliance/packs", None).await;
     assert!(
@@ -258,12 +294,17 @@ async fn uninstall_and_reinstall_round_trip() {
     // 重装
     let (code, body) = install(&app, &archive).await;
     assert_eq!(code, 200, "重装失败：{body}");
-    let (code, schema_body) = send(&app, "GET", &format!("/api/plugins/{PACK_ID}/schema"), None).await;
+    let (code, schema_body) =
+        send(&app, "GET", &format!("/api/plugins/{PACK_ID}/schema"), None).await;
     assert_eq!(code, 200, "重装后 schema 打不开：{schema_body}");
     assert_eq!(schema_body["declared"], true);
     let (_, list) = send(&app, "GET", "/api/compliance/packs", None).await;
     assert_eq!(imaging_entries(&list).len(), 1, "{list}");
-    assert_eq!(present_versions(&list), vec!["1.0.0"], "重装后应真的有该版本：{list}");
+    assert_eq!(
+        present_versions(&list),
+        vec!["1.0.0"],
+        "重装后应真的有该版本：{list}"
+    );
     let _ = builtin_hash;
 }
 
@@ -286,11 +327,21 @@ async fn uninstall_then_schema_404_for_non_builtin_id() {
     assert_eq!(body["pluginId"], SIDE_ID, "{body}");
     assert_eq!(body["declared"], true, "{body}");
 
-    let (code, body) = send(&app, "DELETE", &format!("/api/compliance/packs/{SIDE_ID}"), None).await;
+    let (code, body) = send(
+        &app,
+        "DELETE",
+        &format!("/api/compliance/packs/{SIDE_ID}"),
+        None,
+    )
+    .await;
     assert_eq!(code, 200, "卸载失败：{body}");
 
     let (code, body) = send(&app, "GET", &format!("/api/plugins/{SIDE_ID}/schema"), None).await;
-    assert_eq!(code, StatusCode::NOT_FOUND.as_u16(), "卸载后 schema 应 404：{body}");
+    assert_eq!(
+        code,
+        StatusCode::NOT_FOUND.as_u16(),
+        "卸载后 schema 应 404：{body}"
+    );
 
     // 重装仍可用
     let (code, body) = install(&app, &archive).await;
@@ -318,10 +369,16 @@ async fn install_rejected_when_host_lacks_u2net() {
     assert_eq!(code, 400, "宿主能力不齐必须拒装：{body}");
     assert_eq!(body["error"], "pack_capability_missing", "{body}");
     assert!(
-        body["message"].as_str().unwrap_or("").contains("detect.u2net"),
+        body["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("detect.u2net"),
         "拒装理由必须点名缺哪个能力：{body}"
     );
     // 拒装后列表里不该有它（不许「装了但跑不了」）
     let (_, list) = send(&app, "GET", "/api/compliance/packs", None).await;
-    assert!(present_versions(&list).is_empty(), "拒装后不该有已安装版本：{list}");
+    assert!(
+        present_versions(&list).is_empty(),
+        "拒装后不该有已安装版本：{list}"
+    );
 }

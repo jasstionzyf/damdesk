@@ -120,15 +120,15 @@ fn stem_vector(stem: &str) -> Vec<f32> {
         .take_while(|c| c.is_ascii_digit())
         .collect();
     let n: usize = digits.parse().unwrap_or(63);
-    let suffix = stem.chars().rev().next().unwrap_or('x');
-    let v = match (prefix, suffix) {
+    let suffix = stem.chars().next_back().unwrap_or('x');
+
+    match (prefix, suffix) {
         (b'g', _) => unit(30 + (n % 30)),
         (b'n', _) => unit(n % DIMS as usize),
         (b'v', 'a') => unit(10 + (n % 20)),
         (b'v', _) => perturbed(10 + (n % 20), 45 + (n % 10), 0.33),
         _ => unit(63),
-    };
-    v
+    }
 }
 
 struct FakeEmbed {
@@ -205,7 +205,7 @@ fn perturbed(base: usize, noise: usize, eps: f32) -> Vec<f32> {
 fn gen_fixtures(dir: &Path) -> std::io::Result<Vec<String>> {
     std::fs::create_dir_all(dir)?;
     let mut names = Vec::new();
-    let mut save = |name: String, color: Rgb<u8>, corner: u8, names: &mut Vec<String>| {
+    let save = |name: String, color: Rgb<u8>, corner: u8, names: &mut Vec<String>| {
         let mut img = RgbImage::from_pixel(64, 64, color);
         img.put_pixel(0, 0, Rgb([corner, corner, corner]));
         img.save(dir.join(format!("{name}.png"))).unwrap();
@@ -438,7 +438,9 @@ fn run(work: &Path, keep: bool) -> Result<Vec<String>, Box<dyn Error>> {
         &fix_dir.join("n01b.png"),
         5,
         &Default::default(),
-        &SimilarOptions { min_score: Some(0.0) },
+        &SimilarOptions {
+            min_score: Some(0.0),
+        },
     )?;
     println!(
         "  以图搜图 n01b.png top3 = {:?}",
@@ -462,7 +464,9 @@ fn run(work: &Path, keep: bool) -> Result<Vec<String>, Box<dyn Error>> {
         aid,
         5,
         &Default::default(),
-        &SimilarOptions { min_score: Some(0.0) },
+        &SimilarOptions {
+            min_score: Some(0.0),
+        },
     )?;
     println!(
         "  找相似 n01a top5 = {:?}",

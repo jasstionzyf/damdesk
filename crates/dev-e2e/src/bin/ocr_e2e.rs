@@ -8,7 +8,9 @@
 use std::path::Path;
 
 fn main() {
-    let corpus = std::env::args().nth(1).unwrap_or_else(|| "/tmp/ocr-corpus".into());
+    let corpus = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "/tmp/ocr-corpus".into());
     let dir = std::env::temp_dir().join(format!("dam-ocr-e2e-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("mkdir");
 
@@ -35,32 +37,47 @@ fn main() {
     let mut steps = Vec::new();
     let report = svc_pipeline::run_ocr_queue(&conn, &cancel, &mut |p| steps.push(p.status.clone()))
         .expect("run ocr queue");
-    println!("report: processed={} done={} failed={} skipped={}", report.processed, report.done, report.failed, report.skipped);
+    println!(
+        "report: processed={} done={} failed={} skipped={}",
+        report.processed, report.done, report.failed, report.skipped
+    );
     assert_eq!(report.done, 3, "三张全部成功");
     assert_eq!(report.failed, 0);
 
     // 3) 校验落库文本
-    let mut hits = 0;
     for (i, id) in asset_ids.iter().enumerate() {
         let text: String = conn
-            .query_row("SELECT ocr_text FROM assets WHERE assetId = ?1", [id], |r| r.get(0))
+            .query_row(
+                "SELECT ocr_text FROM assets WHERE assetId = ?1",
+                [id],
+                |r| r.get(0),
+            )
             .expect("ocr_text");
-        println!("asset {id} ({}):\n---\n{text}\n---", ["cn.png", "en.png", "mixed.png"][i]);
-        if !text.trim().is_empty() {
-            hits += 1;
-        }
+        println!(
+            "asset {id} ({}):\n---\n{text}\n---",
+            ["cn.png", "en.png", "mixed.png"][i]
+        );
         assert!(!text.trim().is_empty(), "asset {id} ocr_text 为空");
     }
     // 关键字断言（识别质量锚点）
     let all: String = asset_ids
         .iter()
         .map(|id| {
-            conn.query_row("SELECT ocr_text FROM assets WHERE assetId = ?1", [id], |r| r.get::<_, String>(0))
-                .unwrap_or_default()
+            conn.query_row(
+                "SELECT ocr_text FROM assets WHERE assetId = ?1",
+                [id],
+                |r| r.get::<_, String>(0),
+            )
+            .unwrap_or_default()
         })
         .collect::<Vec<_>>()
         .join("\n");
-    for kw in ["数字资产管理", "Digital Asset Management", "DAMDesk", "Model Release"] {
+    for kw in [
+        "数字资产管理",
+        "Digital Asset Management",
+        "DAMDesk",
+        "Model Release",
+    ] {
         assert!(all.contains(kw), "OCR 文本缺少关键字: {kw}\n{all}");
     }
 

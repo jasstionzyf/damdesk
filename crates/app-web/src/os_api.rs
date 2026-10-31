@@ -243,7 +243,11 @@ pub fn check_shape(path: &Path) -> Result<(), RevealError> {
 /// 3. `roots` 中的导出目录同样按子树放行（导出目录里的产物要能 reveal）。
 ///
 /// 比较用 `canonicalize`（存在时）消除 `//`、符号链接差异；不存在时按原样比。
-pub fn check_whitelist(path: &Path, roots: &[PathBuf], exact: &[PathBuf]) -> Result<(), RevealError> {
+pub fn check_whitelist(
+    path: &Path,
+    roots: &[PathBuf],
+    exact: &[PathBuf],
+) -> Result<(), RevealError> {
     let cand = canon_or_self(path);
     if roots.iter().any(|r| {
         let root = canon_or_self(r);
@@ -281,15 +285,19 @@ fn norm_key(s: &str) -> String {
 
 /// 从 DB 采集白名单：库根 + 导出目标（`job_queue kind='export'` 最近 100 条的 payload.dest）
 /// + 该路径恰好等于某个资产 absPath 的精确命中（回收站项/失联项可能已不在任何根下）。
-pub fn allowlist(conn: &rusqlite::Connection, data_dir: &Path, path: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
+pub fn allowlist(
+    conn: &rusqlite::Connection,
+    data_dir: &Path,
+    path: &str,
+) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let roots = svc_library::capabilities::library_roots(conn, data_dir);
 
     let mut exact: Vec<PathBuf> = Vec::new();
     // ① 导出目标（dest 可能是目录，也可能是 zip 文件路径）——按子树放行
     let mut export_roots: Vec<PathBuf> = Vec::new();
-    if let Ok(mut stmt) = conn.prepare(
-        "SELECT payload FROM job_queue WHERE kind='export' ORDER BY id DESC LIMIT 100",
-    ) {
+    if let Ok(mut stmt) =
+        conn.prepare("SELECT payload FROM job_queue WHERE kind='export' ORDER BY id DESC LIMIT 100")
+    {
         if let Ok(rows) = stmt.query_map([], |r| r.get::<_, Option<String>>(0)) {
             for payload in rows.flatten().flatten() {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&payload) {
@@ -336,7 +344,10 @@ fn spawn_runner(plan: &RevealPlan) -> Result<(), String> {
 
 fn runner() -> MutexGuard<'static, Runner> {
     static RUNNER: OnceLock<Mutex<Runner>> = OnceLock::new();
-    RUNNER.get_or_init(|| Mutex::new(spawn_runner)).lock().unwrap()
+    RUNNER
+        .get_or_init(|| Mutex::new(spawn_runner))
+        .lock()
+        .unwrap()
 }
 
 /// 测试钩子：替换执行器（避免真的拉起 Finder/Explorer）。
@@ -488,7 +499,12 @@ mod tests {
         assert!(check_whitelist(&root.join("a.jpg"), &roots, &[]).is_ok());
         assert!(check_whitelist(&root, &roots, &[]).is_ok());
 
-        for outside in ["/etc", "/etc/passwd", "C:\\Windows", "C:\\Windows\\System32"] {
+        for outside in [
+            "/etc",
+            "/etc/passwd",
+            "C:\\Windows",
+            "C:\\Windows\\System32",
+        ] {
             let e = check_whitelist(Path::new(outside), &roots, &[]).unwrap_err();
             assert_eq!(e.code, "path_not_allowed", "应拒绝 {outside}");
             assert_eq!(e.status, StatusCode::BAD_REQUEST);
@@ -503,7 +519,7 @@ mod tests {
             "path_not_allowed"
         );
         // 精确白名单（导出目标/资产 absPath）放行
-        assert!(check_whitelist(&sibling, &roots, &[sibling.clone()]).is_ok());
+        assert!(check_whitelist(&sibling, &roots, std::slice::from_ref(&sibling)).is_ok());
     }
 
     /// 判定顺序与门控：容器形态（is_desktop=false）→ feature_disabled；
@@ -520,33 +536,64 @@ mod tests {
         };
 
         // 容器形态：库内路径 → feature_disabled（文案与 featureReasons.openInOS 同一句）
-        let e = decide(&req(file.to_str().unwrap(), None), false, &roots, &[], PlanOs::Other)
-            .unwrap_err();
+        let e = decide(
+            &req(file.to_str().unwrap(), None),
+            false,
+            &roots,
+            &[],
+            PlanOs::Other,
+        )
+        .unwrap_err();
         assert_eq!(e.code, "feature_disabled");
         assert!(e.message.contains("系统文件管理器"));
 
         // 桌面形态：库内文件 → reveal 计划
-        let plan = decide(&req(file.to_str().unwrap(), Some("reveal")), true, &roots, &[], PlanOs::Other)
-            .unwrap();
+        let plan = decide(
+            &req(file.to_str().unwrap(), Some("reveal")),
+            true,
+            &roots,
+            &[],
+            PlanOs::Other,
+        )
+        .unwrap();
         assert_eq!(plan.mode, Mode::Reveal);
         assert_eq!(plan.args, vec![root.to_string_lossy().to_string()]);
 
         // 库外路径：两形态都 path_not_allowed（白名单先于门控）
         for desktop in [true, false] {
-            let e = decide(&req("/etc/passwd", None), desktop, &roots, &[], PlanOs::Other).unwrap_err();
+            let e = decide(
+                &req("/etc/passwd", None),
+                desktop,
+                &roots,
+                &[],
+                PlanOs::Other,
+            )
+            .unwrap_err();
             assert_eq!(e.code, "path_not_allowed");
         }
 
         // 不存在路径（桌面形态、库内）→ 409 path_missing
         let gone = root.join("gone.jpg");
-        let e = decide(&req(gone.to_str().unwrap(), None), true, &roots, &[], PlanOs::Other)
-            .unwrap_err();
+        let e = decide(
+            &req(gone.to_str().unwrap(), None),
+            true,
+            &roots,
+            &[],
+            PlanOs::Other,
+        )
+        .unwrap_err();
         assert_eq!(e.code, "path_missing");
         assert_eq!(e.status, StatusCode::CONFLICT);
 
         // 非法 mode → bad_mode
-        let e = decide(&req(file.to_str().unwrap(), Some("explode")), true, &roots, &[], PlanOs::Other)
-            .unwrap_err();
+        let e = decide(
+            &req(file.to_str().unwrap(), Some("explode")),
+            true,
+            &roots,
+            &[],
+            PlanOs::Other,
+        )
+        .unwrap_err();
         assert_eq!(e.code, "bad_mode");
     }
 

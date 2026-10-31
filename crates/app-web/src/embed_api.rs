@@ -129,12 +129,21 @@ fn enqueue_scope(
 ///
 /// 报错文案带上「塔写死、不可替换」的口径，避免把 engine-embed 的
 /// 「改选 openai_compat 远程端点」建议误读成「判重塔可以换」。
-fn build_dedup(models_root: &Path, conn: &rusqlite::Connection) -> Result<Arc<dyn EmbedProvider>, String> {
+fn build_dedup(
+    models_root: &Path,
+    conn: &rusqlite::Connection,
+) -> Result<Arc<dyn EmbedProvider>, String> {
     let reg = infer::registry()?;
     let settings = infer::load_settings(conn);
-    let hint = "（判重塔写死不可选，需 local-infer 构建 + 本地模型文件；job 留队列，环境就绪后可续跑）";
-    let mut p = engine_embed::factory::build_dedup_embedder(&reg, &settings, models_root)
-        .map_err(|e| format!("去重塔（{}）装配失败：{e}{hint}", core_config::DEDUP_EMBEDDER))?;
+    let hint =
+        "（判重塔写死不可选，需 local-infer 构建 + 本地模型文件；job 留队列，环境就绪后可续跑）";
+    let mut p =
+        engine_embed::factory::build_dedup_embedder(&reg, &settings, models_root).map_err(|e| {
+            format!(
+                "去重塔（{}）装配失败：{e}{hint}",
+                core_config::DEDUP_EMBEDDER
+            )
+        })?;
     p.load().map_err(|e| {
         format!(
             "去重塔（{}）加载失败：{e}{hint}",
@@ -178,7 +187,11 @@ fn record_tower_failure(state: &AppState, scope: EmbedScope, model: String, msg:
 }
 
 /// 顺序消费给定塔（provider 已装配）：每塔独立记录 report，失败只影响自己。
-fn consume_towers(state: &AppState, conn: &rusqlite::Connection, built: Vec<(EmbedScope, Arc<dyn EmbedProvider>)>) {
+fn consume_towers(
+    state: &AppState,
+    conn: &rusqlite::Connection,
+    built: Vec<(EmbedScope, Arc<dyn EmbedProvider>)>,
+) {
     for (scope, provider) in built {
         if state.embed.cancel.load(Ordering::SeqCst) {
             break;
@@ -190,7 +203,13 @@ fn consume_towers(state: &AppState, conn: &rusqlite::Connection, built: Vec<(Emb
             let mut progress = |p: core_types::EmbedProgress| {
                 *state.embed.progress.lock().unwrap() = Some(p);
             };
-            svc_pipeline::run_embed_queue(conn, provider.as_ref(), scope, cancel.as_ref(), &mut progress)
+            svc_pipeline::run_embed_queue(
+                conn,
+                provider.as_ref(),
+                scope,
+                cancel.as_ref(),
+                &mut progress,
+            )
         };
         match res {
             Ok(rep) => {
@@ -230,11 +249,21 @@ fn spawn_embed_job(state: AppState, built: Vec<(EmbedScope, Arc<dyn EmbedProvide
 }
 
 /// 启动嵌入任务：入队 → 装配 provider → spawn_blocking 消费，返回各塔入队数。
+/// 双塔装配结果：(成功塔, 失败原因)。
+type BuiltTowers = (
+    Vec<(EmbedScope, Arc<dyn EmbedProvider>)>,
+    Vec<(EmbedScope, String)>,
+);
+
 pub async fn start(State(state): State<AppState>, Json(req): Json<StartReq>) -> impl IntoResponse {
     let mode = req.mode.unwrap_or_else(|| "pending".into());
     let scope_s = req.scope.unwrap_or_else(|| "semantic".into());
     if !matches!(mode.as_str(), "pending" | "all" | "backfill") {
-        return err(StatusCode::BAD_REQUEST, "bad_mode", format!("未知 mode: {mode}"));
+        return err(
+            StatusCode::BAD_REQUEST,
+            "bad_mode",
+            format!("未知 mode: {mode}"),
+        );
     }
     let towers = match towers_of(&scope_s) {
         Ok(t) => t,
@@ -285,28 +314,26 @@ pub async fn start(State(state): State<AppState>, Json(req): Json<StartReq>) -> 
     // 装配 provider（失败回滚 running，把原因回给前端）。双塔模式下只有全部塔都装配失败才算请求失败。
     let st = state.clone();
     let want = towers.clone();
-    let built = tokio::task::spawn_blocking(
-        move || -> (Vec<(EmbedScope, Arc<dyn EmbedProvider>)>, Vec<(EmbedScope, String)>) {
-            let mut ok = Vec::new();
-            let mut bad = Vec::new();
-            match core_storage::open(&infer::db_path(&st.data_dir)) {
-                Ok(conn) => {
-                    for scope in want {
-                        match build_tower(&st, &conn, scope) {
-                            Ok(p) => ok.push((scope, p)),
-                            Err(m) => bad.push((scope, m)),
-                        }
-                    }
-                }
-                Err(e) => {
-                    for scope in want {
-                        bad.push((scope, format!("open db: {e}")));
+    let built = tokio::task::spawn_blocking(move || -> BuiltTowers {
+        let mut ok = Vec::new();
+        let mut bad = Vec::new();
+        match core_storage::open(&infer::db_path(&st.data_dir)) {
+            Ok(conn) => {
+                for scope in want {
+                    match build_tower(&st, &conn, scope) {
+                        Ok(p) => ok.push((scope, p)),
+                        Err(m) => bad.push((scope, m)),
                     }
                 }
             }
-            (ok, bad)
-        },
-    )
+            Err(e) => {
+                for scope in want {
+                    bad.push((scope, format!("open db: {e}")));
+                }
+            }
+        }
+        (ok, bad)
+    })
     .await;
 
     let (built, bad) = match built {

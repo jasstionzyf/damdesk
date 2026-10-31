@@ -76,9 +76,7 @@ pub fn trim_dir_sep(s: &str) -> &str {
 pub fn is_abs_dir(p: &str) -> bool {
     p.starts_with('/')
         || p.starts_with('\\')
-        || (p.len() >= 3
-            && p.as_bytes()[1] == b':'
-            && matches!(p.as_bytes()[2], b'\\' | b'/'))
+        || (p.len() >= 3 && p.as_bytes()[1] == b':' && matches!(p.as_bytes()[2], b'\\' | b'/'))
 }
 
 #[cfg(test)]
@@ -88,8 +86,14 @@ mod path_helper_tests {
     #[test]
     fn parent_dir_is_separator_agnostic() {
         assert_eq!(parent_dir_any_sep("/a/b/c.jpg"), Some("/a/b"));
-        assert_eq!(parent_dir_any_sep(r"D:\pics\2024\a.jpg"), Some(r"D:\pics\2024"));
-        assert_eq!(parent_dir_any_sep(r"\\srv\share\a.jpg"), Some(r"\\srv\share"));
+        assert_eq!(
+            parent_dir_any_sep(r"D:\pics\2024\a.jpg"),
+            Some(r"D:\pics\2024")
+        );
+        assert_eq!(
+            parent_dir_any_sep(r"\\srv\share\a.jpg"),
+            Some(r"\\srv\share")
+        );
         assert_eq!(parent_dir_any_sep("no-sep.jpg"), None);
         // 根下文件：父目录是空串，调用方负责归到根
         assert_eq!(parent_dir_any_sep(r"D:\a.jpg"), Some("D:"));
@@ -391,7 +395,9 @@ pub fn camera_models(conn: &Connection, limit: u32) -> Result<Vec<(String, i64)>
          ORDER BY n DESC, cameraModel
          LIMIT ?1",
     )?;
-    let rows = stmt.query_map([limit], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+    let rows = stmt.query_map([limit], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+    })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
@@ -461,8 +467,8 @@ pub fn tag_candidates(
     let limit = limit.clamp(1, 200);
     let offset = offset.max(0);
     let norm = |s: &str| core_types::normalize_tag_query(s).to_ascii_lowercase();
-    let key_norm = key.map(|k| norm(k)).filter(|s| !s.is_empty());
-    let prefix_norm = prefix.map(|p| norm(p)).filter(|s| !s.is_empty());
+    let key_norm = key.map(norm).filter(|s| !s.is_empty());
+    let prefix_norm = prefix.map(norm).filter(|s| !s.is_empty());
     // 每个条件 → 半开区间 [lo, hi)；key 追加 `-` 后成前缀区间。求交后单对边界一次下发。
     let mut ranges: Vec<(String, String)> = Vec::new();
     if let Some(k) = &key_norm {
@@ -848,7 +854,9 @@ fn merge_plan(
         }
     }
     if srcs.is_empty() {
-        return Err(LibraryError::Invalid("至少选择一个与目标值不同的标签".into()));
+        return Err(LibraryError::Invalid(
+            "至少选择一个与目标值不同的标签".into(),
+        ));
     }
     // 受影响资产数（去重、仅在库）——确认框与上限都用这个数
     let affected = {
@@ -858,11 +866,9 @@ fn merge_plan(
              CROSS JOIN assets a ON a.assetId = t.assetId AND a.deleted = 0
              WHERE t.value IN ({ph})"
         );
-        conn.query_row(
-            &sql,
-            rusqlite::params_from_iter(srcs.iter()),
-            |r| r.get::<_, i64>(0),
-        )?
+        conn.query_row(&sql, rusqlite::params_from_iter(srcs.iter()), |r| {
+            r.get::<_, i64>(0)
+        })?
     };
     if affected > TAG_MERGE_MAX_ASSETS {
         return Err(LibraryError::Invalid(format!(
@@ -906,11 +912,7 @@ pub fn tag_merge_preview(
 /// - **不动 `tag_result`**（打标任务结果留档，合并只改标签实体）；
 /// - 上限 `TAG_MERGE_MAX_ASSETS` 张（超限返回 Invalid，前端提示分批）；
 /// - **不提供撤销**（裁决 2026-10-20）。
-pub fn tag_merge(
-    conn: &Connection,
-    sources: &[String],
-    to: &str,
-) -> Result<TagMergeOutcome> {
+pub fn tag_merge(conn: &Connection, sources: &[String], to: &str) -> Result<TagMergeOutcome> {
     let (kept, srcs, affected, _planned_removed) = merge_plan(conn, sources, to)?;
     let tx = conn.unchecked_transaction()?;
     let now: i64 = tx.query_row("SELECT unixepoch()", [], |r| r.get(0))?;
@@ -1054,7 +1056,10 @@ pub fn stats(conn: &Connection) -> Result<LibraryStats> {
     )?;
     // D3 无法预览：与 /api/library/assets?broken=1 同一段条件（单一口径，不另算一套）
     let broken = conn.query_row(
-        &format!("SELECT COUNT(*) FROM assets a WHERE a.deleted=0 AND {}", BROKEN_COND),
+        &format!(
+            "SELECT COUNT(*) FROM assets a WHERE a.deleted=0 AND {}",
+            BROKEN_COND
+        ),
         [],
         |r| r.get(0),
     )?;
@@ -1069,12 +1074,10 @@ pub fn stats(conn: &Connection) -> Result<LibraryStats> {
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     // 核查新鲜度：记录缺失（老库/从未核查）或解析失败 → 视为过期，不阻断统计本身
-    let check: Option<core_types::MissingCheckRecord> = core_storage::settings::get_json(
-        conn,
-        core_types::MISSING_CHECK_KEY,
-    )
-    .ok()
-    .flatten();
+    let check: Option<core_types::MissingCheckRecord> =
+        core_storage::settings::get_json(conn, core_types::MISSING_CHECK_KEY)
+            .ok()
+            .flatten();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -1230,9 +1233,7 @@ mod tests {
         // title_ch 中文字面
         assert_eq!(by("雪山"), vec![1]);
         // 描述 + 大小写不敏感（LIKE 默认 ASCII nocase）
-        assert_eq!(by("snow"),
-            vec![2],
-            "英文描述应命中且大小写不敏感");
+        assert_eq!(by("snow"), vec![2], "英文描述应命中且大小写不敏感");
         assert_eq!(by("SNOW MOUNTAIN"), vec![2]);
         // 文件名子串
         assert_eq!(by("x3.jpg"), vec![3]);
@@ -1422,7 +1423,10 @@ mod tests {
         fuse_ocr_text(&c, &mut hits, "发票", 10).unwrap();
         assert_eq!(hits.len(), 1);
         assert!(hits[0].ocrMatched, "字面命中必须标记 ocrMatched");
-        assert!((hits[0].score - OCR_FUSION_SCORE).abs() < 1e-6, "弱语义抬到融合分");
+        assert!(
+            (hits[0].score - OCR_FUSION_SCORE).abs() < 1e-6,
+            "弱语义抬到融合分"
+        );
         assert_eq!(hits[0].ocrSnippet.as_deref(), Some("发票号 8891"));
 
         // 语义一个都没召回：字面命中要能补入（此前 `resources` 表名错误导致静默丢弃）
@@ -1430,7 +1434,10 @@ mod tests {
         seed_ocr(&c2, &["数字资产管理平台", "授权书 模板"]);
         let mut hits = vec![hit(1, 0.9), hit(9, 0.8)];
         fuse_ocr_text(&c2, &mut hits, "授权书", 10).unwrap();
-        let added = hits.iter().find(|h| h.assetId == 2).expect("字面独有命中必须补入");
+        let added = hits
+            .iter()
+            .find(|h| h.assetId == 2)
+            .expect("字面独有命中必须补入");
         assert!(added.ocrMatched);
         assert!((added.score - OCR_FUSION_SCORE).abs() < 1e-6);
         assert_eq!(added.ocrSnippet.as_deref(), Some("授权书 模板"));
@@ -1448,7 +1455,11 @@ mod tests {
         fuse_ocr_text(&c, &mut hits, "发票 报销", 10).unwrap();
         assert_eq!(hits.len(), 2);
         // 全命中：0.35；部分命中（2 个 term 命中 1 个）：0.35 × 0.6 × 1/2
-        assert!((hits[0].score - OCR_FUSION_SCORE).abs() < 1e-6, "{:?}", hits[0]);
+        assert!(
+            (hits[0].score - OCR_FUSION_SCORE).abs() < 1e-6,
+            "{:?}",
+            hits[0]
+        );
         assert!((hits[1].score - OCR_FUSION_SCORE * OCR_PARTIAL_FACTOR * 0.5).abs() < 1e-6);
         assert!(hits.iter().all(|h| h.ocrMatched));
     }
@@ -1511,11 +1522,19 @@ mod tests {
 
     #[test]
     fn ocr_snippet_windows_and_keeps_original_case() {
-        let long_line = format!("{}发票号 A-001 合计 1200 元{}", "前".repeat(60), "后".repeat(200));
+        let long_line = format!(
+            "{}发票号 A-001 合计 1200 元{}",
+            "前".repeat(60),
+            "后".repeat(200)
+        );
         let s = ocr_snippet(&long_line, &["发票".to_string()]).unwrap();
         assert!(s.starts_with('…'), "长行左侧截断要带省略号：{s}");
         assert!(s.ends_with('…'), "长行右侧截断要带省略号");
-        assert!(s.chars().count() <= OCR_SNIPPET_CHARS + 2, "窗口不超过 {} 字符", OCR_SNIPPET_CHARS);
+        assert!(
+            s.chars().count() <= OCR_SNIPPET_CHARS + 2,
+            "窗口不超过 {} 字符",
+            OCR_SNIPPET_CHARS
+        );
         assert!(s.contains("发票号 A-001"));
 
         // 第二个匹配行（第一行不含 term）
@@ -1524,7 +1543,10 @@ mod tests {
         assert_eq!(s, "第二行 Management 授权", "大小写折叠定位，但返回原文");
 
         // 找不到 term → 回退首行；空文本 → None
-        assert_eq!(ocr_snippet("只有这行", &["不存在".to_string()]).unwrap(), "只有这行");
+        assert_eq!(
+            ocr_snippet("只有这行", &["不存在".to_string()]).unwrap(),
+            "只有这行"
+        );
         assert!(ocr_snippet("   \n\n", &["x".to_string()]).is_none());
     }
 }
@@ -1555,17 +1577,12 @@ mod tests {
 ///   匹配命中保持 43/46；0.090 → 保持 41/46。取 **0.085**（漏出清零优先，
 ///   保留率 93%）。被 0.085 滤掉的 3 条全是中文短查询（中文侧 cos 系统性比英文
 ///   低 0.02~0.03），由混合字面召回通道兜底（见 [`fuse_literal_text`]）。
+///
 /// 要放宽/关闭用 `TextSearchOptions.min_score`（Some(0.0)=不过滤）。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TextSearchOptions {
     /// 相关性下限；None = 用 [`DEFAULT_TEXT_MIN_SCORE`]，Some(0.0) = 关闭。
     pub min_score: Option<f32>,
-}
-
-impl Default for TextSearchOptions {
-    fn default() -> Self {
-        Self { min_score: None }
-    }
 }
 
 /// 语义相关性下限（cos）。定标过程与依据见 [`TextSearchOptions`] 文档与
@@ -1672,7 +1689,9 @@ fn fill_ocr_snippets(
         return Ok(());
     }
     let texts: std::collections::HashMap<i64, String> =
-        core_storage::ocr_index::texts(conn, &need)?.into_iter().collect();
+        core_storage::ocr_index::texts(conn, &need)?
+            .into_iter()
+            .collect();
     for hit in hits.iter_mut() {
         if hit.ocrMatched {
             hit.ocrSnippet = texts.get(&hit.assetId).and_then(|t| ocr_snippet(t, terms));
@@ -1943,7 +1962,7 @@ fn window(chars: &[char], start: usize, end: usize) -> String {
     if lead > 0 {
         s.push('…');
     }
-    s.extend(chars[lead..tail].iter().collect::<String>().trim().chars());
+    s.push_str(chars[lead..tail].iter().collect::<String>().trim());
     if tail < chars.len() {
         s.push('…');
     }
@@ -1982,16 +2001,10 @@ pub fn similar_min_score_calibrated(model: &str) -> bool {
 }
 
 /// 以图搜图选项（形态与 [`TextSearchOptions`] 一致）。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SimilarOptions {
     /// 相关性下限；None = 用 [`default_similar_min_score`]（按模型标定），Some(0.0) = 关闭。
     pub min_score: Option<f32>,
-}
-
-impl Default for SimilarOptions {
-    fn default() -> Self {
-        Self { min_score: None }
-    }
 }
 
 impl SimilarOptions {
@@ -2026,14 +2039,8 @@ pub fn search_by_image_path(
         .into_iter()
         .next()
         .ok_or_else(|| LibraryError::Embed(engine_embed::EmbedError::BatchSize(1, 0)))?;
-    let mut hits = engine_search::search_by_vector(
-        conn,
-        &spec.name,
-        spec.dims as usize,
-        &qvec,
-        k,
-        filter,
-    )?;
+    let mut hits =
+        engine_search::search_by_vector(conn, &spec.name, spec.dims as usize, &qvec, k, filter)?;
     // 相关性下限（TEXT-EMBED-1 的同款裁决，作用于 image 相似度）：低分命中当"没有相似图"。
     // 库内资产查询时自身命中恒为 1.0，不受影响。
     let min = opts.effective(&spec.name);
@@ -2064,14 +2071,7 @@ pub fn find_similar(
     // G5-A：碰磁盘前先探测（相似图重算 = 真实读原图点）——不在了 → missing=1；
     // 文件回来了 → 清标。判据与导出/原图读取同源（core_storage::presence）。
     core_storage::presence::probe_and_note(conn, asset_id, std::path::Path::new(&path));
-    Ok(search_by_image_path(
-        conn,
-        provider,
-        std::path::Path::new(&path),
-        k,
-        filter,
-        opts,
-    )?)
+    search_by_image_path(conn, provider, std::path::Path::new(&path), k, filter, opts)
 }
 
 // ---------- KI-5「精准匹配」：语义塔扩池召回 + 判重塔（DINOv3）rerank ----------
@@ -2199,7 +2199,9 @@ pub fn find_similar_precise(
     core_storage::presence::probe_and_note(conn, asset_id, std::path::Path::new(&path));
 
     let k = k.clamp(1, PRECISE_POOL_CAP);
-    let pool = k.saturating_mul(PRECISE_POOL_FACTOR).clamp(k, PRECISE_POOL_CAP);
+    let pool = k
+        .saturating_mul(PRECISE_POOL_FACTOR)
+        .clamp(k, PRECISE_POOL_CAP);
     // ① 语义塔扩池召回：显式 min_score=0（不套标定阈值），候选留给判重塔裁决
     let semantic = search_by_image_path(
         conn,
@@ -2227,13 +2229,14 @@ pub fn find_similar_precise(
     };
 
     let cand_ids: Vec<i64> = candidates.iter().map(|h| h.resourceId).collect();
-    let fetched: std::collections::HashMap<i64, Vec<f32>> = if dedup_index_ready && !cand_ids.is_empty() {
-        core_storage::vecstore::fetch_vectors(conn, dedup_model, &cand_ids)?
-            .into_iter()
-            .collect()
-    } else {
-        Default::default()
-    };
+    let fetched: std::collections::HashMap<i64, Vec<f32>> =
+        if dedup_index_ready && !cand_ids.is_empty() {
+            core_storage::vecstore::fetch_vectors(conn, dedup_model, &cand_ids)?
+                .into_iter()
+                .collect()
+        } else {
+            Default::default()
+        };
     let missing_dedup_vectors = cand_ids
         .iter()
         .filter(|rid| !fetched.contains_key(rid))
@@ -2411,7 +2414,9 @@ pub fn restore_assets_checked(conn: &Connection, asset_ids: &[i64]) -> Result<Re
     let mut rep = RestoreReport::default();
     for &id in asset_ids {
         let in_trash: Option<i64> = conn
-            .query_row("SELECT deleted FROM assets WHERE assetId = ?1", [id], |r| r.get(0))
+            .query_row("SELECT deleted FROM assets WHERE assetId = ?1", [id], |r| {
+                r.get(0)
+            })
             .map(Some)
             .or_else(|e| match e {
                 rusqlite::Error::QueryReturnedNoRows => Ok(None),
@@ -3174,7 +3179,8 @@ pub fn dup_groups(conn: &Connection) -> Result<Vec<DupGroupView>> {
 
     let engine_members: Vec<engine_dedup::DupMember> =
         rows.iter().map(|(m, _)| m.clone()).collect();
-    let legacy_groups = engine_dedup::build_dup_groups(&engine_members, engine_dedup::PHASH_THRESHOLD);
+    let legacy_groups =
+        engine_dedup::build_dup_groups(&engine_members, engine_dedup::PHASH_THRESHOLD);
 
     // 视觉判据边：只认本次可见（未删）资产之间的边
     let idx_of: std::collections::HashMap<i64, usize> = rows
@@ -3200,10 +3206,7 @@ pub fn dup_groups(conn: &Connection) -> Result<Vec<DupGroupView>> {
             for &m in &g.members[1..] {
                 dsu.union(first, m);
             }
-            legacy_kinds.push((
-                engine_members[first].asset_id,
-                g.kind.as_str().to_string(),
-            ));
+            legacy_kinds.push((engine_members[first].asset_id, g.kind.as_str().to_string()));
         }
     }
     for (ia, ib, _, _) in &visual_edges {
@@ -3226,10 +3229,7 @@ pub fn dup_groups(conn: &Connection) -> Result<Vec<DupGroupView>> {
     }
     for (ia, _, _, kind) in &visual_edges {
         let root = dsu.find(*ia);
-        kinds_by_root
-            .entry(root)
-            .or_default()
-            .insert(kind.clone());
+        kinds_by_root.entry(root).or_default().insert(kind.clone());
     }
 
     let mut out: Vec<DupGroupView> = Vec::with_capacity(buckets.len());
@@ -3364,6 +3364,7 @@ mod w5_dedup_tests {
         format!("{v:016x}")
     }
 
+    #[allow(clippy::too_many_arguments)] // 夹具全列固有宽度
     fn seed_asset(
         conn: &Connection,
         id: i64,
@@ -3498,14 +3499,29 @@ mod fs_error_classify_tests {
     #[test]
     fn classifies_known_codes_and_falls_back() {
         // Linux 原生码：EXDEV=18，EACCES=13，ENOENT=2（30=EROFS 归 read_only_fs 或 cross_device，随平台 kind 映射）
-        assert_eq!(classify_fs_error(&Error::from_raw_os_error(18)), "cross_device");
-        assert_eq!(classify_fs_error(&Error::from_raw_os_error(13)), "permission_denied");
+        assert_eq!(
+            classify_fs_error(&Error::from_raw_os_error(18)),
+            "cross_device"
+        );
+        assert_eq!(
+            classify_fs_error(&Error::from_raw_os_error(13)),
+            "permission_denied"
+        );
         assert_eq!(classify_fs_error(&Error::from_raw_os_error(2)), "not_found");
         let e30 = classify_fs_error(&Error::from_raw_os_error(30));
-        assert!(e30 == "read_only_fs" || e30 == "cross_device", "EROFS 归类异常：{e30}");
+        assert!(
+            e30 == "read_only_fs" || e30 == "cross_device",
+            "EROFS 归类异常：{e30}"
+        );
         // Windows 码（在非 Windows 平台走 raw 兜底）：17=NOT_SAME_DEVICE，5=ACCESS_DENIED
-        assert_eq!(classify_fs_error(&Error::from_raw_os_error(17)), "cross_device");
-        assert_eq!(classify_fs_error(&Error::from_raw_os_error(5)), "permission_denied");
+        assert_eq!(
+            classify_fs_error(&Error::from_raw_os_error(17)),
+            "cross_device"
+        );
+        assert_eq!(
+            classify_fs_error(&Error::from_raw_os_error(5)),
+            "permission_denied"
+        );
         // 无法归因 → other（上层原样透出）
         assert_eq!(classify_fs_error(&Error::other("boom")), "other");
     }
@@ -3591,7 +3607,11 @@ mod text_min_score_tests {
         core_storage::vecstore::upsert(
             conn,
             model,
-            &[(1, &qvec), (2, &[0.0, 1.0, 0.0, 0.0]), (3, &[0.6, 0.8, 0.0, 0.0])],
+            &[
+                (1, &qvec),
+                (2, &[0.0, 1.0, 0.0, 0.0]),
+                (3, &[0.6, 0.8, 0.0, 0.0]),
+            ],
         )
         .unwrap();
         qvec
@@ -3601,7 +3621,10 @@ mod text_min_score_tests {
     fn default_min_score_filters_noise_but_keeps_real_matches() {
         let conn = open_db();
         let qvec = seed_vectors(&conn);
-        let p = FixedTextProvider { spec: mock_spec(), qvec };
+        let p = FixedTextProvider {
+            spec: mock_spec(),
+            qvec,
+        };
         let hits = search_by_text(
             &conn,
             &p,
@@ -3622,14 +3645,19 @@ mod text_min_score_tests {
     fn min_score_zero_disables_filter() {
         let conn = open_db();
         let qvec = seed_vectors(&conn);
-        let p = FixedTextProvider { spec: mock_spec(), qvec };
+        let p = FixedTextProvider {
+            spec: mock_spec(),
+            qvec,
+        };
         let hits = search_by_text(
             &conn,
             &p,
             "狗",
             10,
             &SearchFilter::default(),
-            &TextSearchOptions { min_score: Some(0.0) },
+            &TextSearchOptions {
+                min_score: Some(0.0),
+            },
         )
         .unwrap();
         assert_eq!(hits.len(), 3, "关闭阈值后正交向量也应返回");
@@ -3639,14 +3667,19 @@ mod text_min_score_tests {
     fn high_min_score_yields_explicit_empty() {
         let conn = open_db();
         let qvec = seed_vectors(&conn);
-        let p = FixedTextProvider { spec: mock_spec(), qvec };
+        let p = FixedTextProvider {
+            spec: mock_spec(),
+            qvec,
+        };
         let hits = search_by_text(
             &conn,
             &p,
             "狗",
             10,
             &SearchFilter::default(),
-            &TextSearchOptions { min_score: Some(0.9) },
+            &TextSearchOptions {
+                min_score: Some(0.9),
+            },
         )
         .unwrap();
         // 只剩同向那条（cos=1.0 ≥ 0.9）；0.6 与 0.0 被滤掉
@@ -3659,7 +3692,9 @@ mod text_min_score_tests {
             "狗",
             10,
             &SearchFilter::default(),
-            &TextSearchOptions { min_score: Some(1.5) },
+            &TextSearchOptions {
+                min_score: Some(1.5),
+            },
         )
         .unwrap();
         assert!(none.is_empty());
@@ -3730,7 +3765,11 @@ mod similar_min_score_tests {
         core_storage::vecstore::upsert(
             conn,
             model,
-            &[(1, &qvec), (2, &[0.0, 1.0, 0.0, 0.0]), (3, &[0.6, 0.8, 0.0, 0.0])],
+            &[
+                (1, &qvec),
+                (2, &[0.0, 1.0, 0.0, 0.0]),
+                (3, &[0.6, 0.8, 0.0, 0.0]),
+            ],
         )
         .unwrap();
         qvec
@@ -3770,7 +3809,10 @@ mod similar_min_score_tests {
         assert!((default_similar_min_score(suffixed) - 0.72).abs() < 1e-6);
         assert!(similar_min_score_calibrated(suffixed));
         // KI-3：去重塔已从标定表删除 → 带后缀写法同样是「未标定」
-        assert_eq!(default_similar_min_score("dinov3-vits16-onnx:whatever"), 0.0);
+        assert_eq!(
+            default_similar_min_score("dinov3-vits16-onnx:whatever"),
+            0.0
+        );
         // 远程未标定模型的后缀写法仍然不猜数字
         assert_eq!(
             default_similar_min_score("openai-compat-embedding:qwen3-vl-embedding-2b"),
@@ -3783,7 +3825,8 @@ mod similar_min_score_tests {
 
     #[test]
     fn effective_clamps_to_unit_range() {
-        let o = |v: Option<f32>| SimilarOptions { min_score: v }.effective("siglip2-base-p224-onnx");
+        let o =
+            |v: Option<f32>| SimilarOptions { min_score: v }.effective("siglip2-base-p224-onnx");
         assert!((o(None) - 0.72).abs() < 1e-6, "None → 标定值");
         assert_eq!(o(Some(0.0)), 0.0, "显式 0 = 关闭");
         assert_eq!(o(Some(-1.0)), 0.0, "负数钳到 0");
@@ -3886,7 +3929,8 @@ mod similar_min_score_tests {
     #[test]
     fn calibrated_model_default_drops_low_scores() {
         // 用真实标定名 → 默认下限生效（siglip2 0.72）
-        for (model, expect) in [("siglip2-base-p224-onnx", 1usize)] {
+        {
+            let (model, expect) = ("siglip2-base-p224-onnx", 1usize);
             let conn = open_db();
             let qvec = seed(&conn, model);
             let p = FixedImageProvider {
@@ -3904,7 +3948,9 @@ mod similar_min_score_tests {
             )
             .unwrap();
             assert_eq!(hits.len(), expect, "{model} 默认下限过滤后条数");
-            assert!(hits.iter().all(|h| h.score >= default_similar_min_score(model) - 1e-6));
+            assert!(hits
+                .iter()
+                .all(|h| h.score >= default_similar_min_score(model) - 1e-6));
             let _ = std::fs::remove_file(q);
         }
     }
@@ -3951,7 +3997,9 @@ mod similar_min_score_tests {
             &q,
             10,
             &SearchFilter::default(),
-            &SimilarOptions { min_score: Some(0.0) },
+            &SimilarOptions {
+                min_score: Some(0.0),
+            },
         )
         .unwrap();
         assert_eq!(off.len(), 3, "minScore=0 关闭过滤");
@@ -3961,7 +4009,9 @@ mod similar_min_score_tests {
             &q,
             10,
             &SearchFilter::default(),
-            &SimilarOptions { min_score: Some(0.5) },
+            &SimilarOptions {
+                min_score: Some(0.5),
+            },
         )
         .unwrap();
         assert_eq!(mid.len(), 2, "0.5 下限保留 1.0 与 0.6");
@@ -3971,7 +4021,9 @@ mod similar_min_score_tests {
             &q,
             10,
             &SearchFilter::default(),
-            &SimilarOptions { min_score: Some(0.99) },
+            &SimilarOptions {
+                min_score: Some(0.99),
+            },
         )
         .unwrap();
         assert_eq!(high.len(), 1, "0.99 只留同向 1.0");
@@ -3981,7 +4033,9 @@ mod similar_min_score_tests {
             &q,
             10,
             &SearchFilter::default(),
-            &SimilarOptions { min_score: Some(1.0) },
+            &SimilarOptions {
+                min_score: Some(1.0),
+            },
         )
         .unwrap();
         assert!(none.iter().all(|h| h.score >= 1.0), "1.0 只可能剩同向");
@@ -4031,7 +4085,12 @@ mod literal_fusion_tests {
         // 文件名（英文、大小写不敏感）
         let mut hits = vec![];
         fuse_literal_text(&conn, &mut hits, "skateboards", 10).unwrap();
-        assert_eq!(hits.len(), 1, "{:?}", hits.iter().map(|h| h.assetId).collect::<Vec<_>>());
+        assert_eq!(
+            hits.len(),
+            1,
+            "{:?}",
+            hits.iter().map(|h| h.assetId).collect::<Vec<_>>()
+        );
         assert_eq!(hits[0].assetId, 1);
         assert!((hits[0].score - LITERAL_FUSION_SCORE).abs() < 1e-6);
 
@@ -4156,7 +4215,8 @@ mod precise_mode_tests {
 
     /// is_file() 前置检查要真实文件（内容不参与 mock 推理）；DB 里的 absPath 必须指向它。
     fn query_file(tag: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!("dam-ki5-precise-{tag}-{}.jpg", std::process::id()));
+        let p =
+            std::env::temp_dir().join(format!("dam-ki5-precise-{tag}-{}.jpg", std::process::id()));
         std::fs::write(&p, b"not-an-image").unwrap();
         p
     }
@@ -4329,8 +4389,14 @@ mod precise_mode_tests {
         let q = query_file("querymiss");
         let conn = open_db();
         seed(&conn, &q, true);
-        conn.execute(&format!("DELETE FROM \"{}\" WHERE resourceId = 1", core_storage::vecstore::table_name(DEDUP)), [])
-            .unwrap();
+        conn.execute(
+            &format!(
+                "DELETE FROM \"{}\" WHERE resourceId = 1",
+                core_storage::vecstore::table_name(DEDUP)
+            ),
+            [],
+        )
+        .unwrap();
         let p = provider();
         let res = find_similar_precise(&conn, &p, 1, 10, &SearchFilter::default()).unwrap();
         assert!(res.query_missing_dedup_vector);
@@ -4365,8 +4431,15 @@ mod precise_mode_tests {
         let conn = open_db();
         seed(&conn, &q, true);
         let p = provider();
-        let hits = find_similar(&conn, &p, 1, 10, &SearchFilter::default(), &SimilarOptions::default())
-            .unwrap();
+        let hits = find_similar(
+            &conn,
+            &p,
+            1,
+            10,
+            &SearchFilter::default(),
+            &SimilarOptions::default(),
+        )
+        .unwrap();
         let got: Vec<(i64, f32)> = hits.iter().map(|h| (h.assetId, h.score)).collect();
         let expect = [(1i64, 1.0f32), (2, 0.71), (5, 0.70), (4, 0.60), (3, 0.50)];
         assert_eq!(got.len(), expect.len(), "默认模式不丢候选：{got:?}");
@@ -4388,7 +4461,10 @@ mod precise_mode_tests {
         seed(&conn, &q, true);
         let p = provider();
         let e = find_similar_precise(&conn, &p, 999, 10, &SearchFilter::default());
-        assert!(e.is_err(), "资产不存在必须是错误（HTTP 500/sqlite no rows），不能装成空结果");
+        assert!(
+            e.is_err(),
+            "资产不存在必须是错误（HTTP 500/sqlite no rows），不能装成空结果"
+        );
         let _ = std::fs::remove_file(q);
     }
 }
@@ -4419,7 +4495,14 @@ mod ki2b_dup_edge_tests {
             "INSERT INTO assets (assetId, absPath, missing, fileName, fileExt, fileSz, mtime,
                                  fileHash, importedAt)
              VALUES (?1, ?2, 0, ?3, 'jpg', ?4, ?5, ?6, ?1)",
-            rusqlite::params![id, format!("/a/{id}.jpg"), format!("f{id}.jpg"), sz, id, hash],
+            rusqlite::params![
+                id,
+                format!("/a/{id}.jpg"),
+                format!("f{id}.jpg"),
+                sz,
+                id,
+                hash
+            ],
         )
         .unwrap();
         conn.execute(
@@ -4500,7 +4583,10 @@ mod ki2b_dup_edge_tests {
         conn.execute("UPDATE assets SET deleted = 1 WHERE assetId = 7", [])
             .unwrap();
 
-        assert!(dup_groups(&conn).unwrap().is_empty(), "只剩 6 一张，不构成组");
+        assert!(
+            dup_groups(&conn).unwrap().is_empty(),
+            "只剩 6 一张，不构成组"
+        );
     }
 
     /// 老库（0019 未跑 / 表被清）→ 行为与升级前一致，不报错
@@ -4670,8 +4756,14 @@ mod purge_tests {
         assert_eq!(rep.not_in_trash, vec![3, 999], "未软删/不存在一律拒绝");
         assert_eq!(rep.skipped(), 2);
         // 未软删的 c 完好无损
-        assert_eq!(count(&fx.conn, "SELECT COUNT(*) FROM assets WHERE assetId=3"), 1);
-        assert_eq!(count(&fx.conn, "SELECT COUNT(*) FROM resource WHERE assetId=3"), 1);
+        assert_eq!(
+            count(&fx.conn, "SELECT COUNT(*) FROM assets WHERE assetId=3"),
+            1
+        );
+        assert_eq!(
+            count(&fx.conn, "SELECT COUNT(*) FROM resource WHERE assetId=3"),
+            1
+        );
         assert_eq!(
             count(&fx.conn, "SELECT COUNT(*) FROM tag WHERE assetId=3"),
             1,
@@ -4684,7 +4776,10 @@ mod purge_tests {
         let fx = fixture();
         assert!(fx.copyin_abs.is_file() && fx.reference_abs.is_file());
         purge_assets(&fx.conn, &fx.thumbs, &[1, 2]).unwrap();
-        assert!(!fx.copyin_abs.exists(), "copyin = 库内副本，彻底删要连原图一起删");
+        assert!(
+            !fx.copyin_abs.exists(),
+            "copyin = 库内副本，彻底删要连原图一起删"
+        );
         assert!(
             fx.reference_abs.is_file(),
             "reference = 用户原地文件，只删记录，磁盘必须不动"
@@ -4697,21 +4792,39 @@ mod purge_tests {
         assert_eq!(thumb_count(&fx, 1), 2);
         let rep = purge_assets(&fx.conn, &fx.thumbs, &[1, 2]).unwrap();
         // 库行：assets/resource/tag/job_queue 全部消失
-        assert_eq!(count(&fx.conn, "SELECT COUNT(*) FROM assets WHERE assetId IN (1,2)"), 0);
         assert_eq!(
-            count(&fx.conn, "SELECT COUNT(*) FROM resource WHERE assetId IN (1,2)"),
+            count(
+                &fx.conn,
+                "SELECT COUNT(*) FROM assets WHERE assetId IN (1,2)"
+            ),
             0
         );
-        assert_eq!(count(&fx.conn, "SELECT COUNT(*) FROM tag WHERE assetId IN (1,2)"), 0);
         assert_eq!(
-            count(&fx.conn, "SELECT COUNT(*) FROM job_queue WHERE targetId IN (1,2)"),
+            count(
+                &fx.conn,
+                "SELECT COUNT(*) FROM resource WHERE assetId IN (1,2)"
+            ),
+            0
+        );
+        assert_eq!(
+            count(&fx.conn, "SELECT COUNT(*) FROM tag WHERE assetId IN (1,2)"),
+            0
+        );
+        assert_eq!(
+            count(
+                &fx.conn,
+                "SELECT COUNT(*) FROM job_queue WHERE targetId IN (1,2)"
+            ),
             0,
             "指向被删资产的任务队列行不能留"
         );
         assert!(rep.rows >= 8, "行数如实统计，实际 {}", rep.rows);
         // 向量：两张各 1 行被清，c 那行还在
         assert_eq!(rep.vectors, 2);
-        assert_eq!(core_storage::vecstore::count(&fx.conn, fx.model).unwrap(), 1);
+        assert_eq!(
+            core_storage::vecstore::count(&fx.conn, fx.model).unwrap(),
+            1
+        );
         // 缩略图两档全删
         assert_eq!(rep.thumbs, 4, "每张 2 档，共 4 个文件");
         assert_eq!(thumb_count(&fx, 1) + thumb_count(&fx, 2), 0);
@@ -4733,7 +4846,11 @@ mod purge_tests {
         assert_eq!(first.purged, vec![1]);
         let second = purge_assets(&fx.conn, &fx.thumbs, &[1]).unwrap();
         assert!(second.purged.is_empty(), "第二次 purged 必须为 0");
-        assert_eq!(second.not_in_trash, vec![1], "已彻底删过的 id 报「不在回收站」");
+        assert_eq!(
+            second.not_in_trash,
+            vec![1],
+            "已彻底删过的 id 报「不在回收站」"
+        );
         assert_eq!(second.files_deleted, 0);
         assert_eq!(second.freed_bytes, 0);
         assert_eq!(second.vectors, 0);
@@ -4746,9 +4863,15 @@ mod purge_tests {
     fn purge_clears_ocr_index_entries() {
         let fx = fixture();
         fx.conn
-            .execute("INSERT INTO ocr_fts (rowid, grams) VALUES (1, '狗 狗狗')", [])
+            .execute(
+                "INSERT INTO ocr_fts (rowid, grams) VALUES (1, '狗 狗狗')",
+                [],
+            )
             .unwrap();
-        assert_eq!(count(&fx.conn, "SELECT COUNT(*) FROM ocr_fts WHERE rowid=1"), 1);
+        assert_eq!(
+            count(&fx.conn, "SELECT COUNT(*) FROM ocr_fts WHERE rowid=1"),
+            1
+        );
         purge_assets(&fx.conn, &fx.thumbs, &[1]).unwrap();
         assert_eq!(
             count(&fx.conn, "SELECT COUNT(*) FROM ocr_fts WHERE rowid=1"),
@@ -4907,8 +5030,11 @@ pub struct MigrateOptions {
     pub progress: Option<MigrateProgressFn>,
     /// 删源动作注入口（**仅 crate 内测试用**：容器里以 root 跑，chmod/权限造不出 unlink
     /// 失败，这条防线只能靠注入验证）。生产一律 `None` → `std::fs::remove_file`。
-    pub(crate) remove_src: Option<std::sync::Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync>>,
+    pub(crate) remove_src: Option<RemoveSrcFn>,
 }
+
+/// 删源动作注入签名（见 `MigrateSpec.remove_src`）。
+type RemoveSrcFn = std::sync::Arc<dyn Fn(&Path) -> std::io::Result<()> + Send + Sync>;
 
 /// 跳过明细。
 #[derive(Debug, Clone, serde::Serialize)]
@@ -4973,6 +5099,7 @@ pub struct MigrateAuditRow {
 struct MigrateHeader {
     abs_path: String,
     store_mode: String,
+    #[allow(dead_code)] // CSV 报告列形状保留；读侧口径不消费
     missing: i64,
     file_name: String,
     file_ext: String,
@@ -5032,9 +5159,7 @@ fn insert_audit(
         "INSERT INTO migrate_audit
              (batchId, kind, assetId, fromPath, toPath, bytes, operator, status, error, at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, unixepoch())",
-        rusqlite::params![
-            batch_id, kind, asset_id, from, to, bytes, operator, status, error
-        ],
+        rusqlite::params![batch_id, kind, asset_id, from, to, bytes, operator, status, error],
     )
 }
 
@@ -5129,7 +5254,9 @@ fn migrate_one_with(
                 format!("复制到库根失败：{e}"),
             ));
         }
-        let part_len = std::fs::metadata(&part).map(|m| m.len() as i64).unwrap_or(-1);
+        let part_len = std::fs::metadata(&part)
+            .map(|m| m.len() as i64)
+            .unwrap_or(-1);
         if part_len != src_len {
             let _ = std::fs::remove_file(&part);
             return Err((
@@ -5409,11 +5536,8 @@ mod migrate_fault_tests {
     use super::*;
 
     fn temp_dir(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!(
-            "dam-migrate-fault-{}-{}",
-            tag,
-            std::process::id()
-        ));
+        let d =
+            std::env::temp_dir().join(format!("dam-migrate-fault-{}-{}", tag, std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -5455,11 +5579,15 @@ mod migrate_fault_tests {
         assert!(w.detail.contains("删不掉源文件"), "{}", w.detail);
         // 库内那份在、形态已切、源仍保留
         let abs: String = conn
-            .query_row("SELECT absPath FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row("SELECT absPath FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert!(Path::new(&abs).is_file());
         let mode: String = conn
-            .query_row("SELECT storeMode FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row("SELECT storeMode FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(mode, "copyin");
         assert!(src.is_file(), "删不掉的部分不该假装成功");
@@ -5492,8 +5620,7 @@ mod migrate_fault_tests {
             })),
             ..Default::default()
         };
-        let rep =
-            migrate_to_library(&mut conn, &[id], &dir.join("library"), &opts).unwrap();
+        let rep = migrate_to_library(&mut conn, &[id], &dir.join("library"), &opts).unwrap();
         assert_eq!(rep.migrated, 1, "{rep:?}");
         assert_eq!(rep.warnings.len(), 1);
         assert_eq!(rep.warnings[0].asset_id, id);

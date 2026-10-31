@@ -1,3 +1,4 @@
+#![allow(non_snake_case)] // 本模块 DTO 字段 = 前端 JSON camelCase 契约，勿改
 //! C6 合规审核 API：行业包管理（内置列表 / 本地导入 / 激活切换 / 只读预览）+ 待人工队列 +
 //! 「误判」反馈（写 `rule_feedback`）+ 反馈 CSV 导出。
 //!
@@ -36,7 +37,11 @@ use crate::AppState;
 pub const PACKS_DIR: &str = "packs";
 
 fn err(status: StatusCode, code: &str, msg: impl Into<String>) -> Response {
-    (status, Json(json!({ "error": code, "message": msg.into() }))).into_response()
+    (
+        status,
+        Json(json!({ "error": code, "message": msg.into() })),
+    )
+        .into_response()
 }
 
 /// E2（卡 task）：插件装卸族沿用 **legacy 形状**（`error` 恒为码，ip_k08 断言 error==码），
@@ -134,16 +139,16 @@ impl JudgeFail {
         body.insert("error".into(), serde_json::json!(self.code));
         body.insert("message".into(), serde_json::json!(self.message));
         body.insert("code".into(), serde_json::json!(self.code));
-        if self
-            .params
-            .as_object()
-            .is_some_and(|m| !m.is_empty())
-        {
+        if self.params.as_object().is_some_and(|m| !m.is_empty()) {
             body.insert("params".into(), self.params.clone());
         }
         body.insert("hint".into(), serde_json::json!(self.hint));
         body.insert("action".into(), serde_json::json!(self.action));
-        (StatusCode::BAD_REQUEST, Json(serde_json::Value::Object(body))).into_response()
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::Value::Object(body)),
+        )
+            .into_response()
     }
 }
 
@@ -156,6 +161,7 @@ impl From<String> for JudgeFail {
 
 // ---------------------------------------------------------------- 行业元数据（插件自带）
 
+#[allow(dead_code)] // 保留：包根路径口径的单一出处，接线由后续卡使用
 fn packs_root(data_dir: &Path) -> PathBuf {
     data_dir.join(PACKS_DIR)
 }
@@ -198,7 +204,8 @@ pub fn plugin_meta_pack_checked(conn: &Connection, data_dir: &Path) -> Result<Pa
 
 /// 目录 → 元数据；失败信息带目录（排障要点名「哪个包、哪个键」）。
 fn load_meta_pack(dir: &Path) -> Result<Pack, String> {
-    Pack::from_plugin_dir(dir).map_err(|e| format!("处理插件元数据装载失败（{}）：{e}", dir.display()))
+    Pack::from_plugin_dir(dir)
+        .map_err(|e| format!("处理插件元数据装载失败（{}）：{e}", dir.display()))
 }
 
 /// 读接口降级用的宽松版本（只要规则名/阈值，不能因为坏包把整个读面打死）。
@@ -260,10 +267,7 @@ pub struct FeedbackReq {
 }
 
 /// GET /api/compliance/status —— 插件身份 + 合规状态分桶 + 反馈统计。
-pub async fn status(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn status(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     let conn = state.db.lock().await;
     // 元数据装载错误**必须到人**：顶层 `packError` + `pluginState{available:false, note}`。
     // 不能 `if let Ok` 吞成「available + 0 条规则」—— 那是「全都合格」的假通过。
@@ -277,10 +281,11 @@ pub async fn status(
         Ok(s) => s,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, "states", e.to_string()),
     };
-    let feedback = match svc_library::compliance_view::list_feedback(&conn, &pack_id, None, None, None) {
-        Ok(rows) => rows,
-        Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, "feedback", e.to_string()),
-    };
+    let feedback =
+        match svc_library::compliance_view::list_feedback(&conn, &pack_id, None, None, None) {
+            Ok(rows) => rows,
+            Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, "feedback", e.to_string()),
+        };
     let misjudged = feedback.iter().filter(|f| f.is_misjudged()).count();
     // 队列（含已处置）：total/unresolved 两个口径都给，界面才敢说"还剩几张要人看"
     let (queue_total, cards) = match svc_library::compliance_view::low_confidence_queue(
@@ -398,15 +403,20 @@ fn asset_verdict_payload(
         .iter()
         .filter(|r| r.judgement_scope.as_deref() != Some("per_group"))
         .collect();
-    let reviews = svc_library::compliance_view::ReviewIndex::load(conn, pack_id).map_err(|e| e.to_string())?;
+    let reviews = svc_library::compliance_view::ReviewIndex::load(conn, pack_id)
+        .map_err(|e| e.to_string())?;
     let machine_state = svc_library::compliance_view::state_of_verdicts(&asset_rows);
     let state_word = svc_library::compliance_view::state_of_verdicts_with(&asset_rows, &reviews);
-    let feedback = svc_library::compliance_view::list_feedback(conn, pack_id, Some(asset_id), None, None)
-        .unwrap_or_default();
+    let feedback =
+        svc_library::compliance_view::list_feedback(conn, pack_id, Some(asset_id), None, None)
+            .unwrap_or_default();
     let items: Vec<serde_json::Value> = rows
         .iter()
         .map(|r| {
-            let fb = feedback.iter().filter(|f| f.rule_id == r.rule_id).max_by_key(|f| f.id);
+            let fb = feedback
+                .iter()
+                .filter(|f| f.rule_id == r.rule_id)
+                .max_by_key(|f| f.id);
             json!({
                 "ruleId": r.rule_id,
                 // i18n-F：按请求 locale 取规则名 + 原样 i18n 对象（切语言前端即时切，不重拉）
@@ -803,7 +813,20 @@ pub async fn results(
         Ok(v) => v,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, "results", e.to_string()),
     };
-    for (asset_id, file_name, abs_path, rule_id, exec, verdict, confidence, fields, reason, ts, scope) in rows {
+    for (
+        asset_id,
+        file_name,
+        abs_path,
+        rule_id,
+        exec,
+        verdict,
+        confidence,
+        fields,
+        reason,
+        ts,
+        scope,
+    ) in rows
+    {
         let fields_json: serde_json::Value = fields
             .as_deref()
             .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
@@ -891,7 +914,6 @@ fn chain_view(raw: &str) -> serde_json::Value {
 /// 搬进行业列字典），**外加 `artifacts`**：`[{kind:"export_file", path, sha256, …}]`
 /// （处理产物唯一去处；导出/预览按它取）。`ruleId` 槽位放链的拼接（如 `resize→convert`）
 /// —— 处理行没有规则 id，但行 key 要稳定可辨识。
-
 fn process_results_view(
     conn: &Connection,
     pack_id: &str,
@@ -989,13 +1011,30 @@ fn process_results_view(
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, "results", e.to_string()),
     };
     let mut items: Vec<serde_json::Value> = Vec::new();
-    for (asset_id, file_name, abs_path, actions, result, error_message, path, sha256, bytes,
-         format, width, height, asset_name, chain, duration_ms, ts) in rows
+    for (
+        asset_id,
+        file_name,
+        abs_path,
+        actions,
+        result,
+        error_message,
+        path,
+        sha256,
+        bytes,
+        format,
+        width,
+        height,
+        asset_name,
+        chain,
+        duration_ms,
+        ts,
+    ) in rows
     {
         let chain_json: serde_json::Value = chain_view(&chain);
         // 链拼接当 ruleId 槽位（"resize" / "resize→convert"）—— 稳定可辨识的行 key
-        let action_list: Vec<String> =
-            serde_json::from_str::<Vec<String>>(&actions).ok().unwrap_or_default();
+        let action_list: Vec<String> = serde_json::from_str::<Vec<String>>(&actions)
+            .ok()
+            .unwrap_or_default();
         let rule_id = action_list.join("→");
         // 产物（仅 ok 行有）：export_file 契约（kind/path/sha256 + 尺寸格式元数据）
         let artifacts = if result == "ok" {
@@ -1102,7 +1141,7 @@ pub async fn feedback_list(
     Query(q): Query<FeedbackQuery>,
 ) -> impl IntoResponse {
     let conn = state.db.lock().await;
-        let pack_id = verdict_pack_id(&conn, &state.data_dir);
+    let pack_id = verdict_pack_id(&conn, &state.data_dir);
     match svc_library::compliance_view::list_feedback(
         &conn,
         &pack_id,
@@ -1134,8 +1173,9 @@ pub async fn feedback_list(
 /// GET /api/compliance/feedback/export —— 反馈 CSV（UTF-8 BOM，Excel 直开不乱码）。
 pub async fn feedback_export(State(state): State<AppState>) -> impl IntoResponse {
     let conn = state.db.lock().await;
-        let pack_id = verdict_pack_id(&conn, &state.data_dir);
-    let rows = match svc_library::compliance_view::list_feedback(&conn, &pack_id, None, None, None) {
+    let pack_id = verdict_pack_id(&conn, &state.data_dir);
+    let rows = match svc_library::compliance_view::list_feedback(&conn, &pack_id, None, None, None)
+    {
         Ok(r) => r,
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, "feedback", e.to_string()),
     };
@@ -1161,10 +1201,7 @@ pub async fn feedback_export(State(state): State<AppState>) -> impl IntoResponse
 ///
 /// IP-K16：旧的两族并列（内置 YAML 行业包 + 代码插件包）已收口成一族 —— 一个行业的
 /// 合规检测/处理 = 一个插件，它自带规则/词表/报告元数据。所以这里只剩插件视图。
-pub async fn pack_list(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn pack_list(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     let conn = state.db.lock().await;
     (
         StatusCode::OK,
@@ -1260,11 +1297,7 @@ fn pack_host_caps(conn: &Connection) -> Vec<String> {
 }
 
 fn pack_db_err(e: impl std::fmt::Display) -> (StatusCode, &'static str, String) {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "packs_db",
-        e.to_string(),
-    )
+    (StatusCode::INTERNAL_SERVER_ERROR, "packs_db", e.to_string())
 }
 
 fn install_status(e: &pack_host::RegistryError) -> StatusCode {
@@ -1371,8 +1404,12 @@ fn pack_display_meta(
         Ok((m, _)) => (
             json!(m.short_label(locale)),
             json!(m.summary_text(locale)),
-            m.label_i18n().map(|t| json!(t)).unwrap_or(serde_json::Value::Null),
-            m.summary_i18n().map(|t| json!(t)).unwrap_or(serde_json::Value::Null),
+            m.label_i18n()
+                .map(|t| json!(t))
+                .unwrap_or(serde_json::Value::Null),
+            m.summary_i18n()
+                .map(|t| json!(t))
+                .unwrap_or(serde_json::Value::Null),
         ),
         Err(_) => pack_display_meta_none(),
     }
@@ -1506,7 +1543,11 @@ fn plugin_pack_detail(
     let store = pack_host::PackStore::new(data_dir);
     let repo = core_storage::packs::SqlitePackRepo::new(conn);
     let rows = repo.list().ok()?;
-    let row_versions: Vec<String> = rows.iter().filter(|r| r.id == id).map(|r| r.version.clone()).collect();
+    let row_versions: Vec<String> = rows
+        .iter()
+        .filter(|r| r.id == id)
+        .map(|r| r.version.clone())
+        .collect();
     let dir_versions = store.installed_versions(id);
     if row_versions.is_empty() && dir_versions.is_empty() && !BUILTIN_PLUGIN_IDS.contains(&id) {
         return None;
@@ -1594,11 +1635,13 @@ fn probe_pack_info(
 ) -> Result<serde_json::Value, String> {
     let (manifest, _ident) = pack_host::load_pack(pack_dir).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(work_dir).map_err(|e| format!("建探针工作目录失败：{e}"))?;
-    let gw_cfg = pack_host::GatewayConfig::from_manifest(&manifest, work_dir)
-        .with_vl(Arc::new(NoVl));
-    let gateway = pack_host::Gateway::start(gw_cfg).map_err(|e| format!("能力网关启动失败：{e}"))?;
+    let gw_cfg =
+        pack_host::GatewayConfig::from_manifest(&manifest, work_dir).with_vl(Arc::new(NoVl));
+    let gateway =
+        pack_host::Gateway::start(gw_cfg).map_err(|e| format!("能力网关启动失败：{e}"))?;
     let cfg = pack_host_config(gateway.base_url(), gateway.token(), work_dir, rt);
-    let host = pack_host::PackHost::open(pack_dir, cfg).map_err(|e| format!("插件宿主打开失败：{e}"))?;
+    let host =
+        pack_host::PackHost::open(pack_dir, cfg).map_err(|e| format!("插件宿主打开失败：{e}"))?;
     host.call_with_timeout("pack.info", json!({}), std::time::Duration::from_secs(10))
         .map_err(|e| format!("pack.info 失败：{e}"))
 }
@@ -1760,7 +1803,9 @@ pub async fn pack_install(
                 ))
             }
         }
-        Err(e) => Some(format!("官方默认方案派生失败（可到 /api/specs/migrate 重跑）：{e}")),
+        Err(e) => Some(format!(
+            "官方默认方案派生失败（可到 /api/specs/migrate 重跑）：{e}"
+        )),
     };
     (
         StatusCode::OK,
@@ -1832,15 +1877,13 @@ fn switch_current(
             ))?;
             versions
                 .iter()
-                .filter(|v| pack_host::compare_versions(v, &cur) == std::cmp::Ordering::Less)
-                .next_back()
+                .rev()
+                .find(|v| pack_host::compare_versions(v, &cur) == std::cmp::Ordering::Less)
                 .cloned()
                 .ok_or((
                     StatusCode::NOT_FOUND,
                     "pack_no_previous_version",
-                    format!(
-                        "{id} 没有更早的版本可回滚（当前 {cur}，已装：{versions:?}）"
-                    ),
+                    format!("{id} 没有更早的版本可回滚（当前 {cur}，已装：{versions:?}）"),
                 ))?
         }
         None => versions.last().cloned().unwrap_or_default(),
@@ -1860,9 +1903,9 @@ fn switch_current(
                 StatusCode::CONFLICT,
                 "pack_tampered",
                 format!(
-                    "{id}@{target} 的目录内容与登记不符（登记 {} / 实物 {}）：拒绝切换，请重装该版本",
-                    r.manifest_hash, ident.plugin_hash
-                ),
+                "{id}@{target} 的目录内容与登记不符（登记 {} / 实物 {}）：拒绝切换，请重装该版本",
+                r.manifest_hash, ident.plugin_hash
+            ),
             ))
         }
         Some(_) => {}
@@ -1918,7 +1961,13 @@ pub async fn pack_activate_version(
     Json(req): Json<VersionReq>,
 ) -> impl IntoResponse {
     let conn = state.db.lock().await;
-    match switch_current(&conn, &state.data_dir, &id, req.version.as_deref(), "activate") {
+    match switch_current(
+        &conn,
+        &state.data_dir,
+        &id,
+        req.version.as_deref(),
+        "activate",
+    ) {
         Ok(v) => (StatusCode::OK, Json(v)).into_response(),
         Err((code, word, msg)) => err(code, word, msg),
     }
@@ -1931,7 +1980,13 @@ pub async fn pack_rollback(
     Json(req): Json<VersionReq>,
 ) -> impl IntoResponse {
     let conn = state.db.lock().await;
-    match switch_current(&conn, &state.data_dir, &id, req.version.as_deref(), "rollback") {
+    match switch_current(
+        &conn,
+        &state.data_dir,
+        &id,
+        req.version.as_deref(),
+        "rollback",
+    ) {
         Ok(v) => (StatusCode::OK, Json(v)).into_response(),
         Err((code, word, msg)) => err(code, word, msg),
     }
@@ -2109,11 +2164,7 @@ pub struct JudgeReq {
 }
 
 /// 判定候选资产集合（按 mode 三选一；`all` 与显式 assetIds 都由 SQL 排除已删/失联）。
-fn judge_candidates(
-    conn: &Connection,
-    pack_id: &str,
-    req: &JudgeReq,
-) -> Result<Vec<i64>, String> {
+fn judge_candidates(conn: &Connection, pack_id: &str, req: &JudgeReq) -> Result<Vec<i64>, String> {
     let mut ids: Vec<i64> = if let Some(explicit) = &req.assetIds {
         let mut stmt = conn
             .prepare("SELECT assetId FROM assets WHERE deleted = 0 AND assetId = ?1")
@@ -2321,13 +2372,11 @@ impl pack_host::VlJudge for GatewayVl {
             Vec::new(),
             self.handle.stats.clone(),
         );
-        let cap = max_tokens.min(pack_host::VL_MAX_TOKENS_CAP).max(1);
-        Ok(
-            match session.ask_raw(path, prompt, cap) {
-                Ok(raw) => pack_host::VlReply::decided(raw, Vec::new()),
-                Err(e) => pack_host::VlReply::undetermined(e.to_string()),
-            },
-        )
+        let cap = max_tokens.clamp(1, pack_host::VL_MAX_TOKENS_CAP);
+        Ok(match session.ask_raw(path, prompt, cap) {
+            Ok(raw) => pack_host::VlReply::decided(raw, Vec::new()),
+            Err(e) => pack_host::VlReply::undetermined(e.to_string()),
+        })
     }
 
     /// 重复采样（协议 1.2，K07-FIX-H 翻转保护）：第 1 份走缓存（同图同 prompt 复用旧结论，
@@ -2346,7 +2395,7 @@ impl pack_host::VlJudge for GatewayVl {
             Vec::new(),
             self.handle.stats.clone(),
         );
-        let cap = max_tokens.min(pack_host::VL_MAX_TOKENS_CAP).max(1);
+        let cap = max_tokens.clamp(1, pack_host::VL_MAX_TOKENS_CAP);
         let mut replies = Vec::new();
         for i in 0..samples.max(1) {
             let asked = if i == 0 {
@@ -2442,8 +2491,8 @@ impl PluginRuntime {
         std::fs::create_dir_all(work_dir)
             .map_err(|e| format!("建插件工作目录 {} 失败：{e}", work_dir.display()))?;
         let gw_cfg = pack_host::GatewayConfig::from_manifest(&manifest, work_dir).with_vl(vl_judge);
-        let gateway = pack_host::Gateway::start(gw_cfg)
-            .map_err(|e| format!("能力网关启动失败：{e}"))?;
+        let gateway =
+            pack_host::Gateway::start(gw_cfg).map_err(|e| format!("能力网关启动失败：{e}"))?;
         // 解释器 + 启动器：桌面形态走随包 runtime（KI-28），容器/开发态回落 python3 + 仓库 tools/
         let cfg = pack_host_config(gateway.base_url(), gateway.token(), work_dir, rt);
         let host = pack_host::PackHost::open(pack_dir, cfg)
@@ -2597,6 +2646,7 @@ fn build_options(effective: &serde_json::Value, work_dir: &str) -> serde_json::V
 /// - 包在、声明了 schema → `declared:true` + `schema`（插件原文，界面据此画控件）；
 /// - 包在、没声明（老包）→ `declared:false` + `schema:null`（协议 v1.1 自由透传，界面给空面板）；
 /// - 包不在 → 404 `plugin_not_found`（不是空 schema —— 那会让界面以为「这插件没参数」）。
+///
 /// 声明了但读不出来/校验不过 → 500 `pack_params_schema`（装坏的包，排障要看见）。
 pub async fn plugin_params_schema(
     State(state): State<AppState>,
@@ -2709,8 +2759,10 @@ impl JudgeParams {
         if map.is_empty() || self.effective.contains_key("thresholds") {
             return;
         }
-        self.effective
-            .insert("thresholds".to_string(), serde_json::Value::Object(map.clone()));
+        self.effective.insert(
+            "thresholds".to_string(),
+            serde_json::Value::Object(map.clone()),
+        );
     }
 
     /// 落 run 的 `params` 快照（人读 + 机读都在里面）。
@@ -2729,6 +2781,7 @@ impl JudgeParams {
 /// - 老包（`manifest.params` 缺省）走 [`pack_host::merge_layers`] 原样透传 —— 协议 v1.1
 ///   的 `options` 语义不变，插件换到 v2 声明时行为连续；
 /// - 返回 `Ok(None)` = 包目录缺失（插件未安装）—— 由 prepare 阶段报准确错误，这里不抢口径。
+#[allow(dead_code)] // 保留：定插件版解析入口（spec→plugin 归属在调用侧再收敛）
 fn resolve_judge_params(
     conn: &Connection,
     data_dir: &Path,
@@ -2750,6 +2803,7 @@ fn resolve_judge_params(
 /// `pack_id = Some(id)` 时：
 /// * 参数按**这个包**的 schema 合并（不是默认判定包的）；
 /// * 不看引擎档位 —— 动作链本来就走插件通道，能点名包就说明意图明确。
+///
 /// `pack_id = None` = 走默认判定插件包（N18：执行通道恒为插件，没有第二套引擎）。
 fn resolve_judge_params_for(
     conn: &Connection,
@@ -2771,7 +2825,7 @@ fn resolve_judge_params_for(
     let (manifest, _ident) = pack_host::load_pack(&pack_dir)
         .map_err(|e| JudgeFail::new("pack_manifest", e.to_string()))?;
     let layers = [("规格", spec), ("任务覆盖", task)];
-    let mut params = match pack_host::ParamSchema::load_declared(&pack_dir, manifest.params.as_deref())
+    let params = match pack_host::ParamSchema::load_declared(&pack_dir, manifest.params.as_deref())
     {
         Ok(Some(schema)) => {
             let effective = schema
@@ -2789,7 +2843,8 @@ fn resolve_judge_params_for(
         }
         Ok(None) => {
             // 老包：不校验、不填默认值（宿主不知道它有哪些参数），只按层序合并
-            let effective = pack_host::merge_layers(&layers).map_err(|e| JudgeFail::new(e.code(), e.to_string()))?;
+            let effective = pack_host::merge_layers(&layers)
+                .map_err(|e| JudgeFail::new(e.code(), e.to_string()))?;
             let mut params = JudgeParams {
                 declared: false,
                 effective,
@@ -2797,7 +2852,12 @@ fn resolve_judge_params_for(
             params.inject_thresholds(thresholds);
             params
         }
-        Err(e) => return Err(JudgeFail::new(e.code(), format!("{}：{e}", pack_dir.display()))),
+        Err(e) => {
+            return Err(JudgeFail::new(
+                e.code(),
+                format!("{}：{e}", pack_dir.display()),
+            ))
+        }
     };
     Ok(Some(params))
 }
@@ -2835,7 +2895,10 @@ fn with_row_fields(
         return evidence;
     }
     if let Some(obj) = evidence.as_object_mut() {
-        obj.insert("fields".to_string(), serde_json::Value::Object(fields.clone()));
+        obj.insert(
+            "fields".to_string(),
+            serde_json::Value::Object(fields.clone()),
+        );
     }
     evidence
 }
@@ -2924,7 +2987,9 @@ fn parse_reply(
                 return fail(format!("{method} 应答有 verdict 缺 ruleId"));
             };
             let Some(status) = item.get("status").and_then(|x| x.as_str()) else {
-                return fail(format!("{method} 应答有 verdict 缺 status（ruleId={rule_id}）"));
+                return fail(format!(
+                    "{method} 应答有 verdict 缺 status（ruleId={rule_id}）"
+                ));
             };
             let legacy_fields = item
                 .get("fields")
@@ -2935,7 +3000,10 @@ fn parse_reply(
                 rule_id: rule_id.to_string(),
                 status: status.to_string(),
                 score: item.get("score").and_then(|x| x.as_f64()),
-                label: item.get("label").and_then(|x| x.as_str()).map(str::to_string),
+                label: item
+                    .get("label")
+                    .and_then(|x| x.as_str())
+                    .map(str::to_string),
                 evidence: with_row_fields(
                     item.get("evidence")
                         .cloned()
@@ -2944,7 +3012,10 @@ fn parse_reply(
                     &legacy_fields,
                 ),
                 fixed: item.get("fixed").and_then(|x| x.as_bool()).unwrap_or(false),
-                note: item.get("note").and_then(|x| x.as_str()).map(str::to_string),
+                note: item
+                    .get("note")
+                    .and_then(|x| x.as_str())
+                    .map(str::to_string),
             });
         }
         verdicts
@@ -2963,11 +3034,9 @@ fn parse_reply(
                     v.confidence,
                     v.reason_code.clone(),
                 ),
-                (None, pack_host::ResultStatus::Skipped) => (
-                    "skipped".to_string(),
-                    None,
-                    row.skip_reason.clone(),
-                ),
+                (None, pack_host::ResultStatus::Skipped) => {
+                    ("skipped".to_string(), None, row.skip_reason.clone())
+                }
                 // 判不了 ≠ 通过：行级执行失败/无结论一律 undetermined（带原因）
                 (None, _) => (
                     "undetermined".to_string(),
@@ -3072,7 +3141,7 @@ fn launcher_dir(rt: &crate::PackRuntime) -> Option<PathBuf> {
         .join("..")
         .join("..")
         .join("tools");
-    repo.join("dampack_launcher.py").is_file().then(|| repo)
+    repo.join("dampack_launcher.py").is_file().then_some(repo)
 }
 
 /// 插件宿主的统一装配入口（探针 / `pack.info` 核对 / 真判定三处共用）。
@@ -3187,7 +3256,8 @@ fn register_pack(
         installed_at: unix_now(),
         current: true,
     };
-    repo.upsert(&rec).map_err(|e| format!("登记行业包失败：{e}"))?;
+    repo.upsert(&rec)
+        .map_err(|e| format!("登记行业包失败：{e}"))?;
     repo.set_current(&ident.id, &ident.version)
         .map_err(|e| format!("切换行业包生效版本失败：{e}"))?;
     Ok(())
@@ -3282,7 +3352,6 @@ impl JudgeSpec {
         layer
     }
 
-
     /// 生效参数快照里的 `spec` 段（重跑要能说清「用哪条规格、它当时是什么」）
     fn snapshot(&self) -> serde_json::Value {
         json!({
@@ -3344,7 +3413,6 @@ fn load_judge_spec(
         )
         .with_params(serde_json::json!({ "specName": record.name })));
     }
-    let packs_dir = data_dir.join(PACKS_DIR);
     // 规格属于哪个插件就开哪个包（KI-31）；包不可装载 = 当场 400，参数绝不静默失效。
     let Some(spec_dir) = plugin_pack_dir_for(conn, data_dir, &record.plugin_id) else {
         return Err(JudgeFail::guided(
@@ -3458,7 +3526,10 @@ pub async fn judge(State(state): State<AppState>, Json(req): Json<JudgeReq>) -> 
     };
     // 规格的规则清单随 job 下发（plugin 通道 = 真正的子集；legacy 只接受「全部」，
     // 由 svc-pipeline 侧比对后决定放行/报错 —— 口径在数据层统一，不在入口分叉）
-    let spec_rules: Vec<String> = judge_spec.as_ref().map(JudgeSpec::rules).unwrap_or_default();
+    let spec_rules: Vec<String> = judge_spec
+        .as_ref()
+        .map(JudgeSpec::rules)
+        .unwrap_or_default();
     if !spec_rules.is_empty() && scope == "group" {
         return err(
             StatusCode::BAD_REQUEST,
@@ -3505,8 +3576,8 @@ pub async fn judge(State(state): State<AppState>, Json(req): Json<JudgeReq>) -> 
         let task = req.options.clone();
         let chain_pack = req.actions.as_ref().and_then(|_| req.packId.clone());
         let plugin_id = judge_plugin_id.clone();
-        let resolved = tokio::task::spawn_blocking(
-            move || -> Result<Option<JudgeParams>, JudgeFail> {
+        let resolved =
+            tokio::task::spawn_blocking(move || -> Result<Option<JudgeParams>, JudgeFail> {
                 let conn = core_storage::open(&crate::infer::db_path(&data_dir))
                     .map_err(|e| JudgeFail::new("db_open", e.to_string()))?;
                 resolve_judge_params_for(
@@ -3517,9 +3588,8 @@ pub async fn judge(State(state): State<AppState>, Json(req): Json<JudgeReq>) -> 
                     task.as_ref(),
                     thresholds.as_ref(),
                 )
-            },
-        )
-        .await;
+            })
+            .await;
         match resolved {
             Ok(Ok(v)) => v,
             Ok(Err(f)) => return f.http(),
@@ -3990,9 +4060,12 @@ fn spawn_judge_job(
         match core_storage::open(&db) {
             Ok(c) => {
                 let runs = SqliteComplianceRunRepo::new(&c);
-                if let Err(e) =
-                    runs.finish(run_id, status, err.as_deref(), &svc_pipeline::COMPLIANCE_KINDS)
-                {
+                if let Err(e) = runs.finish(
+                    run_id,
+                    status,
+                    err.as_deref(),
+                    &svc_pipeline::COMPLIANCE_KINDS,
+                ) {
                     eprintln!("compliance run{run_id} 收工记账失败: {e}");
                 }
             }
@@ -4018,7 +4091,11 @@ pub async fn judge_cancel(State(state): State<AppState>) -> impl IntoResponse {
         return err(StatusCode::CONFLICT, "not_running", "没有运行中的合规判定");
     }
     state.compliance.cancel.store(true, Ordering::SeqCst);
-    (StatusCode::OK, Json(json!({ "ok": true, "cancelling": true }))).into_response()
+    (
+        StatusCode::OK,
+        Json(json!({ "ok": true, "cancelling": true })),
+    )
+        .into_response()
 }
 
 /// GET /api/compliance/judge/status —— 运行态 + 进度 + 最近一轮汇总 + 队列计数
@@ -4038,10 +4115,10 @@ pub async fn judge_status(State(state): State<AppState>) -> Response {
     }
     let data_dir = state.data_dir.clone();
     let snap = tokio::task::spawn_blocking(move || -> Result<Snapshot, String> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| e.to_string())?;
-        let (ad, af, ap) = svc_pipeline::compliance_queue::compliance_stats(&conn)
-            .map_err(|e| e.to_string())?;
+        let conn =
+            core_storage::open(&crate::infer::db_path(&data_dir)).map_err(|e| e.to_string())?;
+        let (ad, af, ap) =
+            svc_pipeline::compliance_queue::compliance_stats(&conn).map_err(|e| e.to_string())?;
         let (gd, gf, gp) = svc_pipeline::compliance_queue::compliance_group_stats(&conn)
             .map_err(|e| e.to_string())?;
         // 本 run：正在跑的那一次优先，否则最近一次（界面据此显示「这一次」的统计）
@@ -4130,7 +4207,7 @@ fn run_view(conn: &Connection, run: &RunRow) -> Result<serde_json::Value, String
             live.done,
             live.failed,
             live.skipped,
-            0,          // 运行中没有「未执行」这一说：任务都还在队列里
+            0, // 运行中没有「未执行」这一说：任务都还在队列里
             live.queued(),
         )
     } else {
@@ -4210,7 +4287,12 @@ fn run_verdict_counts(conn: &Connection, run_id: i64) -> Result<RunVerdictCounts
             ))
         })
         .map_err(|e| e.to_string())?;
-    let mut out = RunVerdictCounts { total_assets: 0, pass: 0, fail: 0, undetermined: 0 };
+    let mut out = RunVerdictCounts {
+        total_assets: 0,
+        pass: 0,
+        fail: 0,
+        undetermined: 0,
+    };
     for row in rows {
         let (pass, fail, undet) = row.map_err(|e| e.to_string())?;
         out.total_assets += 1;
@@ -4383,16 +4465,13 @@ fn load_pack_for_tasks(
 }
 
 /// GET /api/compliance/jobs —— 执行列表（按开始时间倒序；每一行是**一次独立执行**）。
-pub async fn jobs_list(
-    State(state): State<AppState>,
-    Query(q): Query<JobsQuery>,
-) -> Response {
+pub async fn jobs_list(State(state): State<AppState>, Query(q): Query<JobsQuery>) -> Response {
     let data_dir = state.data_dir.clone();
     let limit = q.limit.unwrap_or(20).clamp(1, 200);
     let offset = q.offset.unwrap_or(0).max(0);
     let res = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| e.to_string())?;
+        let conn =
+            core_storage::open(&crate::infer::db_path(&data_dir)).map_err(|e| e.to_string())?;
         let (total, rows) = SqliteComplianceRunRepo::new(&conn)
             .list(limit, offset)
             .map_err(|e| e.to_string())?;
@@ -4414,8 +4493,8 @@ pub async fn jobs_list(
 pub async fn jobs_current(State(state): State<AppState>) -> Response {
     let data_dir = state.data_dir.clone();
     let res = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| e.to_string())?;
+        let conn =
+            core_storage::open(&crate::infer::db_path(&data_dir)).map_err(|e| e.to_string())?;
         let runs = SqliteComplianceRunRepo::new(&conn);
         match runs.running().map_err(|e| e.to_string())? {
             Some(r) => Ok(json!({
@@ -4443,13 +4522,15 @@ pub async fn job_detail(
     let limit = q.limit.unwrap_or(200).clamp(1, 1000);
     let offset = q.offset.unwrap_or(0).max(0);
     let res = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| e.to_string())?;
+        let conn =
+            core_storage::open(&crate::infer::db_path(&data_dir)).map_err(|e| e.to_string())?;
         let repo = SqliteComplianceRunRepo::new(&conn);
         let Some(run) = repo.get(run_id).map_err(|e| e.to_string())? else {
             return Err(format!("run {run_id} 不存在"));
         };
-        let (task_total, rows) = repo.tasks(run_id, limit, offset).map_err(|e| e.to_string())?;
+        let (task_total, rows) = repo
+            .tasks(run_id, limit, offset)
+            .map_err(|e| e.to_string())?;
         let mut cache: std::collections::HashMap<String, Option<Pack>> = Default::default();
         let packs = load_pack_for_tasks(&conn, &data_dir, &rows, &mut cache);
         let tasks: Vec<serde_json::Value> = rows
@@ -4468,14 +4549,13 @@ pub async fn job_detail(
     .await;
     match res {
         Ok(Ok(v)) => (StatusCode::OK, Json(v)).into_response(),
-        Ok(Err(e)) if e.contains("不存在") => {
-            err(StatusCode::NOT_FOUND, "run_not_found", e)
-        }
+        Ok(Err(e)) if e.contains("不存在") => err(StatusCode::NOT_FOUND, "run_not_found", e),
         Ok(Err(e)) => err(StatusCode::INTERNAL_SERVER_ERROR, "job_detail", e),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, "join", e.to_string()),
     }
 }
 
+#[allow(dead_code)] // 保留：秒级时间戳口径单一出处
 fn now_secs() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -4527,8 +4607,8 @@ pub async fn job_verdicts(
     let offset = q.offset.unwrap_or(0).max(0);
     let asset_filter = q.asset_id;
     let res = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| e.to_string())?;
+        let conn =
+            core_storage::open(&crate::infer::db_path(&data_dir)).map_err(|e| e.to_string())?;
         // run 必须存在（不存在 → 404，而不是「空结果」假装跑过）
         if SqliteComplianceRunRepo::new(&conn)
             .get(run_id)
@@ -4540,8 +4620,9 @@ pub async fn job_verdicts(
         let pack = plugin_meta_pack(&conn, &data_dir);
         // IP-K10-FIX：判定行族 = 引擎写侧包 id
         let pack_id = verdict_pack_id(&conn, &data_dir);
-        let mut statuses = svc_library::compliance_view::run_asset_statuses(&conn, &pack_id, run_id)
-            .map_err(|e| e.to_string())?;
+        let mut statuses =
+            svc_library::compliance_view::run_asset_statuses(&conn, &pack_id, run_id)
+                .map_err(|e| e.to_string())?;
         // 分桶统计（合成后口径；人审覆盖会改变档位 —— 界面要按生效结论分桶）
         let mut counts = serde_json::Map::new();
         for st in &statuses {
@@ -4717,12 +4798,13 @@ pub async fn job_export(
     let picked = req.asset_ids.clone();
     let manifest = req.manifest.unwrap_or(true);
     let res = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| e.to_string())?;
+        let conn =
+            core_storage::open(&crate::infer::db_path(&data_dir)).map_err(|e| e.to_string())?;
         let pack = plugin_meta_pack(&conn, &data_dir);
         let pack_id = verdict_pack_id(&conn, &data_dir);
-        let mut statuses = svc_library::compliance_view::run_asset_statuses(&conn, &pack_id, run_id)
-            .map_err(|e| e.to_string())?;
+        let mut statuses =
+            svc_library::compliance_view::run_asset_statuses(&conn, &pack_id, run_id)
+                .map_err(|e| e.to_string())?;
         if let Some(p) = &picked {
             statuses.retain(|s| p.contains(&s.assetId));
         }
@@ -4752,14 +4834,9 @@ pub async fn job_export(
             strip_gps: false,
         };
         let cancel = std::sync::atomic::AtomicBool::new(false);
-        let report = svc_library::export::run_export(
-            &conn,
-            &spec,
-            &thumbs_root,
-            &cancel,
-            &mut |_p| {},
-        )
-        .map_err(|e| e.to_string())?;
+        let report =
+            svc_library::export::run_export(&conn, &spec, &thumbs_root, &cancel, &mut |_p| {})
+                .map_err(|e| e.to_string())?;
         Ok(json!({
             "ok": true,
             "runId": run_id,
@@ -4771,11 +4848,9 @@ pub async fn job_export(
     .await;
     match res {
         Ok(Ok(v)) => (StatusCode::OK, Json(v)).into_response(),
-        Ok(Err(e)) if e.contains("导出取消") => err(
-            StatusCode::BAD_REQUEST,
-            "export_source_invalid",
-            e,
-        ),
+        Ok(Err(e)) if e.contains("导出取消") => {
+            err(StatusCode::BAD_REQUEST, "export_source_invalid", e)
+        }
         Ok(Err(e)) => err(StatusCode::INTERNAL_SERVER_ERROR, "job_export", e),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, "join", e.to_string()),
     }
@@ -4832,7 +4907,10 @@ pub struct ReviewHistoryQuery {
 }
 
 /// `sort` 解析：非法值 → 400（不静默当「不排序」——排序没生效是最难查的假象）。
-fn parse_sort(v: Option<&str>) -> std::result::Result<svc_library::compliance_view::ReviewSort, Response> {
+#[allow(clippy::result_large_err)] // 错误即 Response（axum handler 惯例）
+fn parse_sort(
+    v: Option<&str>,
+) -> std::result::Result<svc_library::compliance_view::ReviewSort, Response> {
     use svc_library::compliance_view::ReviewSort;
     match v.map(str::trim).filter(|s| !s.is_empty()) {
         None | Some("asset") | Some("assetId") => Ok(ReviewSort::Asset),
@@ -4855,9 +4933,17 @@ fn review_err(e: svc_library::compliance_view::ReviewError) -> Response {
             } else {
                 StatusCode::BAD_REQUEST
             };
-            (status, Json(json!({ "error": r.code, "message": r.message }))).into_response()
+            (
+                status,
+                Json(json!({ "error": r.code, "message": r.message })),
+            )
+                .into_response()
         }
-        ReviewError::Store(e) => err(StatusCode::INTERNAL_SERVER_ERROR, "review_store", e.to_string()),
+        ReviewError::Store(e) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "review_store",
+            e.to_string(),
+        ),
     }
 }
 
@@ -4940,9 +5026,7 @@ pub async fn review_list(
         .unwrap_or_else(|| pack.low_confidence());
     // 给了 assetId 时缺省列「全部有结论的行」（检查器要看到整张图的所有规则）；
     // 没给 assetId（全库复核视图）时缺省只列需要复核的行，否则一次吐出全库。
-    let low_confidence_only = q
-        .lowConfidence
-        .unwrap_or_else(|| q.assetId.is_none());
+    let low_confidence_only = q.lowConfidence.unwrap_or_else(|| q.assetId.is_none());
     let sort = match parse_sort(q.sort.as_deref()) {
         Ok(s) => s,
         Err(resp) => return resp,
@@ -4956,7 +5040,13 @@ pub async fn review_list(
         limit: q.limit.unwrap_or(200),
         offset: q.offset.unwrap_or(0),
     };
-    match svc_library::compliance_view::list_reviews(&conn, &pack_id, &pack, &query, locale_from_headers(&headers)) {
+    match svc_library::compliance_view::list_reviews(
+        &conn,
+        &pack_id,
+        &pack,
+        &query,
+        locale_from_headers(&headers),
+    ) {
         Ok((total, items)) => (
             StatusCode::OK,
             Json(json!({
@@ -4965,7 +5055,11 @@ pub async fn review_list(
             })),
         )
             .into_response(),
-        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, "review_list", e.to_string()),
+        Err(e) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "review_list",
+            e.to_string(),
+        ),
     }
 }
 
@@ -4975,7 +5069,7 @@ pub async fn review_revoke(
     Query(q): Query<ReviewRevokeQuery>,
 ) -> impl IntoResponse {
     let conn = state.db.lock().await;
-    let pack = plugin_meta_pack(&conn, &state.data_dir);
+    let _pack = plugin_meta_pack(&conn, &state.data_dir);
     let pack_id = verdict_pack_id(&conn, &state.data_dir);
     let revoked = svc_library::compliance_view::revoke_human_review(
         &conn,
@@ -5004,7 +5098,7 @@ pub async fn review_history(
     Query(q): Query<ReviewHistoryQuery>,
 ) -> impl IntoResponse {
     let conn = state.db.lock().await;
-    let pack = plugin_meta_pack(&conn, &state.data_dir);
+    let _pack = plugin_meta_pack(&conn, &state.data_dir);
     let pack_id = verdict_pack_id(&conn, &state.data_dir);
     match svc_library::compliance_view::review_history(
         &conn,
@@ -5041,7 +5135,11 @@ pub async fn review_history(
             )
                 .into_response()
         }
-        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, "review_history", e.to_string()),
+        Err(e) => err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "review_history",
+            e.to_string(),
+        ),
     }
 }
 
@@ -5083,10 +5181,7 @@ fn version_json(v: &core_storage::asset_versions::StoredVersion) -> serde_json::
 /// 一张图一条链 = 一行（`result=ok|failed`）；`current=true` 的那一行是**当前工作版本**，
 /// 至多一张（DB 部分唯一索引兜底）。界面/验收据此回答三件事：
 /// 「这张图处理过几次」「现在生效的是哪一版（sha256 对得上）」「上一次为什么失败」。
-pub async fn versions(
-    State(state): State<AppState>,
-    Query(q): Query<VersionsQuery>,
-) -> Response {
+pub async fn versions(State(state): State<AppState>, Query(q): Query<VersionsQuery>) -> Response {
     let Some(asset_id) = q.assetId else {
         return err(
             StatusCode::BAD_REQUEST,
@@ -5260,14 +5355,14 @@ pub async fn artifact_serve(
 }
 
 #[derive(Deserialize)]
-struct ArtifactsExportItem {
+pub struct ArtifactsExportItem {
     path: String,
     /// 目标文件名（缺省 = 产物 basename）；只取文件名分量，路径分隔符当脏数据剥掉
     name: Option<String>,
 }
 
 #[derive(Deserialize)]
-struct ArtifactsExportReq {
+pub struct ArtifactsExportReq {
     items: Vec<ArtifactsExportItem>,
     /// 与既有 JSON 体同风格用 camelCase（`destDir`），兼容蛇形
     #[serde(rename = "destDir", alias = "dest_dir")]
@@ -5286,8 +5381,15 @@ fn copy_artifacts_to(items: Vec<(PathBuf, String)>, dest: &Path) -> std::io::Res
             .unwrap_or("artifact")
             .trim()
             .to_string();
-        let name = if name.is_empty() { "artifact".to_string() } else { name };
-        let stem = Path::new(&name).file_stem().and_then(|s| s.to_str()).unwrap_or("artifact");
+        let name = if name.is_empty() {
+            "artifact".to_string()
+        } else {
+            name
+        };
+        let stem = Path::new(&name)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("artifact");
         let ext = Path::new(&name).extension().and_then(|s| s.to_str());
         let mut target = dest.join(&name);
         let mut n = 2u32;
@@ -5364,8 +5466,8 @@ pub async fn artifacts_export(
         );
     }
     let dest_for_copy = dest.clone();
-    let copied = tokio::task::spawn_blocking(move || copy_artifacts_to(checked, &dest_for_copy))
-        .await;
+    let copied =
+        tokio::task::spawn_blocking(move || copy_artifacts_to(checked, &dest_for_copy)).await;
     let files = match copied {
         Ok(Ok(f)) => f,
         Ok(Err(e)) => {
@@ -5515,7 +5617,9 @@ mod k05_tests {
     #[test]
     fn real_ecommerce_pack_judges_every_rule() {
         let Some(pack_dir) = repo_pack_dir() else {
-            eprintln!("skip: 未找到 packs/plugins/ecommerce（DAM_PACK_DIR / data_dir/packs / 仓库）");
+            eprintln!(
+                "skip: 未找到 packs/plugins/ecommerce（DAM_PACK_DIR / data_dir/packs / 仓库）"
+            );
             return;
         };
         if !python3_available() {
@@ -5615,7 +5719,10 @@ mod k05_tests {
         }
         let got: Vec<&str> = out.verdicts.iter().map(|v| v.rule_id.as_str()).collect();
         for rule in &ident.rule_ids {
-            assert!(got.contains(&rule.as_str()), "缺规则 {rule} 的 verdict：{got:?}");
+            assert!(
+                got.contains(&rule.as_str()),
+                "缺规则 {rule} 的 verdict：{got:?}"
+            );
         }
         for v in &out.verdicts {
             assert!(
@@ -5640,10 +5747,20 @@ mod k05_tests {
         let table: Vec<String> = out
             .verdicts
             .iter()
-            .map(|v| format!("{}={}{}", v.rule_id, v.status,
-                v.score.map(|s| format!("({s:.2})")).unwrap_or_default()))
+            .map(|v| {
+                format!(
+                    "{}={}{}",
+                    v.rule_id,
+                    v.status,
+                    v.score.map(|s| format!("({s:.2})")).unwrap_or_default()
+                )
+            })
             .collect();
-        eprintln!("plugin judge 结果（{}ms）：{}", out.duration_ms, table.join(" "));
+        eprintln!(
+            "plugin judge 结果（{}ms）：{}",
+            out.duration_ms,
+            table.join(" ")
+        );
     }
 
     /// 宿主错误 → 失败归档词（报告/证据按这些词聚合，改词就是改口径）。
@@ -5697,7 +5814,10 @@ mod k05_tests {
                 pack_host::PackHostError::Protocol("无 result".into()),
                 "plugin_protocol_error",
             ),
-            (pack_host::PackHostError::Io("断管".into()), "plugin_unavailable"),
+            (
+                pack_host::PackHostError::Io("断管".into()),
+                "plugin_unavailable",
+            ),
         ];
         for (e, want) in cases {
             let kind = map_host_error(&e);
@@ -5862,8 +5982,15 @@ mod k05_tests {
         assert_eq!(out.verdicts.len(), 2);
         assert_eq!(out.verdicts[0].status, "fail");
         assert_eq!(out.verdicts[0].note.as_deref(), Some("R3_no_watermark"));
-        assert_eq!(out.verdicts[1].status, "undetermined", "行级失败不得冒充 pass");
-        assert!(out.verdicts[1].note.as_deref().unwrap().contains("vl_unavailable"));
+        assert_eq!(
+            out.verdicts[1].status, "undetermined",
+            "行级失败不得冒充 pass"
+        );
+        assert!(out.verdicts[1]
+            .note
+            .as_deref()
+            .unwrap()
+            .contains("vl_unavailable"));
     }
 
     #[test]
@@ -5990,7 +6117,11 @@ mod k07i_tests {
         };
         assert_eq!(err.code, "spec_plugin_not_installed");
         assert!(err.message.contains("com.example.missing"), "{err:?}");
-        assert_eq!(err.action, Some("open_packs_drawer"), "必须带界面去处：{err:?}");
+        assert_eq!(
+            err.action,
+            Some("open_packs_drawer"),
+            "必须带界面去处：{err:?}"
+        );
     }
 
     /// KI-31 的反向证明：**房产规格在插件引擎下可装载**（改前必然 `spec_plugin_mismatch`），
@@ -6028,11 +6159,22 @@ mod k07i_tests {
         };
         let spec = json!({"shortSideMin": 2000});
         let task = json!({"attribute": true});
-        let got = resolve_judge_params(&conn, &std::env::temp_dir(), PLUGIN_ECOMMERCE_ID, Some(&spec), Some(&task), None)
-            .unwrap()
-            .expect("plugin 引擎 + 包在 → 必须有参数快照");
+        let got = resolve_judge_params(
+            &conn,
+            &std::env::temp_dir(),
+            PLUGIN_ECOMMERCE_ID,
+            Some(&spec),
+            Some(&task),
+            None,
+        )
+        .unwrap()
+        .expect("plugin 引擎 + 包在 → 必须有参数快照");
         assert!(got.declared, "官方包声明了 params");
-        assert_eq!(got.effective["shortSideMin"], json!(2000), "规格层覆盖默认值");
+        assert_eq!(
+            got.effective["shortSideMin"],
+            json!(2000),
+            "规格层覆盖默认值"
+        );
         assert_eq!(got.effective["attribute"], json!(true), "任务覆盖");
         assert_eq!(
             got.effective["whiteMaxDev"],
@@ -6106,11 +6248,21 @@ mod k07i_tests {
             (json!({"shortSidMin": 1600}), "params_unknown_key"),
             (json!({"allowInpaint": "yes"}), "params_type"),
         ] {
-            let err = resolve_judge_params(&conn, &dir, PLUGIN_ECOMMERCE_ID, None, Some(&layer), None).unwrap_err();
+            let err =
+                resolve_judge_params(&conn, &dir, PLUGIN_ECOMMERCE_ID, None, Some(&layer), None)
+                    .unwrap_err();
             assert_eq!(err.code, code, "{layer} → {err:?}");
         }
         // 层不是对象
-        let err = resolve_judge_params(&conn, &dir, PLUGIN_ECOMMERCE_ID, None, Some(&json!(["x"])), None).unwrap_err();
+        let err = resolve_judge_params(
+            &conn,
+            &dir,
+            PLUGIN_ECOMMERCE_ID,
+            None,
+            Some(&json!(["x"])),
+            None,
+        )
+        .unwrap_err();
         assert_eq!(err.code, "params_layer");
     }
 
@@ -6213,7 +6365,8 @@ mod k07i_tests {
         let v1 = r1(&out1);
         assert_eq!(v1.status, "pass", "1800px ≥ 默认 1600 → 应 pass：{v1:?}");
         assert_eq!(
-            v1.evidence["threshold"], json!(1600),
+            v1.evidence["threshold"],
+            json!(1600),
             "证据里的阈值 = 包默认值（说明插件用的是自己的默认，不是宿主替它算）：{v1:?}"
         );
 
@@ -6224,9 +6377,16 @@ mod k07i_tests {
             json!({ "shortSideMin": 2000, "whiteMaxDev": 8, "allowInpaint": true }),
         );
         let out2 = svc_pipeline::PackJudge::judge_asset(&rt_custom, &asset(&work2));
-        assert!(out2.failure.is_none(), "自定义参数是合法值，不该失败：{:?}", out2.failure);
+        assert!(
+            out2.failure.is_none(),
+            "自定义参数是合法值，不该失败：{:?}",
+            out2.failure
+        );
         let v2 = r1(&out2);
-        assert_eq!(v2.status, "fail", "1800px < 自定义 2000 → 必须 fail：{v2:?}");
+        assert_eq!(
+            v2.status, "fail",
+            "1800px < 自定义 2000 → 必须 fail：{v2:?}"
+        );
         eprintln!(
             "K07I_EVIDENCE custom options_sent={} verdict={}",
             build_options(
@@ -6243,7 +6403,8 @@ mod k07i_tests {
             })
         );
         assert_eq!(
-            v2.evidence["threshold"], json!(2000),
+            v2.evidence["threshold"],
+            json!(2000),
             "证据里的阈值必须是下发的生效值（参数没到插件就是这个断言炸）：{v2:?}"
         );
 
@@ -6365,7 +6526,11 @@ mod proc_res1_tests {
         );
         let layer = s.chain_params_layer();
         assert_eq!(layer["keepMeta"], json!(true), "params_diff 为底：{layer}");
-        assert_eq!(layer["resizeLongEdge"], json!(900), "同名键后一动作胜：{layer}");
+        assert_eq!(
+            layer["resizeLongEdge"],
+            json!(900),
+            "同名键后一动作胜：{layer}"
+        );
         assert_eq!(layer["format"], json!("webp"), "{layer}");
         // 动作名本身不是参数（它是链；每步由 action_asset 覆盖 options.action）
         assert!(layer.get("action").is_none(), "{layer}");
@@ -6467,7 +6632,11 @@ mod proc_res1_tests {
         // 排序按 assetId, versionId：ok 在前
         assert_eq!(items[0]["result"], "ok");
         assert_eq!(items[0]["verdict"], serde_json::Value::Null);
-        assert_eq!(items[0]["ruleId"], "resize", "ruleId 槽位 = 链拼接：{}", items[0]);
+        assert_eq!(
+            items[0]["ruleId"], "resize",
+            "ruleId 槽位 = 链拼接：{}",
+            items[0]
+        );
         let arts = items[0]["artifacts"].as_array().unwrap();
         assert_eq!(arts.len(), 1);
         assert_eq!(arts[0]["kind"], "export_file");
@@ -6479,9 +6648,9 @@ mod proc_res1_tests {
             items[0]
         );
         // 库里的 chain 是对象（写侧 evidence 整块）→ 接口 fields.chain 必须是数组，逐步证据可读
-        let chain = items[0]["fields"]["chain"].as_array().unwrap_or_else(|| {
-            panic!("fields.chain 必须是数组（库里存对象）：{}", items[0])
-        });
+        let chain = items[0]["fields"]["chain"]
+            .as_array()
+            .unwrap_or_else(|| panic!("fields.chain 必须是数组（库里存对象）：{}", items[0]));
         assert_eq!(chain.len(), 2, "两步链逐步证据：{}", items[0]);
         assert_eq!(chain[0]["action"], "resize");
         assert_eq!(chain[0]["result"], "ok");
@@ -6507,8 +6676,9 @@ mod proc_res1_tests {
     #[test]
     fn chain_view_accepts_object_and_bare_array() {
         assert_eq!(
-            chain_view(r#"{"chain":[{"action":"resize","result":"ok"}],"durationMs":6,"cancelled":false}"#)
-                [0]["action"],
+            chain_view(
+                r#"{"chain":[{"action":"resize","result":"ok"}],"durationMs":6,"cancelled":false}"#
+            )[0]["action"],
             "resize"
         );
         assert_eq!(
@@ -6526,6 +6696,7 @@ mod proc_res1_tests {
 mod proc_res2_tests {
     use super::*;
 
+    #[allow(dead_code)] // 保留：PROC-RES-2 夹具桩（当前用例未走到账本版本分支）
     fn ledger_with_version(path: &str) -> Connection {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         core_storage::migrations::migrate(&conn).unwrap();
@@ -6610,7 +6781,11 @@ mod proc_res2_tests {
 
         assert_eq!(written.len(), 3);
         assert!(dest.join("a.webp").is_file());
-        assert_eq!(std::fs::read(dest.join("a.webp")).unwrap(), b"one", "先到的不被覆盖");
+        assert_eq!(
+            std::fs::read(dest.join("a.webp")).unwrap(),
+            b"one",
+            "先到的不被覆盖"
+        );
         assert!(dest.join("a-2.webp").is_file());
         assert_eq!(std::fs::read(dest.join("a-2.webp")).unwrap(), b"two");
         // 路径分量被剥掉：落在 dest 里而不是 dest 的上级
@@ -6632,7 +6807,10 @@ mod ki39_run_identity_tests {
     #[test]
     fn chain_mode_records_chain_pack() {
         assert_eq!(
-            run_pack_identity(&Some("com.soujpg.pack.segment".into()), "com.soujpg.pack.imaging"),
+            run_pack_identity(
+                &Some("com.soujpg.pack.segment".into()),
+                "com.soujpg.pack.imaging"
+            ),
             "com.soujpg.pack.segment",
             "链模式：run 记链插件（产物挂在它名下）"
         );

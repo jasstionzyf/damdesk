@@ -162,10 +162,18 @@ pub fn params_error(id: &str, params: &serde_yaml::Value) -> Option<String> {
     };
     let err = |e: DetectorError| Some(e.to_string());
     match id {
-        "size_min" => parse_params::<detectors::SizeMinParams>("size_min", &normalized).err().and_then(err),
-        "white_edge" => parse_params::<detectors::WhiteEdgeParams>("white_edge", &normalized).err().and_then(err),
-        "sharpness" => parse_params::<detectors::SharpnessParams>("sharpness", &normalized).err().and_then(err),
-        "exposure" => parse_params::<detectors::ExposureParams>("exposure", &normalized).err().and_then(err),
+        "size_min" => parse_params::<detectors::SizeMinParams>("size_min", &normalized)
+            .err()
+            .and_then(err),
+        "white_edge" => parse_params::<detectors::WhiteEdgeParams>("white_edge", &normalized)
+            .err()
+            .and_then(err),
+        "sharpness" => parse_params::<detectors::SharpnessParams>("sharpness", &normalized)
+            .err()
+            .and_then(err),
+        "exposure" => parse_params::<detectors::ExposureParams>("exposure", &normalized)
+            .err()
+            .and_then(err),
         _ => None,
     }
 }

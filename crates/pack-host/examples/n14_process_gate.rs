@@ -108,7 +108,6 @@ fn upscale_metric_gate_armed() -> bool {
     *UPSCALE_METRIC_GATE.get().unwrap_or(&false)
 }
 
-
 // ---------------------------------------------------------------------------
 // 语料自检
 // ---------------------------------------------------------------------------
@@ -210,7 +209,12 @@ fn start_harness(work: &Path) -> Result<Harness, String> {
     let imaging = open(PACK_IMAGING, "imaging")?;
     let segment = open(PACK_SEGMENT, "segment")?;
     let upscale = open(PACK_UPSCALE, "upscale")?;
-    Ok(Harness { gw, imaging, segment, upscale })
+    Ok(Harness {
+        gw,
+        imaging,
+        segment,
+        upscale,
+    })
 }
 
 impl Harness {
@@ -326,7 +330,11 @@ fn attempt(
             })
         }
     };
-    let rows = reply.get("rows").and_then(Value::as_array).cloned().unwrap_or_default();
+    let rows = reply
+        .get("rows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     if rows.len() != 1 {
         return Err(format!("应答 rows 数量 {} != 1：{reply}", rows.len()));
     }
@@ -336,7 +344,11 @@ fn attempt(
         Ok(_) => json!({ "ok": true }),
         Err(v) => json!({ "ok": false, "code": v.code(), "detail": v.to_string() }),
     };
-    let art = row.get("artifacts").and_then(Value::as_array).cloned().unwrap_or_default();
+    let art = row
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let out_path = art
         .first()
         .and_then(|a| a.get("path"))
@@ -353,7 +365,15 @@ fn attempt(
         }),
         None => (String::new(), 0),
     };
-    Ok(Attempt { row, contract, out_path, sha256, bytes, workdir: workdir.to_path_buf(), error: None })
+    Ok(Attempt {
+        row,
+        contract,
+        out_path,
+        sha256,
+        bytes,
+        workdir: workdir.to_path_buf(),
+        error: None,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -507,7 +527,11 @@ fn psnr_ssim_vs(out: &DynamicImage, reference: &Path) -> Result<(f64, f64, u32, 
             n += 1.0;
         }
     }
-    let psnr = if sq == 0.0 { 99.0 } else { 10.0 * (255.0 * 255.0 / (sq / n)).log10() };
+    let psnr = if sq == 0.0 {
+        99.0
+    } else {
+        10.0 * (255.0 * 255.0 / (sq / n)).log10()
+    };
     let (ga, _, _) = gray(&DynamicImage::ImageRgb8(a));
     let (gb, _, _) = gray(&DynamicImage::ImageRgb8(b));
     Ok((psnr, ssim_gray(&ga, &gb, w, h), w, h))
@@ -521,7 +545,12 @@ fn lanczos_baseline(src: &Path, want: (u32, u32)) -> Result<DynamicImage, String
     if want.0 == 0 || want.1 == 0 {
         return Err("目标尺寸为 0".into());
     }
-    Ok(DynamicImage::ImageRgb8(img_resize(&img, want.0, want.1, FilterType::Lanczos3)))
+    Ok(DynamicImage::ImageRgb8(img_resize(
+        &img,
+        want.0,
+        want.1,
+        FilterType::Lanczos3,
+    )))
 }
 
 fn aspect_ok(w: u32, h: u32, target: f64) -> bool {
@@ -532,7 +561,7 @@ fn aspect_ok(w: u32, h: u32, target: f64) -> bool {
 }
 
 fn parse_aspect(spec: &str) -> Option<f64> {
-    let raw = spec.replace('：', ":").replace('/', ":");
+    let raw = spec.replace(['：', '/'], ":");
     let (l, r) = raw.split_once(':')?;
     let w: f64 = l.trim().parse().ok()?;
     let h: f64 = r.trim().parse().ok()?;
@@ -566,12 +595,23 @@ fn border_band_max_dev(path: &Path, band: u32) -> Result<f64, String> {
 /// JPEG 重编码噪声在纹理区能到 30+，35% 的白字在中等底色上差值也就 20~60，单看幅度分不开
 /// （N6c 语料脚本踩过这个坑）。这里解出每像素 α，只收「反差 ≥45」的像素（除法不放大噪声），
 /// 再要求成片（4 邻域里 ≥2 个同带）→ 字形内部，最后量那个块的框与中位 α。
-fn watermark_probe(src: &Path, out: &Path, anchor: &str, color: [f64; 3], want: f64) -> Result<Value, String> {
+fn watermark_probe(
+    src: &Path,
+    out: &Path,
+    anchor: &str,
+    color: [f64; 3],
+    want: f64,
+) -> Result<Value, String> {
     let a = load(src)?.to_rgb8();
     let b = load(out)?.to_rgb8();
     let (w, h) = a.dimensions();
     if b.dimensions() != (w, h) {
-        return Err(format!("叠加后尺寸变了：{}x{} → {:?}", w, h, b.dimensions()));
+        return Err(format!(
+            "叠加后尺寸变了：{}x{} → {:?}",
+            w,
+            h,
+            b.dimensions()
+        ));
     }
     const MIN_DIFF: i32 = 8;
     const MIN_CONTRAST: f64 = 45.0;
@@ -584,7 +624,10 @@ fn watermark_probe(src: &Path, out: &Path, anchor: &str, color: [f64; 3], want: 
         for x in 0..wus {
             let pa = a.get_pixel(x as u32, y as u32).0;
             let pb = b.get_pixel(x as u32, y as u32).0;
-            let maxdiff = (0..3).map(|k| (pb[k] as i32 - pa[k] as i32).abs()).max().unwrap_or(0);
+            let maxdiff = (0..3)
+                .map(|k| (pb[k] as i32 - pa[k] as i32).abs())
+                .max()
+                .unwrap_or(0);
             if maxdiff <= MIN_DIFF {
                 continue;
             }
@@ -681,7 +724,12 @@ fn watermark_probe(src: &Path, out: &Path, anchor: &str, color: [f64; 3], want: 
 }
 
 /// smart_crop：label 主体框映射到产物坐标后必须完整落在产物内。
-fn crop_box_mapping(fields: &Value, subject: &Value, out_dims: (u32, u32), tol: f64) -> (bool, Value) {
+fn crop_box_mapping(
+    fields: &Value,
+    subject: &Value,
+    out_dims: (u32, u32),
+    tol: f64,
+) -> (bool, Value) {
     let Some(bbox) = subject.as_array() else {
         return (false, json!({ "why": "label 缺 subject_bbox" }));
     };
@@ -699,7 +747,11 @@ fn crop_box_mapping(fields: &Value, subject: &Value, out_dims: (u32, u32), tol: 
     };
     let bx1 = box_used.first().and_then(Value::as_f64).unwrap_or(0.0);
     let by1 = box_used.get(1).and_then(Value::as_f64).unwrap_or(0.0);
-    let pad = fields.get("padOffset").and_then(Value::as_array).cloned().unwrap_or_default();
+    let pad = fields
+        .get("padOffset")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let ox = pad.first().and_then(Value::as_f64).unwrap_or(0.0);
     let oy = pad.get(1).and_then(Value::as_f64).unwrap_or(0.0);
     let mapped = [x1 - bx1 + ox, y1 - by1 + oy, x2 - bx1 + ox, y2 - by1 + oy];
@@ -707,10 +759,8 @@ fn crop_box_mapping(fields: &Value, subject: &Value, out_dims: (u32, u32), tol: 
     // 容差口径（裁决明确）：label 主体框本身有 ±`subject_bbox_tol_px`（v1.1 标 2px，边缘鲁棒估计）的
     // 标注误差，映射后允许落在产物边界外 tol 以内仍算「完整落在产物内」；默认 0 容差会把这 2px 的
     // 标注噪声当成算法切图。
-    let inside = mapped[0] >= -tol
-        && mapped[1] >= -tol
-        && mapped[2] <= ow + tol
-        && mapped[3] <= oh + tol;
+    let inside =
+        mapped[0] >= -tol && mapped[1] >= -tol && mapped[2] <= ow + tol && mapped[3] <= oh + tol;
     (
         inside,
         json!({
@@ -747,7 +797,11 @@ fn eval_item(
 
     // 契约关先跑：产物去处不合契约 → 后面像素再好也不算 PASS
     if a.contract.get("ok").and_then(Value::as_bool) != Some(true) {
-        let code = a.contract.get("code").and_then(Value::as_str).unwrap_or("?");
+        let code = a
+            .contract
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or("?");
         fail(&mut why, format!("结果行契约被拒（{code}）"));
     }
 
@@ -818,12 +872,20 @@ fn eval_item(
 
     match (&a.error, &a.out_path) {
         (Some(e), _) => fail(&mut why, e.clone()),
-        (None, None) => fail(&mut why, "行里没有产物（处理类必须落 working version）".into()),
+        (None, None) => fail(
+            &mut why,
+            "行里没有产物（处理类必须落 working version）".into(),
+        ),
         _ => {}
     }
 
     // 产物去处：只能一个 export_file/working_version，且落在宿主给的资产目录里
-    let art = a.row.get("artifacts").and_then(Value::as_array).cloned().unwrap_or_default();
+    let art = a
+        .row
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let art_ok = art.len() == 1
         && matches!(
             art[0].get("kind").and_then(Value::as_str),
@@ -907,12 +969,14 @@ fn eval_item(
             let fmt_ok = got == want;
             let size_ok = load(&src).map(|i| i.dimensions() == dims).unwrap_or(false);
             // alpha：源有 alpha → 产物必须也有 alpha 且极值不丢
-            let src_alpha = load(&src).map(|i| i.to_rgba8()).ok().map(|rgba| {
-                rgba.pixels().map(|p| p.0[3]).collect::<Vec<_>>()
-            });
-            let out_alpha = load(out).map(|i| i.to_rgba8()).ok().map(|rgba| {
-                rgba.pixels().map(|p| p.0[3]).collect::<Vec<_>>()
-            });
+            let src_alpha = load(&src)
+                .map(|i| i.to_rgba8())
+                .ok()
+                .map(|rgba| rgba.pixels().map(|p| p.0[3]).collect::<Vec<_>>());
+            let out_alpha = load(out)
+                .map(|i| i.to_rgba8())
+                .ok()
+                .map(|rgba| rgba.pixels().map(|p| p.0[3]).collect::<Vec<_>>());
             let src_has_alpha = src_alpha
                 .as_ref()
                 .map(|v| v.iter().any(|a| *a != 255))
@@ -929,7 +993,9 @@ fn eval_item(
                     _ => false,
                 }
             };
-            crit.push(json!({ "name": "format", "ok": fmt_ok, "detail": { "got": got, "expect": want } }));
+            crit.push(
+                json!({ "name": "format", "ok": fmt_ok, "detail": { "got": got, "expect": want } }),
+            );
             crit.push(json!({ "name": "size_unchanged", "ok": size_ok, "detail": { "out": [dims.0, dims.1] } }));
             crit.push(json!({ "name": "png_keeps_alpha", "ok": alpha_ok,
                              "detail": { "srcHasAlpha": src_has_alpha, "checked": src_has_alpha } }));
@@ -943,7 +1009,9 @@ fn eval_item(
             metrics = json!({ "format": got, "bytes": a.bytes });
         }
         "compress" => {
-            let max_bytes = expect["target_max_bytes"].as_u64().unwrap_or(COMPRESS_MAX_BYTES);
+            let max_bytes = expect["target_max_bytes"]
+                .as_u64()
+                .unwrap_or(COMPRESS_MAX_BYTES);
             let ssim_min = expect["ssim_min"].as_f64().unwrap_or(COMPRESS_SSIM_MIN);
             let size_ok = a.bytes <= max_bytes;
             let fmt_ok = magic_format(out) == expect["out_format"].as_str().unwrap_or("jpg");
@@ -952,7 +1020,8 @@ fn eval_item(
                     let ssim_ok = ssim >= ssim_min;
                     crit.push(json!({ "name": "ssim_to_source", "ok": ssim_ok,
                                      "detail": { "ssim": (ssim * 10000.0).round() / 10000.0, "min": ssim_min } }));
-                    metrics = json!({ "bytes": a.bytes, "ssim": (ssim * 10000.0).round() / 10000.0 });
+                    metrics =
+                        json!({ "bytes": a.bytes, "ssim": (ssim * 10000.0).round() / 10000.0 });
                     if !ssim_ok {
                         fail(&mut why, format!("SSIM {ssim:.4} < {ssim_min}"));
                     }
@@ -963,7 +1032,9 @@ fn eval_item(
                 }
             }
             crit.push(json!({ "name": "max_bytes", "ok": size_ok, "detail": { "bytes": a.bytes, "max": max_bytes } }));
-            crit.push(json!({ "name": "format", "ok": fmt_ok, "detail": { "magic": magic_format(out) } }));
+            crit.push(
+                json!({ "name": "format", "ok": fmt_ok, "detail": { "magic": magic_format(out) } }),
+            );
             if !size_ok && why.is_empty() {
                 fail(&mut why, format!("{}B > {}B", a.bytes, max_bytes));
             }
@@ -1018,7 +1089,10 @@ fn eval_item(
                     if !placed && why.is_empty() {
                         fail(&mut why, format!("水印没落在 {anchor}"));
                     } else if !opacity_ok && why.is_empty() {
-                        fail(&mut why, format!("不透明度实测 {opacity:.3} != {want_opacity}"));
+                        fail(
+                            &mut why,
+                            format!("不透明度实测 {opacity:.3} != {want_opacity}"),
+                        );
                     } else if !ink_ok && why.is_empty() {
                         fail(&mut why, "水印几乎没画出来".into());
                     }
@@ -1041,10 +1115,13 @@ fn eval_item(
             }
         }
         "smart_crop" => {
-            let aspect = parse_aspect(expect["aspect"].as_str().unwrap_or("1:1")).unwrap_or(f64::NAN);
+            let aspect =
+                parse_aspect(expect["aspect"].as_str().unwrap_or("1:1")).unwrap_or(f64::NAN);
             let ratio_ok = aspect_ok(dims.0, dims.1, aspect);
             let fields = a.row.get("fields").cloned().unwrap_or(json!({}));
-            let tol = expect["subject_bbox_tol_px"].as_f64().unwrap_or(SUBJECT_BBOX_TOL_PX);
+            let tol = expect["subject_bbox_tol_px"]
+                .as_f64()
+                .unwrap_or(SUBJECT_BBOX_TOL_PX);
             let (inside, detail) = crop_box_mapping(&fields, &expect["subject_bbox"], dims, tol);
             crit.push(json!({ "name": "aspect", "ok": ratio_ok,
                              "detail": { "out": [dims.0, dims.1], "aspect": aspect,
@@ -1075,12 +1152,14 @@ fn eval_item(
             };
             // 两条腿：① 插件产物对 `_ref`；② 同尺寸 Lanczos 2× 重采样对同一张 `_ref`（基线）。
             let plugin_score = psnr_ssim_vs(&out_img, &reference);
-            let base_score = lanczos_baseline(&src, dims).and_then(|b| psnr_ssim_vs(&b, &reference));
+            let base_score =
+                lanczos_baseline(&src, dims).and_then(|b| psnr_ssim_vs(&b, &reference));
             match (plugin_score, base_score) {
                 (Ok((p_psnr, p_ssim, cw, ch)), Ok((b_psnr, b_ssim, _, _))) => {
                     let d_psnr = p_psnr - b_psnr;
                     let d_ssim = p_ssim - b_ssim;
-                    let redline_ok = d_psnr >= -UPSCALE_REDLINE_DB && d_ssim >= -UPSCALE_REDLINE_SSIM;
+                    let redline_ok =
+                        d_psnr >= -UPSCALE_REDLINE_DB && d_ssim >= -UPSCALE_REDLINE_SSIM;
                     let armed = upscale_metric_gate_armed();
                     let r2 = |v: f64| (v * 100.0).round() / 100.0;
                     let r4 = |v: f64| (v * 10000.0).round() / 10000.0;
@@ -1202,7 +1281,8 @@ fn idempotency_probe(
         .get("skipReason")
         .and_then(Value::as_str)
         .map(str::to_string);
-    let second_skipped = second_skip.as_deref() == Some("already_white") && second.out_path.is_none();
+    let second_skipped =
+        second_skip.as_deref() == Some("already_white") && second.out_path.is_none();
     let first_out_band = border_band_max_dev(&first_out, BG_BAND_PX).unwrap_or(f64::MAX);
     let unchanged = if second.out_path.is_none() {
         // 没产物 = 原文件没被覆盖（产物文件名与输入不同，另外再对一次 sha 才叫证据）
@@ -1233,7 +1313,11 @@ fn idempotency_probe(
 
 fn reverse_verdict(reply: &Value) -> Value {
     let mut injected = reply.clone();
-    if let Some(row) = injected.get_mut("rows").and_then(Value::as_array_mut).and_then(|r| r.first_mut()) {
+    if let Some(row) = injected
+        .get_mut("rows")
+        .and_then(Value::as_array_mut)
+        .and_then(|r| r.first_mut())
+    {
         row["verdict"] = json!({ "status": "pass", "confidence": 0.99 });
     }
     let kinds = [PluginKind::Process];
@@ -1283,7 +1367,13 @@ fn parse_args() -> Result<Args, String> {
             other => return Err(format!("未知参数：{other}")),
         }
     }
-    Ok(Args { corpus, work, evidence, keep, task })
+    Ok(Args {
+        corpus,
+        work,
+        evidence,
+        keep,
+        task,
+    })
 }
 
 fn main() {
@@ -1306,7 +1396,10 @@ fn main() {
     let metric_gate_armed = !corpus_ver.trim_start_matches('v').starts_with('1');
     UPSCALE_METRIC_GATE.set(metric_gate_armed).ok();
     println!("== 语料 v1 自检 ==");
-    println!("{}", serde_json::to_string_pretty(&mutation).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&mutation).unwrap_or_default()
+    );
     if mutation["frozen_ok"].as_bool() != Some(true) {
         eprintln!("[n14] 语料自检未过（frozen_ok != true）——拒绝在不可信语料上跑门禁");
         std::process::exit(3);
@@ -1327,16 +1420,17 @@ fn main() {
 
     for pass in ["a", "b"] {
         for need in NEEDS {
-            let labels: Value = match std::fs::read(args.corpus.join("labels").join(format!("{need}.json")))
-                .ok()
-                .and_then(|raw| serde_json::from_slice(&raw).ok())
-            {
-                Some(v) => v,
-                None => {
-                    eprintln!("[n14] 读不到 labels/{need}.json");
-                    std::process::exit(5);
-                }
-            };
+            let labels: Value =
+                match std::fs::read(args.corpus.join("labels").join(format!("{need}.json")))
+                    .ok()
+                    .and_then(|raw| serde_json::from_slice(&raw).ok())
+                {
+                    Some(v) => v,
+                    None => {
+                        eprintln!("[n14] 读不到 labels/{need}.json");
+                        std::process::exit(5);
+                    }
+                };
             let items = labels["items"].as_array().cloned().unwrap_or_default();
             if items.len() != 10 {
                 eprintln!("[n14] {need} 语料数量 {} != 10", items.len());
@@ -1350,7 +1444,11 @@ fn main() {
                     .and_then(|s| s.to_str())
                     .unwrap_or("item")
                     .to_string();
-                let workdir = args.work.join(format!("pass-{pass}")).join(need).join(format!("{idx:02}-{stem}"));
+                let workdir = args
+                    .work
+                    .join(format!("pass-{pass}"))
+                    .join(need)
+                    .join(format!("{idx:02}-{stem}"));
                 let opts = match options_for(need, item) {
                     Ok(v) => v,
                     Err(e) => {
@@ -1359,7 +1457,14 @@ fn main() {
                     }
                 };
                 let host = harness.host_for(need);
-                let att = match attempt(host, need, &format!("{pass}-{idx:02}-{stem}"), &src, &workdir, opts.clone()) {
+                let att = match attempt(
+                    host,
+                    need,
+                    &format!("{pass}-{idx:02}-{stem}"),
+                    &src,
+                    &workdir,
+                    opts.clone(),
+                ) {
                     Ok(a) => a,
                     Err(e) => {
                         eprintln!("[n14] {need}/{stem} 调用失败：{e}");
@@ -1376,7 +1481,11 @@ fn main() {
                             need,
                             &format!("{pass}-{idx:02}-{stem}-probe"),
                             &src,
-                            &args.work.join(format!("pass-{pass}")).join("watermark-probe").join(format!("{idx:02}-{stem}")),
+                            &args
+                                .work
+                                .join(format!("pass-{pass}"))
+                                .join("watermark-probe")
+                                .join(format!("{idx:02}-{stem}")),
                             popts,
                         )
                         .ok()
@@ -1389,7 +1498,8 @@ fn main() {
                             first_reply = Some(json!({ "rows": [att.row] }));
                         }
                     }
-                    let (ok, crit, why, metrics) = eval_item(need, item, &args.corpus, &att, probe_attempt.as_ref());
+                    let (ok, crit, why, metrics) =
+                        eval_item(need, item, &args.corpus, &att, probe_attempt.as_ref());
                     let entry = per_need.entry(need.to_string()).or_insert((0, 0));
                     entry.0 += 1;
                     if ok {
@@ -1410,9 +1520,10 @@ fn main() {
                     }));
                 } else {
                     // pass B：只做 sha256 对账（跳过的行没有产物 → 对账「两趟跳过原因一致」）
-                    if let Some(slot) = results.iter_mut().find(|r| {
-                        r["need"] == json!(need) && r["file"] == json!(file)
-                    }) {
+                    if let Some(slot) = results
+                        .iter_mut()
+                        .find(|r| r["need"] == json!(need) && r["file"] == json!(file))
+                    {
                         let a_sha = slot["sha256_pass_a"].as_str().unwrap_or("").to_string();
                         let a_skip = slot["row"]
                             .get("skipReason")
@@ -1443,7 +1554,7 @@ fn main() {
                             if why.is_empty() {
                                 why = msg.into();
                             } else {
-                                why.push_str("；");
+                                why.push('；');
                                 why.push_str(msg);
                             }
                             slot["why"] = json!(why);
@@ -1474,7 +1585,10 @@ fn main() {
                 }
             }
         }
-        println!("[n14] pass {pass} 完成（{:.1}s）", started.elapsed().as_secs_f64());
+        println!(
+            "[n14] pass {pass} 完成（{:.1}s）",
+            started.elapsed().as_secs_f64()
+        );
     }
 
     // white_bg_fill 幂等（附加探针，不计入 70 项）
@@ -1484,7 +1598,10 @@ fn main() {
             for item in labels["items"].as_array().cloned().unwrap_or_default() {
                 let file = item["file"].as_str().unwrap_or_default();
                 let src = args.corpus.join(file);
-                let stem = Path::new(file).file_stem().and_then(|s| s.to_str()).unwrap_or("i");
+                let stem = Path::new(file)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("i");
                 let workdir = args.work.join("idempotency").join(stem);
                 let probe = idempotency_probe(
                     &harness.segment,
@@ -1497,7 +1614,10 @@ fn main() {
             }
         }
     }
-    let idem_ok = !idem.is_empty() && idem.iter().all(|r| r["probe"]["ok"].as_bool() == Some(true));
+    let idem_ok = !idem.is_empty()
+        && idem
+            .iter()
+            .all(|r| r["probe"]["ok"].as_bool() == Some(true));
 
     // 反向：处理类包回 verdict 必须被拒
     let reverse = match first_reply {
@@ -1513,19 +1633,31 @@ fn main() {
             for item in labels["items"].as_array().cloned().unwrap_or_default() {
                 let file = item["file"].as_str().unwrap_or_default();
                 let src = args.corpus.join(file);
-                let stem = Path::new(file).file_stem().and_then(|s| s.to_str()).unwrap_or("i");
+                let stem = Path::new(file)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("i");
                 let workdir = args.work.join("upscale-light").join(stem);
                 let mut opts = json!({ "scale": item["expect"]["scale"].as_u64().unwrap_or(2).to_string(),
                                        "engine": "light", "tile": "auto", "denoise": 0 });
                 opts["workdir"] = json!(workdir.to_string_lossy());
-                let att = match attempt(&harness.upscale, "upscale", &format!("light-{stem}"), &src, &workdir, opts) {
+                let att = match attempt(
+                    &harness.upscale,
+                    "upscale",
+                    &format!("light-{stem}"),
+                    &src,
+                    &workdir,
+                    opts,
+                ) {
                     Ok(a) => a,
                     Err(e) => {
                         upscale_light.push(json!({ "file": file, "error": e }));
                         continue;
                     }
                 };
-                let reference = args.corpus.join(item["expect"]["gt_reference"].as_str().unwrap_or_default());
+                let reference = args
+                    .corpus
+                    .join(item["expect"]["gt_reference"].as_str().unwrap_or_default());
                 let scored = att.out_path.as_ref().and_then(|p| {
                     let out_img = load(p).ok()?;
                     let dims = out_img.dimensions();
@@ -1557,16 +1689,27 @@ fn main() {
 
     // 附带探针：`convert` 的 alpha 保留（语料 10 张里没有透明源，用 N6b 的 alpha 夹具补这一条）
     let mut alpha_probe: Vec<Value> = Vec::new();
-    let alpha_manifest = repo_root().join("packs/plugins/imaging/tests/fixtures/codec/manifest.json");
+    let alpha_manifest =
+        repo_root().join("packs/plugins/imaging/tests/fixtures/codec/manifest.json");
     if let Ok(raw) = std::fs::read(&alpha_manifest) {
         if let Ok(man) = serde_json::from_slice::<Value>(&raw) {
             for item in man["alpha"].as_array().cloned().unwrap_or_default() {
                 let rel = item["file"].as_str().unwrap_or_default();
                 let src = alpha_manifest.parent().unwrap().join(rel);
-                let stem = Path::new(rel).file_stem().and_then(|s| s.to_str()).unwrap_or("a");
+                let stem = Path::new(rel)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("a");
                 let workdir = args.work.join("convert-alpha").join(stem);
                 let opts = json!({ "action": "convert", "convertFormat": "png" });
-                let att = match attempt(&harness.imaging, "convert", &format!("alpha-{stem}"), &src, &workdir, opts) {
+                let att = match attempt(
+                    &harness.imaging,
+                    "convert",
+                    &format!("alpha-{stem}"),
+                    &src,
+                    &workdir,
+                    opts,
+                ) {
                     Ok(a) => a,
                     Err(e) => {
                         alpha_probe.push(json!({ "file": rel, "ok": false, "why": e }));
@@ -1609,14 +1752,15 @@ fn main() {
             }
         }
     }
-    let alpha_ok = !alpha_probe.is_empty() && alpha_probe.iter().all(|r| r["ok"].as_bool() == Some(true));
+    let alpha_ok =
+        !alpha_probe.is_empty() && alpha_probe.iter().all(|r| r["ok"].as_bool() == Some(true));
 
     let total: u32 = per_need.values().map(|(n, _)| *n).sum();
     let passed: u32 = per_need.values().map(|(_, p)| *p).sum();
     let failed = total.saturating_sub(passed);
 
     println!("\n== N14 process 门禁：7 need × 10 张 ==");
-    println!("{:<14} {:<34} {:<6} {}", "need", "file", "结果", "为什么/指标");
+    println!("{:<14} {:<34} {:<6} 为什么/指标", "need", "file", "结果");
     for r in &results {
         let ok = r["ok"].as_bool().unwrap_or(false);
         let metrics = &r["metrics"];
@@ -1641,12 +1785,27 @@ fn main() {
     for (need, (n, p)) in &per_need {
         println!("  {:<14} {}/{}", need, p, n);
     }
-    println!("\n幂等（white_bg_fill：已白底两次都跳过 / 重跑同字节 / 产物再跑必须被守卫挡下）：{}",
-             if idem_ok { "PASS" } else { "FAIL" });
-    println!("convert alpha 保留（3 张透明夹具 → png）：{}", if alpha_ok { "PASS" } else { "FAIL" });
-    println!("反向（处理类回 verdict 拒收）：{}", if reverse["rejected"].as_bool() == Some(true) { "PASS" } else { "FAIL" });
+    println!(
+        "\n幂等（white_bg_fill：已白底两次都跳过 / 重跑同字节 / 产物再跑必须被守卫挡下）：{}",
+        if idem_ok { "PASS" } else { "FAIL" }
+    );
+    println!(
+        "convert alpha 保留（3 张透明夹具 → png）：{}",
+        if alpha_ok { "PASS" } else { "FAIL" }
+    );
+    println!(
+        "反向（处理类回 verdict 拒收）：{}",
+        if reverse["rejected"].as_bool() == Some(true) {
+            "PASS"
+        } else {
+            "FAIL"
+        }
+    );
     if !upscale_light.is_empty() {
-        let light_redline = upscale_light.iter().filter(|r| r["redlineOk"].as_bool() == Some(true)).count();
+        let light_redline = upscale_light
+            .iter()
+            .filter(|r| r["redlineOk"].as_bool() == Some(true))
+            .count();
         println!(
             "参考（upscale light 档 vs Lanczos 基线）：红线 ΔPSNR ≥ -{UPSCALE_REDLINE_DB}dB 且 ΔSSIM ≥ -{UPSCALE_REDLINE_SSIM} → {light_redline}/{}（arm={}）",
             upscale_light.len(),
@@ -1701,7 +1860,10 @@ fn main() {
     if let Some(dir) = args.evidence.parent() {
         std::fs::create_dir_all(dir).ok();
     }
-    match std::fs::write(&args.evidence, serde_json::to_vec_pretty(&evidence).unwrap_or_default()) {
+    match std::fs::write(
+        &args.evidence,
+        serde_json::to_vec_pretty(&evidence).unwrap_or_default(),
+    ) {
         Ok(_) => println!("evidence → {}", args.evidence.display()),
         Err(e) => eprintln!("[n14] 写 evidence 失败：{e}"),
     }

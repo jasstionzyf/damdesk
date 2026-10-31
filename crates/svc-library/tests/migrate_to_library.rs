@@ -25,17 +25,17 @@ struct Fx {
 impl Fx {
     fn new(tag: &str) -> Self {
         let n = SEQ.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "dam-migrate-{}-{}-{}",
-            tag,
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("dam-migrate-{}-{}-{}", tag, std::process::id(), n));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let conn = core_storage::open(&dir.join("dam.db")).unwrap();
         let lib_root = dir.join("library");
-        Fx { dir, conn, lib_root }
+        Fx {
+            dir,
+            conn,
+            lib_root,
+        }
     }
 
     /// 「参考目录」里造文件 + assets 行，返回 (assetId, 原路径, hash)。
@@ -75,13 +75,17 @@ impl Fx {
 
     fn abs_path(&self, id: i64) -> String {
         self.conn
-            .query_row("SELECT absPath FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row("SELECT absPath FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
             .unwrap()
     }
 
     fn store_mode(&self, id: i64) -> String {
         self.conn
-            .query_row("SELECT storeMode FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row("SELECT storeMode FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
             .unwrap()
     }
 
@@ -183,7 +187,10 @@ fn skip_reason_priority_and_all_branches() {
     // 已在库内（copyin / 其它非 reference 形态）
     assert_eq!(s(true, true, "copyin", true, true), Some("already_copyin"));
     // 盘上读不到
-    assert_eq!(s(true, true, "reference", false, true), Some("missing_file"));
+    assert_eq!(
+        s(true, true, "reference", false, true),
+        Some("missing_file")
+    );
     // 内容与指纹不符
     assert_eq!(
         s(true, true, "reference", true, false),
@@ -266,7 +273,9 @@ fn copies_into_library_and_keeps_source_by_default() {
 
     let rows = svc_library::migrate_audit_rows(&fx.conn, Some("b-copy"), 100).unwrap();
     assert_eq!(rows.len(), 2);
-    assert!(rows.iter().all(|r| r.status == "done" && r.kind == "copyin"));
+    assert!(rows
+        .iter()
+        .all(|r| r.status == "done" && r.kind == "copyin"));
     assert!(rows.iter().all(|r| r.operator == "local"), "默认 operator");
     assert!(rows.iter().all(|r| r.at > 0 && r.bytes > 0));
     assert_eq!(fx.audit_count("b-copy", "failed"), 0);
@@ -372,7 +381,11 @@ fn skips_missing_content_changed_and_hashless_assets() {
     // 失联资产被标 missing=1（与 move_assets 同口径），内容变了的资产不动
     let m: i64 = fx
         .conn
-        .query_row("SELECT missing FROM assets WHERE assetId=?1", [missing], |r| r.get(0))
+        .query_row(
+            "SELECT missing FROM assets WHERE assetId=?1",
+            [missing],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(m, 1);
     assert_eq!(fx.store_mode(changed), "reference");
@@ -418,13 +431,9 @@ fn batch_level_argument_validation() {
     // 库根不可创建（父路径是个文件）→ 明确报错而不是静默
     let file_as_parent = fx.dir.join("blocked");
     std::fs::write(&file_as_parent, b"x").unwrap();
-    let e = svc_library::migrate_to_library(
-        &mut fx.conn,
-        &[a],
-        &file_as_parent.join("library"),
-        &opts,
-    )
-    .unwrap_err();
+    let e =
+        svc_library::migrate_to_library(&mut fx.conn, &[a], &file_as_parent.join("library"), &opts)
+            .unwrap_err();
     assert!(!e.to_string().is_empty());
 }
 
@@ -460,10 +469,25 @@ fn audit_rows_filter_and_limit() {
     let (b, _pb, _hb) = fx.add_reference("b.jpg", b"p2");
     fx.run(&[a], "batch-x");
     fx.run(&[b], "batch-y");
-    assert_eq!(svc_library::migrate_audit_rows(&fx.conn, Some("batch-x"), 10).unwrap().len(), 1);
-    assert_eq!(svc_library::migrate_audit_rows(&fx.conn, None, 10).unwrap().len(), 2);
+    assert_eq!(
+        svc_library::migrate_audit_rows(&fx.conn, Some("batch-x"), 10)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        svc_library::migrate_audit_rows(&fx.conn, None, 10)
+            .unwrap()
+            .len(),
+        2
+    );
     // limit 下限被夹到 1，上限被夹到 1000（不 panic、不返回超量）
-    assert_eq!(svc_library::migrate_audit_rows(&fx.conn, None, 0).unwrap().len(), 1);
+    assert_eq!(
+        svc_library::migrate_audit_rows(&fx.conn, None, 0)
+            .unwrap()
+            .len(),
+        1
+    );
     assert!(svc_library::migrate_audit_rows(&fx.conn, Some("nope"), 10)
         .unwrap()
         .is_empty());
@@ -481,7 +505,14 @@ fn size_mismatch_after_copy_is_rejected() {
     let src = Path::new("/proc/self/cmdline");
     let bytes = std::fs::read(src).unwrap();
     let hash = sha(&bytes);
-    fx.insert_row(src, "cmdline", "", bytes.len() as i64, Some(&hash), "reference");
+    fx.insert_row(
+        src,
+        "cmdline",
+        "",
+        bytes.len() as i64,
+        Some(&hash),
+        "reference",
+    );
     let id = fx.conn.last_insert_rowid();
 
     let rep = fx.run_opts(
@@ -603,16 +634,11 @@ fn transaction_creation_failure_cleans_copied_file() {
     let mut fx = Fx::new("intx");
     let (a, pa, ha) = fx.add_reference("a.jpg", b"payload");
     fx.conn.execute_batch("BEGIN").unwrap();
-    let rep = svc_library::migrate_to_library(
-        &mut fx.conn,
-        &[a],
-        &fx.lib_root,
-        &{
-            let mut o = svc_library::MigrateOptions::default();
-            o.batch_id = Some("b-intx".into());
-            o
-        },
-    )
+    let rep = svc_library::migrate_to_library(&mut fx.conn, &[a], &fx.lib_root, &{
+        let mut o = svc_library::MigrateOptions::default();
+        o.batch_id = Some("b-intx".into());
+        o
+    })
     .unwrap();
     fx.conn.execute_batch("ROLLBACK").unwrap();
     assert_eq!(rep.migrated, 0, "{rep:?}");
@@ -652,7 +678,10 @@ fn over_long_target_name_fails_cleanly() {
     let (a, _pa, _ha) = fx.add_reference("a.jpg", b"payload");
     let long = format!("{}.jpg", "x".repeat(300));
     fx.conn
-        .execute("UPDATE assets SET fileName=?1 WHERE assetId=?2", rusqlite::params![long, a])
+        .execute(
+            "UPDATE assets SET fileName=?1 WHERE assetId=?2",
+            rusqlite::params![long, a],
+        )
         .unwrap();
     let rep = fx.run(&[a], "b-long");
     assert_eq!(rep.migrated, 0, "{rep:?}");

@@ -92,7 +92,10 @@ fn calibrate() -> i32 {
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| {
             matches!(
-                p.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()).as_deref(),
+                p.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|s| s.to_ascii_lowercase())
+                    .as_deref(),
                 Some("jpg") | Some("jpeg") | Some("png")
             )
         })
@@ -165,7 +168,11 @@ fn calibrate() -> i32 {
         );
         let min = v.first().copied().unwrap_or(f64::NAN);
         let max = v.last().copied().unwrap_or(f64::NAN);
-        let mean = if n > 0 { v.iter().sum::<f64>() / n as f64 } else { f64::NAN };
+        let mean = if n > 0 {
+            v.iter().sum::<f64>() / n as f64
+        } else {
+            f64::NAN
+        };
         serde_json::json!({
             "n": n, "min": min, "p1": p1, "p5": p5, "p10": p10, "p25": p25,
             "p50": p50, "p75": p75, "p90": p90, "p99": p99, "max": max, "mean": mean,
@@ -217,11 +224,15 @@ fn load() -> i32 {
             "tagging": r.is_tagging(),
         });
         let mut verdict = "zero_code";
-        let mut detail = serde_json::Value::Null;
-        let mut ignored: Vec<String> = Vec::new();
+        let detail;
+        let _ignored: Vec<String> = Vec::new();
         match r.executor {
             core_config::RuleExecutor::Classic => {
-                let det = r.check.as_ref().map(|c| c.detector.clone()).unwrap_or_default();
+                let det = r
+                    .check
+                    .as_ref()
+                    .map(|c| c.detector.clone())
+                    .unwrap_or_default();
                 let params = r
                     .check
                     .as_ref()
@@ -257,7 +268,8 @@ fn load() -> i32 {
                             }
                             Err(e) => {
                                 verdict = "params_rejected";
-                                detail = serde_json::json!({ "detector": det, "error": e.to_string() });
+                                detail =
+                                    serde_json::json!({ "detector": det, "error": e.to_string() });
                                 needs_code.push(format!("{}: 检测器参数被拒 — {e}", r.id));
                             }
                         }
@@ -265,7 +277,11 @@ fn load() -> i32 {
                 }
             }
             core_config::RuleExecutor::Vl => {
-                let det = r.check.as_ref().map(|c| c.detector.clone()).unwrap_or_default();
+                let det = r
+                    .check
+                    .as_ref()
+                    .map(|c| c.detector.clone())
+                    .unwrap_or_default();
                 let params = r
                     .check
                     .as_ref()
@@ -301,7 +317,11 @@ fn load() -> i32 {
                 }
             }
             core_config::RuleExecutor::LocalModel => {
-                let det = r.check.as_ref().map(|c| c.detector.clone()).unwrap_or_default();
+                let det = r
+                    .check
+                    .as_ref()
+                    .map(|c| c.detector.clone())
+                    .unwrap_or_default();
                 let params = r
                     .check
                     .as_ref()
@@ -652,7 +672,11 @@ fn groups() -> i32 {
                     .get(&(*id, rid.clone()))
                     .cloned()
                     .unwrap_or_else(|| "<无判定行>".into());
-                *per_rule.entry(rid.clone()).or_default().entry(res).or_default() += 1;
+                *per_rule
+                    .entry(rid.clone())
+                    .or_default()
+                    .entry(res)
+                    .or_default() += 1;
             }
         }
         // 组内 pHash 近似重复（L1 engine-dedup 能力直调）
@@ -718,8 +742,9 @@ fn groups() -> i32 {
 /// （serde 默认不 deny_unknown_fields）——这是「换行业=换文件」承诺的隐形陷阱：
 /// 作者以为写了、引擎根本没看。返回 {文件: {位置: [多出来的键]}}。
 fn schema_diff(dir: &Path) -> serde_json::Value {
-    const RULE_KEYS: [&str; 8] =
-        ["id", "name", "executor", "evidence", "check", "outputs", "fixer", "on_fail"];
+    const RULE_KEYS: [&str; 8] = [
+        "id", "name", "executor", "evidence", "check", "outputs", "fixer", "on_fail",
+    ];
     const CHECK_KEYS: [&str; 2] = ["detector", "params"];
     const FIXER_KEYS: [&str; 3] = ["type", "tier", "params"];
     const PIPE_KEYS: [&str; 2] = ["steps", "recheck_max"];
@@ -741,7 +766,10 @@ fn schema_diff(dir: &Path) -> serde_json::Value {
         }
     };
     let extra = |seen: &[String], known: &[&str]| -> Vec<String> {
-        seen.iter().filter(|k| !known.contains(&k.as_str())).cloned().collect()
+        seen.iter()
+            .filter(|k| !known.contains(&k.as_str()))
+            .cloned()
+            .collect()
     };
 
     let mut out: BTreeMap<String, serde_json::Value> = Default::default();
@@ -800,7 +828,10 @@ fn schema_diff(dir: &Path) -> serde_json::Value {
 // ================= 模式 6：schema 探针夹具（故意写错，看引擎响不响） =================
 
 fn probes() -> i32 {
-    let dir = PathBuf::from(env_or("C7_PROBE_DIR", "/workspace/scripts/c7-fixtures/schema-probes"));
+    let dir = PathBuf::from(env_or(
+        "C7_PROBE_DIR",
+        "/workspace/scripts/c7-fixtures/schema-probes",
+    ));
     let mut entries: Vec<PathBuf> = std::fs::read_dir(&dir)
         .map(|d| {
             d.filter_map(|e| e.ok().map(|e| e.path()))
@@ -815,8 +846,13 @@ fn probes() -> i32 {
         let mut row = serde_json::json!({ "probe": name });
         // C8：装载前 lint（键级 schema + 注册表层）= 装载/导入/激活同一道门
         let issues = svc_pipeline::compliance_lint::lint_dir(d);
-        row["lintIssues"] = serde_json::json!(issues.iter().map(|i| i.to_string()).collect::<Vec<_>>());
-        row["gated"] = serde_json::json!(if issues.is_empty() { "accepted" } else { "rejected" });
+        row["lintIssues"] =
+            serde_json::json!(issues.iter().map(|i| i.to_string()).collect::<Vec<_>>());
+        row["gated"] = serde_json::json!(if issues.is_empty() {
+            "accepted"
+        } else {
+            "rejected"
+        });
         let loaded = core_config::Pack::from_dir(d);
         match loaded {
             Err(e) => {
@@ -851,10 +887,12 @@ fn probes() -> i32 {
                                         &input,
                                         &chk.params,
                                     ) {
-                                        Ok(o) => it["probeRun"] = serde_json::json!(format!(
-                                            "ok score={} pass={}",
-                                            o.score, o.pass
-                                        )),
+                                        Ok(o) => {
+                                            it["probeRun"] = serde_json::json!(format!(
+                                                "ok score={} pass={}",
+                                                o.score, o.pass
+                                            ))
+                                        }
                                         Err(e) => {
                                             it["probeRun"] = serde_json::json!(format!("ERR {e}"))
                                         }
@@ -907,7 +945,11 @@ fn synth_rgb() -> engine_classic::registry::DetectorInput {
     let mut px = Vec::with_capacity((w * h * 3) as usize);
     for y in 0..h {
         for x in 0..w {
-            let v = if (x / 8 + y / 8) % 2 == 0 { 40u8 } else { 220u8 };
+            let v = if (x / 8 + y / 8) % 2 == 0 {
+                40u8
+            } else {
+                220u8
+            };
             let g = ((x * 4) as u8).wrapping_add(v / 2);
             px.extend_from_slice(&[g, v, 255 - v]);
         }
@@ -937,7 +979,10 @@ fn dedup_probe() -> i32 {
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| {
             matches!(
-                p.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()).as_deref(),
+                p.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|s| s.to_ascii_lowercase())
+                    .as_deref(),
                 Some("jpg") | Some("jpeg") | Some("png")
             )
         })
@@ -949,7 +994,9 @@ fn dedup_probe() -> i32 {
     for (i, f) in files.iter().enumerate() {
         let bytes = std::fs::read(f).unwrap_or_default();
         let sha = core_hash::sha256_hex(&bytes);
-        let ph = core_media::luma32(f).ok().and_then(|l| core_hash::phash_hex(&l).ok());
+        let ph = core_media::luma32(f)
+            .ok()
+            .and_then(|l| core_hash::phash_hex(&l).ok());
         names.push(f.file_name().unwrap().to_string_lossy().to_string());
         members.push(engine_dedup::DupMember {
             asset_id: i as i64,

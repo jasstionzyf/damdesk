@@ -203,10 +203,10 @@ impl OnnxSiglipProvider {
             }
         }
         let vision = Session::builder()
-            .and_then(|mut b| b.commit_from_file(&vision_p))
+            .and_then(|b| b.commit_from_file(&vision_p))
             .map_err(|e| EmbedError::Onnx(format!("{}: {e}", vision_p.display())))?;
         let text = Session::builder()
-            .and_then(|mut b| b.commit_from_file(&text_p))
+            .and_then(|b| b.commit_from_file(&text_p))
             .map_err(|e| EmbedError::Onnx(format!("{}: {e}", text_p.display())))?;
         let mut tokenizer = Tokenizer::from_file(&tok_p)
             .map_err(|e| EmbedError::Tokenizer(format!("{}: {e}", tok_p.display())))?;
@@ -575,7 +575,9 @@ mod tests {
     #[test]
     fn tokenize_truncates_and_keeps_eos_last() {
         let tk = mini_tokenizer(16);
-        let long = std::iter::repeat("dog cat").take(20).collect::<Vec<_>>().join(" ");
+        let long = std::iter::repeat_n("dog cat", 20)
+            .collect::<Vec<_>>()
+            .join(" ");
         let ids = tokenize(&tk, &long, 16).expect("tokenize");
         assert_eq!(ids.len(), 16);
         assert_eq!(*ids.last().unwrap(), 1, "截断后末位仍要补回 <eos>");

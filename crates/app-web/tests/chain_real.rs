@@ -73,7 +73,9 @@ async fn post(app: &axum::Router, uri: &str, body: Value) -> (u16, Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -84,7 +86,9 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -131,7 +135,10 @@ async fn real_chain_resize_convert_watermark_lands_one_working_version() {
             "watermarkOpacity": 0.6
         }
     });
-    println!("POST /api/compliance/judge\n{}", serde_json::to_string_pretty(&request).unwrap());
+    println!(
+        "POST /api/compliance/judge\n{}",
+        serde_json::to_string_pretty(&request).unwrap()
+    );
     let (code, body) = post(&app, "/api/compliance/judge", request).await;
     println!("{} {}", code, serde_json::to_string_pretty(&body).unwrap());
     assert_eq!(code, 200, "触发链失败：{body}");
@@ -151,15 +158,25 @@ async fn real_chain_resize_convert_watermark_lands_one_working_version() {
             break;
         }
     }
-    println!("judge/status 收工快照\n{}", serde_json::to_string_pretty(&last).unwrap());
+    println!(
+        "judge/status 收工快照\n{}",
+        serde_json::to_string_pretty(&last).unwrap()
+    );
 
     // 结果行 + 工作版本（读侧接口）
     let (code, versions) = get(&app, "/api/compliance/versions?assetId=1").await;
-    println!("GET /api/compliance/versions?assetId=1 → {}\n{}", code, serde_json::to_string_pretty(&versions).unwrap());
+    println!(
+        "GET /api/compliance/versions?assetId=1 → {}\n{}",
+        code,
+        serde_json::to_string_pretty(&versions).unwrap()
+    );
     assert_eq!(code, 200, "{versions}");
     assert_eq!(versions["count"], 1, "一条链 = 一行结果：{versions}");
     assert_eq!(versions["okCount"], 1, "链应成功：{versions}");
-    assert_eq!(versions["currentCount"], 1, "**只有一张**工作版本：{versions}");
+    assert_eq!(
+        versions["currentCount"], 1,
+        "**只有一张**工作版本：{versions}"
+    );
     let cur = &versions["current"];
     assert_eq!(cur["result"], "ok", "{versions}");
     assert_eq!(cur["actions"], json!(["resize", "convert", "watermark"]));
@@ -175,7 +192,10 @@ async fn real_chain_resize_convert_watermark_lands_one_working_version() {
     );
     assert_eq!(cur["format"], "webp", "{versions}");
     let original_now = sha256_of(&original);
-    assert_eq!(original_sha, original_now, "原图不许被改（产物只进 fixes/）");
+    assert_eq!(
+        original_sha, original_now,
+        "原图不许被改（产物只进 fixes/）"
+    );
     println!("产物 {} sha256={}", out_path.display(), disk_sha);
 
     // 链证据：三步、outPath 逐级串起来、中间产物已删
@@ -191,12 +211,19 @@ async fn real_chain_resize_convert_watermark_lands_one_working_version() {
     let p2 = PathBuf::from(chain[1]["outPath"].as_str().unwrap());
     assert!(!p1.exists(), "第 1 步中间产物应已删除：{}", p1.display());
     assert!(!p2.exists(), "第 2 步中间产物应已删除：{}", p2.display());
-    assert_eq!(chain[2]["outPath"].as_str().unwrap(), out_path.to_string_lossy());
+    assert_eq!(
+        chain[2]["outPath"].as_str().unwrap(),
+        out_path.to_string_lossy()
+    );
 
     // 库表直查（验收原文的口径）：SELECT * FROM asset_versions WHERE assetId=1
     let conn = core_storage::open(&db).unwrap();
     let n: i64 = conn
-        .query_row("SELECT COUNT(*) FROM asset_versions WHERE assetId = 1", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM asset_versions WHERE assetId = 1",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     let cur_n: i64 = conn
         .query_row(
@@ -267,9 +294,6 @@ async fn real_chain_resize_convert_watermark_lands_one_working_version() {
     }
     let p_first = PathBuf::from(versions2["versions"][1]["path"].as_str().unwrap());
     let p_second = PathBuf::from(versions2["versions"][0]["path"].as_str().unwrap());
-    assert_ne!(
-        p_first, p_second,
-        "两次跑必须落在不同目录（否则互相覆盖）"
-    );
+    assert_ne!(p_first, p_second, "两次跑必须落在不同目录（否则互相覆盖）");
     let _ = std::fs::remove_dir_all(&sys);
 }

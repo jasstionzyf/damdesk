@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)] // vips 全局锁刻意贯穿 await：测试间串行化 libvips（非 DB 锁，无死锁面）
 //! N18（卡 task）回归钉：**判定默认走插件 + 错误可读 + 没有引擎开关**。
 //!
 //! 背景（N15 真机批次缺陷）：装好插件、建好规格后，用规格发起判定直接 400 —— 那时生效的
@@ -96,7 +97,9 @@ async fn post_json(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_jso
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
@@ -150,7 +153,10 @@ async fn fresh_install_judges_without_any_engine_setting() {
             // 容器里没有 python3 / 没带插件：必须是「插件没装」的可操作错误，而不是引擎选错
             assert_eq!(j["error"], serde_json::json!("plugin_not_installed"), "{j}");
             assert_eq!(j["action"], serde_json::json!("open_packs_drawer"), "{j}");
-            assert!(j["hint"].as_str().unwrap_or_default().contains(".dampack"), "{j}");
+            assert!(
+                j["hint"].as_str().unwrap_or_default().contains(".dampack"),
+                "{j}"
+            );
         }
         other => panic!("判定入口不许 {other}：{j}"),
     }
@@ -186,7 +192,11 @@ async fn upgrade_with_legacy_setting_residue_still_judges() {
     if code == 400 {
         assert_eq!(j["error"], serde_json::json!("plugin_not_installed"), "{j}");
     } else {
-        assert_eq!(j["engine"], serde_json::json!("plugin"), "通道恒为插件：{j}");
+        assert_eq!(
+            j["engine"],
+            serde_json::json!("plugin"),
+            "通道恒为插件：{j}"
+        );
     }
 }
 
@@ -203,13 +213,27 @@ async fn spec_pointing_at_uninstalled_plugin_is_actionable() {
     let body = format!(r#"{{"specId":{spec_id},"assetIds":[1],"scope":"asset"}}"#);
     let (code, j) = post_json(&f.app, "/api/compliance/judge", &body).await;
     assert_eq!(code, 400, "{j}");
-    assert_eq!(j["error"], serde_json::json!("spec_plugin_not_installed"), "{j}");
-    assert_eq!(j["code"], serde_json::json!("spec_plugin_not_installed"), "{j}");
+    assert_eq!(
+        j["error"],
+        serde_json::json!("spec_plugin_not_installed"),
+        "{j}"
+    );
+    assert_eq!(
+        j["code"],
+        serde_json::json!("spec_plugin_not_installed"),
+        "{j}"
+    );
     assert_eq!(j["action"], serde_json::json!("open_packs_drawer"), "{j}");
     let hint = j["hint"].as_str().unwrap_or_default();
-    assert!(hint.contains("com.example.gone"), "提示要点名哪个插件：{hint}");
+    assert!(
+        hint.contains("com.example.gone"),
+        "提示要点名哪个插件：{hint}"
+    );
     let msg = j["message"].as_str().unwrap_or_default();
-    assert!(msg.contains("已卸载插件的规格"), "文案要点名哪条规格：{msg}");
+    assert!(
+        msg.contains("已卸载插件的规格"),
+        "文案要点名哪条规格：{msg}"
+    );
 }
 
 /// 4) 规格钉的版本与已装版本不一致 → 400 `spec_plugin_version_mismatch`（不静默改用新版）。
@@ -218,13 +242,19 @@ async fn spec_version_pin_mismatch_is_actionable() {
     let _guard = vips_lock().lock().unwrap_or_else(|e| e.into_inner());
     let f = setup("spec-pin");
     // 只有装了电商插件、且已装版本 != 钉的版本，这条用例才有意义
-    let Some(dir) = app_web::compliance_api::repo_builtin_pack_dir("com.soujpg.pack.ecommerce") else {
+    let Some(dir) = app_web::compliance_api::repo_builtin_pack_dir("com.soujpg.pack.ecommerce")
+    else {
         eprintln!("skip: 本机没有仓库内置电商插件包");
         return;
     };
     let spec_id = {
         let conn = core_storage::open(&db_path(&f)).unwrap();
-        insert_spec(&conn, "com.soujpg.pack.ecommerce", Some("0.0.1"), "钉旧版本的规格")
+        insert_spec(
+            &conn,
+            "com.soujpg.pack.ecommerce",
+            Some("0.0.1"),
+            "钉旧版本的规格",
+        )
     };
     let _ = dir;
 
@@ -250,8 +280,11 @@ async fn disabled_and_missing_specs_are_actionable() {
     let spec_id = {
         let conn = core_storage::open(&db_path(&f)).unwrap();
         let id = insert_spec(&conn, "com.soujpg.pack.ecommerce", None, "停用的规格");
-        conn.execute("UPDATE plugin_spec SET enabled = 0 WHERE specId = ?1", rusqlite::params![id])
-            .unwrap();
+        conn.execute(
+            "UPDATE plugin_spec SET enabled = 0 WHERE specId = ?1",
+            rusqlite::params![id],
+        )
+        .unwrap();
         id
     };
     let body = format!(r#"{{"specId":{spec_id},"assetIds":[1],"scope":"asset"}}"#);

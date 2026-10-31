@@ -26,7 +26,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 
-use crate::compliance_api::locale_from_headers;
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -37,7 +36,11 @@ use core_storage::specs::{NewSpec, SpecPatch, SpecRecord, SpecRepo, SqliteSpecRe
 use crate::{compliance_api, spec_seed, AppState};
 
 fn err(status: StatusCode, code: &str, msg: impl Into<String>) -> Response {
-    (status, Json(json!({ "error": code, "message": msg.into() }))).into_response()
+    (
+        status,
+        Json(json!({ "error": code, "message": msg.into() })),
+    )
+        .into_response()
 }
 
 /// 能力身份解析结果（读规格时现算，不落库 —— 插件装了/卸了是环境事实，不是规格属性）。
@@ -358,7 +361,7 @@ where
 }
 
 #[derive(Debug, Deserialize)]
-struct TryReq {
+pub struct TryReq {
     #[serde(default)]
     asset_id: Option<i64>,
 }
@@ -367,6 +370,7 @@ struct TryReq {
 // 热路径：库连接 / 惰性迁移
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // 保留：spec 面连接口径单一出处
 fn db(state: &AppState) -> std::path::PathBuf {
     crate::infer::db_path(&state.data_dir)
 }
@@ -395,7 +399,7 @@ fn ensure_seeded(conn: &Connection, data_dir: &Path) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
-struct ListQuery {
+pub struct ListQuery {
     #[serde(default)]
     plugin: Option<String>,
 }
@@ -408,21 +412,24 @@ pub async fn list(
 ) -> Response {
     let locale = crate::compliance_api::locale_from_headers(&headers);
     let data_dir = state.data_dir.clone();
-    let task = tokio::task::spawn_blocking(move || -> Result<Value, (StatusCode, &'static str, String)> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
-        ensure_seeded(&conn, &data_dir).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "spec_seed", e))?;
-        let repo = SqliteSpecRepo::new(&conn);
-        let rows = repo
-            .list(q.plugin.as_deref())
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?;
-        let mut out = Vec::with_capacity(rows.len());
-        for rec in &rows {
-            let facts = plugin_facts(&conn, &data_dir, &rec.plugin_id, locale);
-            out.push(view(rec, &facts));
-        }
-        Ok(json!({ "total": out.len(), "items": out }))
-    })
+    let task = tokio::task::spawn_blocking(
+        move || -> Result<Value, (StatusCode, &'static str, String)> {
+            let conn = core_storage::open(&crate::infer::db_path(&data_dir))
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
+            ensure_seeded(&conn, &data_dir)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "spec_seed", e))?;
+            let repo = SqliteSpecRepo::new(&conn);
+            let rows = repo
+                .list(q.plugin.as_deref())
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?;
+            let mut out = Vec::with_capacity(rows.len());
+            for rec in &rows {
+                let facts = plugin_facts(&conn, &data_dir, &rec.plugin_id, locale);
+                out.push(view(rec, &facts));
+            }
+            Ok(json!({ "total": out.len(), "items": out }))
+        },
+    )
     .await;
     match task {
         Ok(Ok(v)) => (StatusCode::OK, Json(v)).into_response(),
@@ -439,44 +446,55 @@ pub async fn create(
 ) -> Response {
     let locale = crate::compliance_api::locale_from_headers(&headers);
     let data_dir = state.data_dir.clone();
-    let outcome = tokio::task::spawn_blocking(move || -> Result<Value, (StatusCode, &'static str, String)> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
-        ensure_seeded(&conn, &data_dir).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "spec_seed", e))?;
-        let facts = plugin_facts(&conn, &data_dir, &req.plugin_id, locale);
-        validate(
-            &facts,
-            &req.name,
-            &req.rules,
-            &req.thresholds,
-            &req.actions,
-            &req.output,
-            &req.params_diff,
-        )?;
-        let repo = SqliteSpecRepo::new(&conn);
-        let new = NewSpec {
-            plugin_id: req.plugin_id.clone(),
-            plugin_version_pin: req.plugin_version_pin.clone(),
-            name: req.name.trim().to_string(),
-            industry: req.industry.clone(),
-            rules: req.rules.clone(),
-            thresholds: req.thresholds.clone(),
-            actions: req.actions.clone(),
-            output: req.output.clone(),
-            params_diff: req.params_diff.clone(),
-            enabled: req.enabled,
-            origin_key: None, // 用户自建：不占迁移幂等键
-        };
-        let id = repo.create(&new).map_err(|e| match e {
-            core_storage::StorageError::Invalid(msg) => (StatusCode::CONFLICT, "spec_duplicate_name", msg),
-            other => (StatusCode::INTERNAL_SERVER_ERROR, "db", other.to_string()),
-        })?;
-        let rec = repo
-            .get(id)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?
-            .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "db", "回读不到新建规格".to_string()))?;
-        Ok(view(&rec, &facts))
-    })
+    let outcome = tokio::task::spawn_blocking(
+        move || -> Result<Value, (StatusCode, &'static str, String)> {
+            let conn = core_storage::open(&crate::infer::db_path(&data_dir))
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
+            ensure_seeded(&conn, &data_dir)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "spec_seed", e))?;
+            let facts = plugin_facts(&conn, &data_dir, &req.plugin_id, locale);
+            validate(
+                &facts,
+                &req.name,
+                &req.rules,
+                &req.thresholds,
+                &req.actions,
+                &req.output,
+                &req.params_diff,
+            )?;
+            let repo = SqliteSpecRepo::new(&conn);
+            let new = NewSpec {
+                plugin_id: req.plugin_id.clone(),
+                plugin_version_pin: req.plugin_version_pin.clone(),
+                name: req.name.trim().to_string(),
+                industry: req.industry.clone(),
+                rules: req.rules.clone(),
+                thresholds: req.thresholds.clone(),
+                actions: req.actions.clone(),
+                output: req.output.clone(),
+                params_diff: req.params_diff.clone(),
+                enabled: req.enabled,
+                origin_key: None, // 用户自建：不占迁移幂等键
+            };
+            let id = repo.create(&new).map_err(|e| match e {
+                core_storage::StorageError::Invalid(msg) => {
+                    (StatusCode::CONFLICT, "spec_duplicate_name", msg)
+                }
+                other => (StatusCode::INTERNAL_SERVER_ERROR, "db", other.to_string()),
+            })?;
+            let rec = repo
+                .get(id)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "db",
+                        "回读不到新建规格".to_string(),
+                    )
+                })?;
+            Ok(view(&rec, &facts))
+        },
+    )
     .await;
     match outcome {
         Ok(Ok(v)) => (StatusCode::CREATED, Json(v)).into_response(),
@@ -493,18 +511,27 @@ pub async fn detail(
 ) -> Response {
     let locale = crate::compliance_api::locale_from_headers(&headers);
     let data_dir = state.data_dir.clone();
-    let task = tokio::task::spawn_blocking(move || -> Result<Value, (StatusCode, &'static str, String)> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
-        ensure_seeded(&conn, &data_dir).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "spec_seed", e))?;
-        let repo = SqliteSpecRepo::new(&conn);
-        let rec = repo
-            .get(id)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?
-            .ok_or_else(|| (StatusCode::NOT_FOUND, "spec_not_found", format!("规格 #{id} 不存在")))?;
-        let facts = plugin_facts(&conn, &data_dir, &rec.plugin_id, locale);
-        Ok(view(&rec, &facts))
-    })
+    let task = tokio::task::spawn_blocking(
+        move || -> Result<Value, (StatusCode, &'static str, String)> {
+            let conn = core_storage::open(&crate::infer::db_path(&data_dir))
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
+            ensure_seeded(&conn, &data_dir)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "spec_seed", e))?;
+            let repo = SqliteSpecRepo::new(&conn);
+            let rec = repo
+                .get(id)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::NOT_FOUND,
+                        "spec_not_found",
+                        format!("规格 #{id} 不存在"),
+                    )
+                })?;
+            let facts = plugin_facts(&conn, &data_dir, &rec.plugin_id, locale);
+            Ok(view(&rec, &facts))
+        },
+    )
     .await;
     match task {
         Ok(Ok(v)) => (StatusCode::OK, Json(v)).into_response(),
@@ -522,74 +549,102 @@ pub async fn update(
 ) -> Response {
     let locale = crate::compliance_api::locale_from_headers(&headers);
     let data_dir = state.data_dir.clone();
-    let task = tokio::task::spawn_blocking(move || -> Result<Value, (StatusCode, &'static str, String)> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
-        let repo = SqliteSpecRepo::new(&conn);
-        let cur = repo
-            .get(id)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?
-            .ok_or_else(|| (StatusCode::NOT_FOUND, "spec_not_found", format!("规格 #{id} 不存在")))?;
-        // null 只允许出现在可空列：其余列传 null 明确报错（别让「传 null」变成「静默忽略」）
-        for (field, is_null) in [
-            ("thresholds", matches!(&req.thresholds, Some(None))),
-            ("actions", matches!(&req.actions, Some(None))),
-            ("output", matches!(&req.output, Some(None))),
-            ("paramsDiff", matches!(&req.params_diff, Some(None))),
-        ] {
-            if is_null {
+    let task = tokio::task::spawn_blocking(
+        move || -> Result<Value, (StatusCode, &'static str, String)> {
+            let conn = core_storage::open(&crate::infer::db_path(&data_dir))
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
+            let repo = SqliteSpecRepo::new(&conn);
+            let cur = repo
+                .get(id)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::NOT_FOUND,
+                        "spec_not_found",
+                        format!("规格 #{id} 不存在"),
+                    )
+                })?;
+            // null 只允许出现在可空列：其余列传 null 明确报错（别让「传 null」变成「静默忽略」）
+            for (field, is_null) in [
+                ("thresholds", matches!(&req.thresholds, Some(None))),
+                ("actions", matches!(&req.actions, Some(None))),
+                ("output", matches!(&req.output, Some(None))),
+                ("paramsDiff", matches!(&req.params_diff, Some(None))),
+            ] {
+                if is_null {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        "spec_null_field",
+                        format!("{field} 不能是 null（要清空请传 {{}} / []）"),
+                    ));
+                }
+            }
+            let facts = plugin_facts(&conn, &data_dir, &cur.plugin_id, locale);
+            // 校验用「合并后的结果」：PATCH 只给一部分字段时，其余字段按现值参与校验
+            let name = req.name.clone().unwrap_or_else(|| cur.name.clone());
+            let rules = req.rules.clone().unwrap_or_else(|| cur.rules.clone());
+            let thresholds = match &req.thresholds {
+                Some(Some(v)) => v.clone(),
+                _ => cur.thresholds.clone(),
+            };
+            let actions = match &req.actions {
+                Some(Some(v)) => v.clone(),
+                _ => cur.actions.clone(),
+            };
+            let output = match &req.output {
+                Some(Some(v)) => v.clone(),
+                _ => cur.output.clone(),
+            };
+            let params_diff = match &req.params_diff {
+                Some(Some(v)) => v.clone(),
+                _ => cur.params_diff.clone(),
+            };
+            validate(
+                &facts,
+                &name,
+                &rules,
+                &thresholds,
+                &actions,
+                &output,
+                &params_diff,
+            )?;
+            let patch = SpecPatch {
+                name: req.name.as_ref().map(|n| n.trim().to_string()),
+                industry: req.industry.clone(),
+                plugin_version_pin: req.plugin_version_pin.clone(),
+                rules: req.rules.clone(),
+                thresholds: req.thresholds.clone().flatten(),
+                actions: req.actions.clone().flatten(),
+                output: req.output.clone().flatten(),
+                params_diff: req.params_diff.clone().flatten(),
+                enabled: req.enabled,
+            };
+            let hit = repo.update(id, &patch).map_err(|e| match e {
+                core_storage::StorageError::Invalid(msg) => {
+                    (StatusCode::CONFLICT, "spec_duplicate_name", msg)
+                }
+                other => (StatusCode::INTERNAL_SERVER_ERROR, "db", other.to_string()),
+            })?;
+            if !hit {
                 return Err((
-                    StatusCode::BAD_REQUEST,
-                    "spec_null_field",
-                    format!("{field} 不能是 null（要清空请传 {{}} / []）"),
+                    StatusCode::NOT_FOUND,
+                    "spec_not_found",
+                    format!("规格 #{id} 不存在"),
                 ));
             }
-        }
-        let facts = plugin_facts(&conn, &data_dir, &cur.plugin_id, locale);
-        // 校验用「合并后的结果」：PATCH 只给一部分字段时，其余字段按现值参与校验
-        let name = req.name.clone().unwrap_or_else(|| cur.name.clone());
-        let rules = req.rules.clone().unwrap_or_else(|| cur.rules.clone());
-        let thresholds = match &req.thresholds {
-            Some(Some(v)) => v.clone(),
-            _ => cur.thresholds.clone(),
-        };
-        let actions = match &req.actions {
-            Some(Some(v)) => v.clone(),
-            _ => cur.actions.clone(),
-        };
-        let output = match &req.output {
-            Some(Some(v)) => v.clone(),
-            _ => cur.output.clone(),
-        };
-        let params_diff = match &req.params_diff {
-            Some(Some(v)) => v.clone(),
-            _ => cur.params_diff.clone(),
-        };
-        validate(&facts, &name, &rules, &thresholds, &actions, &output, &params_diff)?;
-        let patch = SpecPatch {
-            name: req.name.as_ref().map(|n| n.trim().to_string()),
-            industry: req.industry.clone(),
-            plugin_version_pin: req.plugin_version_pin.clone(),
-            rules: req.rules.clone(),
-            thresholds: req.thresholds.clone().flatten(),
-            actions: req.actions.clone().flatten(),
-            output: req.output.clone().flatten(),
-            params_diff: req.params_diff.clone().flatten(),
-            enabled: req.enabled,
-        };
-        let hit = repo.update(id, &patch).map_err(|e| match e {
-            core_storage::StorageError::Invalid(msg) => (StatusCode::CONFLICT, "spec_duplicate_name", msg),
-            other => (StatusCode::INTERNAL_SERVER_ERROR, "db", other.to_string()),
-        })?;
-        if !hit {
-            return Err((StatusCode::NOT_FOUND, "spec_not_found", format!("规格 #{id} 不存在")));
-        }
-        let rec = repo
-            .get(id)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?
-            .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "db", "回读不到规格".to_string()))?;
-        Ok(view(&rec, &facts))
-    })
+            let rec = repo
+                .get(id)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?
+                .ok_or_else(|| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "db",
+                        "回读不到规格".to_string(),
+                    )
+                })?;
+            Ok(view(&rec, &facts))
+        },
+    )
     .await;
     match task {
         Ok(Ok(v)) => (StatusCode::OK, Json(v)).into_response(),
@@ -603,18 +658,24 @@ pub async fn update(
 /// 只删规格行：历史 verdict、产物、插件包一律不动（设计硬边界 4）。
 pub async fn remove(State(state): State<AppState>, AxumPath(id): AxumPath<i64>) -> Response {
     let data_dir = state.data_dir.clone();
-    let task = tokio::task::spawn_blocking(move || -> Result<Value, (StatusCode, &'static str, String)> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
-        let repo = SqliteSpecRepo::new(&conn);
-        let hit = repo
-            .delete(id)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?;
-        if !hit {
-            return Err((StatusCode::NOT_FOUND, "spec_not_found", format!("规格 #{id} 不存在")));
-        }
-        Ok(json!({ "specId": id, "deleted": true }))
-    })
+    let task = tokio::task::spawn_blocking(
+        move || -> Result<Value, (StatusCode, &'static str, String)> {
+            let conn = core_storage::open(&crate::infer::db_path(&data_dir))
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
+            let repo = SqliteSpecRepo::new(&conn);
+            let hit = repo
+                .delete(id)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?;
+            if !hit {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    "spec_not_found",
+                    format!("规格 #{id} 不存在"),
+                ));
+            }
+            Ok(json!({ "specId": id, "deleted": true }))
+        },
+    )
     .await;
     match task {
         Ok(Ok(v)) => (StatusCode::OK, Json(v)).into_response(),
@@ -717,36 +778,38 @@ pub async fn try_one(
 /// 「现在到底迁了什么、是不是幂等、阈值有没有丢」的可点开的证据面。
 pub async fn migrate(State(state): State<AppState>) -> Response {
     let data_dir = state.data_dir.clone();
-    let task = tokio::task::spawn_blocking(move || -> Result<Value, (StatusCode, &'static str, String)> {
-        let conn = core_storage::open(&crate::infer::db_path(&data_dir))
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
-        let report = spec_seed::ensure_legacy_specs(&conn, &data_dir)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "spec_seed", e))?;
-        // 显式跑过迁移 = 也落一次标记（此后读接口不再惰性补，用户删掉的默认规格不复活）
-        core_storage::settings::set_json(&conn, SPECS_MIGRATED_KEY, &true)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?;
-        Ok(json!({
-            "created": report.created.iter().map(|o| json!({
-                "specId": o.spec_id, "originKey": o.origin_key, "name": o.name,
-                "pluginId": o.plugin_id, "rules": o.rules,
-                "thresholds": o.thresholds, "paramsDiff": o.params_diff, "notes": o.notes,
-            })).collect::<Vec<_>>(),
-            "existing": report.existing.iter().map(|o| json!({
-                "specId": o.spec_id, "originKey": o.origin_key, "name": o.name,
-                "pluginId": o.plugin_id, "rules": o.rules, "notes": o.notes,
-            })).collect::<Vec<_>>(),
-            "verification": {
-                "ok": report.verification.ok(),
-                "specsTotal": report.verification.specs_total,
-                "originUnique": report.verification.origin_unique,
-                "thresholdsMatchSource": report.verification.thresholds_match_source,
-                "rulesNonEmpty": report.verification.rules_non_empty,
-                "namesNonEmpty": report.verification.names_non_empty,
-                "actionsMatchSource": report.verification.actions_match_source,
-                "detail": report.verification.detail,
-            }
-        }))
-    })
+    let task = tokio::task::spawn_blocking(
+        move || -> Result<Value, (StatusCode, &'static str, String)> {
+            let conn = core_storage::open(&crate::infer::db_path(&data_dir))
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db_open", e.to_string()))?;
+            let report = spec_seed::ensure_legacy_specs(&conn, &data_dir)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "spec_seed", e))?;
+            // 显式跑过迁移 = 也落一次标记（此后读接口不再惰性补，用户删掉的默认规格不复活）
+            core_storage::settings::set_json(&conn, SPECS_MIGRATED_KEY, &true)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, "db", e.to_string()))?;
+            Ok(json!({
+                "created": report.created.iter().map(|o| json!({
+                    "specId": o.spec_id, "originKey": o.origin_key, "name": o.name,
+                    "pluginId": o.plugin_id, "rules": o.rules,
+                    "thresholds": o.thresholds, "paramsDiff": o.params_diff, "notes": o.notes,
+                })).collect::<Vec<_>>(),
+                "existing": report.existing.iter().map(|o| json!({
+                    "specId": o.spec_id, "originKey": o.origin_key, "name": o.name,
+                    "pluginId": o.plugin_id, "rules": o.rules, "notes": o.notes,
+                })).collect::<Vec<_>>(),
+                "verification": {
+                    "ok": report.verification.ok(),
+                    "specsTotal": report.verification.specs_total,
+                    "originUnique": report.verification.origin_unique,
+                    "thresholdsMatchSource": report.verification.thresholds_match_source,
+                    "rulesNonEmpty": report.verification.rules_non_empty,
+                    "namesNonEmpty": report.verification.names_non_empty,
+                    "actionsMatchSource": report.verification.actions_match_source,
+                    "detail": report.verification.detail,
+                }
+            }))
+        },
+    )
     .await;
     match task {
         Ok(Ok(v)) => (StatusCode::OK, Json(v)).into_response(),

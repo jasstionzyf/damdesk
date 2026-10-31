@@ -36,7 +36,11 @@ const BASELINE: [(&str, f64, f64, u64, bool); 9] = [
 fn corpus_file(name: &str) -> Option<PathBuf> {
     let root = PathBuf::from(std::env::var(CORPUS_ENV).unwrap_or_else(|_| DEFAULT_CORPUS.into()));
     // 语料分两个目录（pass_fixtures / fail_fixtures），按文件名前缀找
-    let sub = if name.starts_with('a') { "pass_fixtures" } else { "fail_fixtures" };
+    let sub = if name.starts_with('a') {
+        "pass_fixtures"
+    } else {
+        "fail_fixtures"
+    };
     let path = root.join(sub).join(name);
     path.is_file().then_some(path)
 }
@@ -80,8 +84,14 @@ fn white_stats_matches_legacy_baseline_on_corpus() {
         );
         assert_eq!(code, 200, "{name} → {body}");
         assert_eq!(body["band"], 4, "{name}");
-        assert_eq!(body["edge_pixels"], edge_pixels, "{name} 边缘带像素数必须与旧引擎一致");
-        assert_eq!(body["worst_dev"], worst_dev, "{name} 最差单像素偏差必须逐值一致");
+        assert_eq!(
+            body["edge_pixels"], edge_pixels,
+            "{name} 边缘带像素数必须与旧引擎一致"
+        );
+        assert_eq!(
+            body["worst_dev"], worst_dev,
+            "{name} 最差单像素偏差必须逐值一致"
+        );
         assert_eq!(body["pass"], pass, "{name} 判定必须与旧引擎一致");
         let got = body["mean_dev"].as_f64().expect("mean_dev 缺失");
         assert!(
@@ -90,7 +100,10 @@ fn white_stats_matches_legacy_baseline_on_corpus() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 9, "应逐值核对 9 行（f001 被 R0 gate 短路故不入基线）");
+    assert_eq!(
+        checked, 9,
+        "应逐值核对 9 行（f001 被 R0 gate 短路故不入基线）"
+    );
 }
 
 #[test]
@@ -105,5 +118,5 @@ fn white_stats_rejects_bad_params_and_missing_file() {
     assert_eq!(code, 400, "{body}");
     let (code, body) = post(&gw, "/detect/white_stats", json!({ "path": "rel.png" }));
     assert_eq!(code, 400, "相对路径必须 400：{body}");
-    assert!(Path::new("/nope/x.png").exists() == false);
+    assert!(!Path::new("/nope/x.png").exists());
 }

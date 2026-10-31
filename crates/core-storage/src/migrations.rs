@@ -62,11 +62,7 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "rule_verdict_feedback",
         include_str!("migrations/0011_rule_verdict_feedback.sql"),
     ),
-    (
-        12,
-        "ocr_text",
-        include_str!("migrations/0012_ocr_text.sql"),
-    ),
+    (12, "ocr_text", include_str!("migrations/0012_ocr_text.sql")),
     // EXIF2（task）：元数据派生列 + 画幅 + GPS（本卡此前 0012 被 OCR1 占用 → 用 0013）
     (
         13,
@@ -75,11 +71,7 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
     ),
     // OCR-MATCH（task）：OCR 字面检索 FTS5 倒排（中文 bigram 预切分 + unicode61）
     // 合流裁决（task）：本卡原为 0013，main 已被 EXIF2 占用 → 顺延 0014（只改编号，SQL 不动）
-    (
-        14,
-        "ocr_fts",
-        include_str!("migrations/0014_ocr_fts.sql"),
-    ),
+    (14, "ocr_fts", include_str!("migrations/0014_ocr_fts.sql")),
     // C9（task）：组级判定的落点（groupKey + judgementScope）。
     // 卡里写的 0012 已被 OCR1 占用 → 顺延 0014；合流（task）再顺延 0015（OCR-MATCH 先占 0014）。
     (
@@ -249,6 +241,8 @@ fn ensure_ledger(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// 已应用的迁移版本号（测试对账用，仅测试编译）。
+#[cfg(test)]
 fn applied_versions(conn: &Connection) -> Result<Vec<i64>> {
     let mut stmt = conn.prepare("SELECT version FROM schema_migrations ORDER BY version")?;
     let rows = stmt.query_map([], |row| row.get::<_, i64>(0))?;
@@ -262,7 +256,9 @@ fn applied_versions(conn: &Connection) -> Result<Vec<i64>> {
 /// 账本全量（version, name）—— 判重既要版本号也要名字，见 `migrate` 的重编号说明。
 fn applied_entries(conn: &Connection) -> Result<Vec<(i64, String)>> {
     let mut stmt = conn.prepare("SELECT version, name FROM schema_migrations ORDER BY version")?;
-    let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })?;
     let mut out = Vec::new();
     for r in rows {
         out.push(r?);
@@ -365,7 +361,10 @@ mod tests {
             .unwrap();
         assert_eq!(vc, 1, "vector_tables registry must exist");
         // KI-2b：0019 向量判重边表 + 补判账本必须在位（关系表，不是临时算的）
-        assert!(cols_contains(&conn, "dup_edges", "score"), "dup_edges 表缺列");
+        assert!(
+            cols_contains(&conn, "dup_edges", "score"),
+            "dup_edges 表缺列"
+        );
         assert!(cols_contains(&conn, "dup_judge_state", "value"));
         // D8：origin='path' 必须可入库（0006 重建 tag 表扩展 CHECK）
         conn.execute(
@@ -411,7 +410,10 @@ mod tests {
         )
         .unwrap();
         // TAG-VALUE（0021）：tag 只有 value；任务结果表在（name=维度名 / value=输出）
-        assert!(!tag_cols.iter().any(|c| c == "name"), "tag 不应再有 name 列: {tag_cols:?}");
+        assert!(
+            !tag_cols.iter().any(|c| c == "name"),
+            "tag 不应再有 name 列: {tag_cols:?}"
+        );
         assert!(cols_contains(&conn, "tag_result", "name"));
         assert!(cols_contains(&conn, "tag_result", "value"));
         // C0：0011 合规判定两表在位 + packId+ruleId 归属（换 pack 历史判定可查）
@@ -437,14 +439,13 @@ mod tests {
         )
         .unwrap();
         // CHECK 约束拒收非法 result
-        assert!(
-            conn.execute(
+        assert!(conn
+            .execute(
                 "INSERT INTO rule_verdict (packId, assetId, ruleId, result, ts)
                  VALUES ('p', 1, 'R1', 'maybe', unixepoch())",
                 [],
             )
-            .is_err()
-        );
+            .is_err());
         // 判定历史按 packId+ruleId 归属：同 ruleId 不同 pack 各自可查（换包不丢）
         let n: i64 = conn
             .query_row(
@@ -585,9 +586,27 @@ mod tests {
             (1, "R_pass", "pass", None, None),
             (2, "R_fail", "fail", None, None),
             (3, "R_skip", "skipped", None, None),
-            (4, "R_nofixer", "pending_human", Some(r#"{"reason":"no_fixer"}"#), None),
-            (5, "R_vlerr", "pending_human", Some(r#"{"reason":"rule_error","error":"vl timeout"}"#), None),
-            (6, "R_grouperr", "pending_human", Some(r#"{"reason":"group_key_missing"}"#), None),
+            (
+                4,
+                "R_nofixer",
+                "pending_human",
+                Some(r#"{"reason":"no_fixer"}"#),
+                None,
+            ),
+            (
+                5,
+                "R_vlerr",
+                "pending_human",
+                Some(r#"{"reason":"rule_error","error":"vl timeout"}"#),
+                None,
+            ),
+            (
+                6,
+                "R_grouperr",
+                "pending_human",
+                Some(r#"{"reason":"group_key_missing"}"#),
+                None,
+            ),
             (7, "R_fixed", "pass", None, Some("smart_crop")),
         ];
         for (id, rule, result, evidence, fix) in legacy {
@@ -616,13 +635,21 @@ mod tests {
         assert_eq!(got("R_pass").0, "pass");
         assert_eq!(got("R_fail").0, "fail");
         assert_eq!(got("R_skip").0, "skipped");
-        assert_eq!(got("R_nofixer").0, "fail", "无修复器可修 = 不合格（旧 pending_human 映射）");
+        assert_eq!(
+            got("R_nofixer").0,
+            "fail",
+            "无修复器可修 = 不合格（旧 pending_human 映射）"
+        );
         assert_eq!(got("R_vlerr").0, "undetermined", "执行错误 = 未判定");
         assert_eq!(got("R_grouperr").0, "undetermined");
         assert_eq!(got("R_fixed").0, "pass");
-        assert_eq!(got("R_fixed").2.as_deref(), Some("smart_crop"), "修复证据必须保留");
+        assert_eq!(
+            got("R_fixed").2.as_deref(),
+            Some("smart_crop"),
+            "修复证据必须保留"
+        );
         // 行数/id 全保留；历史置信度不可知 → NULL（不造数）
-        let (n, max_id, null_conf) : (i64, i64, i64) = conn
+        let (n, max_id, null_conf): (i64, i64, i64) = conn
             .query_row(
                 "SELECT COUNT(*), MAX(id), SUM(confidence IS NULL) FROM rule_verdict",
                 [],
@@ -640,12 +667,20 @@ mod tests {
             .is_err());
         // rule_feedback 的 machineResult 同口径收敛（旧 pending_human → undetermined）
         let fb: String = conn
-            .query_row("SELECT machineResult FROM rule_feedback WHERE ruleId='R_nofixer'", [], |r| r.get(0))
+            .query_row(
+                "SELECT machineResult FROM rule_feedback WHERE ruleId='R_nofixer'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(fb, "undetermined");
         // judgementScope 兜底为 per_asset（组级传导依赖它进分组）
         let scope: String = conn
-            .query_row("SELECT judgementScope FROM rule_verdict WHERE id = 1", [], |r| r.get(0))
+            .query_row(
+                "SELECT judgementScope FROM rule_verdict WHERE id = 1",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(scope, "per_asset");
     }
@@ -686,7 +721,8 @@ mod tests {
         );
         assert!(current_version(&conn).unwrap() >= 17);
         assert_eq!(
-            conn.query_row("SELECT COUNT(*) FROM rule_verdict", [], |r| r.get::<_, i64>(0))
+            conn.query_row("SELECT COUNT(*) FROM rule_verdict", [], |r| r
+                .get::<_, i64>(0))
                 .unwrap(),
             before,
             "历史判定行一条都不能丢/改"
@@ -793,7 +829,11 @@ mod tests {
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .unwrap();
-        assert_eq!((kind.as_str(), status.as_str()), ("compliance", "failed"), "历史行不许被改");
+        assert_eq!(
+            (kind.as_str(), status.as_str()),
+            ("compliance", "failed"),
+            "历史行不许被改"
+        );
         assert_eq!(run_id, None, "老行 runId 必须 NULL（不回填）");
         // 新表空着（历史不属于任何一次执行）
         let runs: i64 = conn
@@ -804,7 +844,6 @@ mod tests {
         migrate(&conn).unwrap();
         assert_eq!(current_version(&conn).unwrap(), top_version());
     }
-
 
     /// KI-2c（task）：pHashes（D4 八变体）迁移 —— 老库单值回填为 identity 变体。
     /// 验收口径：**连跑两次迁移，第二次不报错、不改已有行**。
@@ -857,7 +896,11 @@ mod tests {
             Some(r#"["abcdef0123456789"]"#),
             "老单值 → identity 变体（小写归一化）"
         );
-        assert_eq!(first[0].1.as_deref(), Some("ABCDEF0123456789"), "老列原样不动");
+        assert_eq!(
+            first[0].1.as_deref(),
+            Some("ABCDEF0123456789"),
+            "老列原样不动"
+        );
         assert_eq!(first[1].2, None, "无 pHash 的行不编造变体");
         assert_eq!(first[2].2, None, "空串 pHash 不编造变体");
 
@@ -974,8 +1017,16 @@ mod tests {
         let digest = format!("{:?}", after);
         migrate(&conn).unwrap();
         assert_eq!(contract_snapshot(&conn), after, "第二次迁移不得改动任何行");
-        assert_eq!(applied_versions(&conn).unwrap(), ledger, "第二次迁移不得新增账本行");
-        assert_eq!(format!("{:?}", contract_snapshot(&conn)), digest, "digest 两遍一致");
+        assert_eq!(
+            applied_versions(&conn).unwrap(),
+            ledger,
+            "第二次迁移不得新增账本行"
+        );
+        assert_eq!(
+            format!("{:?}", contract_snapshot(&conn)),
+            digest,
+            "digest 两遍一致"
+        );
         // 版本号不钉死 28：N1 的 0029（plugin_spec）在合流时排在 0028 之后，
         // 全链跑到顶 = top_version()。本用例要守的是「搬值语义 + 幂等」，不是某一段的序号。
         assert_eq!(current_version(&conn).unwrap(), top_version());
@@ -1020,7 +1071,10 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(kinds, "judge", "旧包（未声明 kinds）= 判定类，与 effective_kinds 回落同口径");
+        assert_eq!(
+            kinds, "judge",
+            "旧包（未声明 kinds）= 判定类，与 effective_kinds 回落同口径"
+        );
 
         conn.execute(
             "INSERT INTO packs (id, version, dir, manifest_hash, api_version, kinds, installed_at)
@@ -1035,7 +1089,10 @@ mod tests {
                 [],
             )
             .unwrap_err();
-        assert!(err.to_string().contains("CHECK"), "kinds 闭集外的值必须拒收");
+        assert!(
+            err.to_string().contains("CHECK"),
+            "kinds 闭集外的值必须拒收"
+        );
     }
 
     /// DM-A4（task）：0033 给 `assets` 加 `batchId`（资产级批次溯源）。
@@ -1074,7 +1131,10 @@ mod tests {
 
         migrate(&conn).unwrap();
         assert_eq!(current_version(&conn).unwrap(), top_version());
-        assert!(cols_contains(&conn, "assets", "batchId"), "0033 必须加 assets.batchId");
+        assert!(
+            cols_contains(&conn, "assets", "batchId"),
+            "0033 必须加 assets.batchId"
+        );
         let idx: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_assets_batch'",
@@ -1086,7 +1146,9 @@ mod tests {
 
         // 历史行 NULL：不假装归属
         let old: Option<i64> = conn
-            .query_row("SELECT batchId FROM assets WHERE assetId = 1", [], |r| r.get(0))
+            .query_row("SELECT batchId FROM assets WHERE assetId = 1", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(old, None, "迁移不许回填历史行的批次归属");
 
@@ -1098,7 +1160,9 @@ mod tests {
         )
         .unwrap();
         let n: i64 = conn
-            .query_row("SELECT COUNT(*) FROM assets WHERE batchId = 7", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM assets WHERE batchId = 7", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(n, 1, "按批次等值只应命中归属该批的那一行");
 
@@ -1131,7 +1195,10 @@ mod tests {
             box_score: 0.9,
             text_score: 0.8,
         };
-        assert_eq!(crate::ocr_boxes::replace(&conn, 1, std::slice::from_ref(&one)).unwrap(), 1);
+        assert_eq!(
+            crate::ocr_boxes::replace(&conn, 1, std::slice::from_ref(&one)).unwrap(),
+            1
+        );
         assert_eq!(crate::ocr_boxes::count(&conn, 1).unwrap(), 1);
 
         // 二次迁移幂等：不重放、不丢数据
@@ -1190,7 +1257,10 @@ mod tests {
             .unwrap();
         assert_eq!(rows.len(), 2, "两条旧人审都要搬过来");
         assert_eq!(rows[0].0, 7);
-        assert_eq!(rows[0].1, "pack:com.soujpg.pack.ecommerce", "schemeId 带 pack: 前缀");
+        assert_eq!(
+            rows[0].1, "pack:com.soujpg.pack.ecommerce",
+            "schemeId 带 pack: 前缀"
+        );
         assert_eq!(rows[0].2.as_deref(), Some("R1_size"));
         assert_eq!(rows[0].3, "pass");
         assert_eq!(rows[0].4, "hash-a", "无工作版本 → 取导入 fileHash");

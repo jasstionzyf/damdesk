@@ -38,7 +38,9 @@ async fn tag_status_exposes_effective_max_tokens() {
         .await
         .unwrap();
     assert_eq!(res.status(), 200);
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let j: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let p = &j["provider"];
     // 2026-10-20 用户裁决：max_tokens 统一上限 4096（core-config 默认值同步）→ 断言跟到 4096
@@ -69,7 +71,11 @@ async fn retry_failed_by_class_only_touches_truncated() {
         2,
         "tag: response parse: json: EOF while parsing a list at line 29 column 5; raw={",
     );
-    seed_failed(&conn, 3, "tag: upstream: HTTP 500 from http://x/v1: model not found");
+    seed_failed(
+        &conn,
+        3,
+        "tag: upstream: HTTP 500 from http://x/v1: model not found",
+    );
     let state = app_web::test_support::state(data_dir, conn);
     let app = app_web::router_without_dist(state);
 
@@ -86,7 +92,9 @@ async fn retry_failed_by_class_only_touches_truncated() {
         .await
         .unwrap();
     assert_eq!(res.status(), 200);
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let j: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(j["reset"], 2, "只重置截断类: {j}");
     // provider 未配置 → 不自动续跑，但重置必须落库（不能报错）
@@ -104,7 +112,9 @@ async fn retry_failed_by_class_only_touches_truncated() {
         .await
         .unwrap();
     assert_eq!(res.status(), 200);
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let j: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let items = j["items"].as_array().unwrap();
     assert_eq!(items.len(), 1, "只剩非截断类: {j}");
@@ -122,7 +132,9 @@ async fn retry_failed_by_class_only_touches_truncated() {
         .await
         .unwrap();
     assert_eq!(res.status(), 200);
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let j: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(j["reset"], 1);
 }

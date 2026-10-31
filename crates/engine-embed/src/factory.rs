@@ -117,7 +117,7 @@ pub fn dedup_files_present(models_root: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core_config::load_registry;
+    use core_config::{load_registry, RemoteEmbedSettings};
 
     #[cfg(feature = "local-infer")]
     #[test]
@@ -134,10 +134,15 @@ mod tests {
     #[test]
     fn builds_remote_provider_when_selected() {
         let reg = load_registry(None).unwrap();
-        let mut s = InferenceSettings::default();
-        s.active_embedder = "openai-compat-embedding".to_string();
-        s.embedding.base_url = "http://127.0.0.1:9/v1".into();
-        s.embedding.model = "bge".into();
+        let s = InferenceSettings {
+            active_embedder: "openai-compat-embedding".to_string(),
+            embedding: RemoteEmbedSettings {
+                base_url: "http://127.0.0.1:9/v1".into(),
+                model: "bge".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let p = build_embedder(&reg, &s, Path::new("/tmp/x")).unwrap();
         assert_eq!(p.spec().name, "openai-compat-embedding");
         assert!(!needs_download(p.spec()));
@@ -146,8 +151,10 @@ mod tests {
     #[test]
     fn unknown_active_embedder_is_loud() {
         let reg = load_registry(None).unwrap();
-        let mut s = InferenceSettings::default();
-        s.active_embedder = "nope".into();
+        let s = InferenceSettings {
+            active_embedder: "nope".into(),
+            ..Default::default()
+        };
         match build_embedder(&reg, &s, Path::new("/tmp/x")) {
             Ok(_) => panic!("unknown active embedder must fail"),
             Err(e) => assert!(matches!(e, EmbedError::UnknownModel(_)), "got {e:?}"),

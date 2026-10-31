@@ -79,7 +79,7 @@ impl OnnxDinoV3Provider {
             }
         }
         let session = Session::builder()
-            .and_then(|mut b| b.commit_from_file(&graph))
+            .and_then(|b| b.commit_from_file(&graph))
             .map_err(|e| EmbedError::Onnx(format!("{}: {e}", graph.display())))?;
         let out_name = pick_output(&session)
             .ok_or_else(|| EmbedError::Onnx("dinov3 has no outputs".to_string()))?;

@@ -119,7 +119,10 @@ async fn per_model_rows_carry_license_and_source() {
     assert_eq!(det["license"], "Apache-2.0");
     assert_eq!(det["totalBytes"], 62_032_837u64);
     // 内置塔与判重塔也如实标注（自备/内置口径在 source 文案里）
-    let dinov3 = models.iter().find(|m| m["name"] == "dinov3-vits16-onnx").unwrap();
+    let dinov3 = models
+        .iter()
+        .find(|m| m["name"] == "dinov3-vits16-onnx")
+        .unwrap();
     assert_eq!(dinov3["downloadable"], false);
     assert!(dinov3["license"].as_str().unwrap().contains("DINOv3"));
     let siglip = models
@@ -140,7 +143,10 @@ async fn file_import_downloads_realesr_and_flips_ready() {
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../app-tauri/resources/models/realesr-general-x4v3");
     if !src.join("realesr-general-x4v3.onnx").is_file() {
-        eprintln!("skip: 仓内无 staged realesr 资源（{}），file:// 导入验收在打包机跑", src.display());
+        eprintln!(
+            "skip: 仓内无 staged realesr 资源（{}），file:// 导入验收在打包机跑",
+            src.display()
+        );
         return;
     }
     let (state, data_dir) = seed_state("import");
@@ -153,7 +159,10 @@ async fn file_import_downloads_realesr_and_flips_ready() {
     )
     .await;
     assert_eq!(st, StatusCode::ACCEPTED, "{body}");
-    assert_eq!(body["sources"], serde_json::json!([format!("file://{}", src.display())]));
+    assert_eq!(
+        body["sources"],
+        serde_json::json!([format!("file://{}", src.display())])
+    );
 
     let status = wait_idle(&app).await;
     assert_eq!(status["status"], "done", "{status}");

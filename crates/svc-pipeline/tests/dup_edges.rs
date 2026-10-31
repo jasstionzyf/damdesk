@@ -116,10 +116,22 @@ fn vec_cos(c: f32) -> [f32; DIMS as usize] {
 #[test]
 fn edge_kind_thresholds_are_exact() {
     assert_eq!(dup_edge_kind(1.0), Some("near_visual"));
-    assert_eq!(dup_edge_kind(DUP_NEAR_THRESHOLD), Some("near_visual"), "阈值本身算 near_visual");
+    assert_eq!(
+        dup_edge_kind(DUP_NEAR_THRESHOLD),
+        Some("near_visual"),
+        "阈值本身算 near_visual"
+    );
     assert_eq!(dup_edge_kind(DUP_NEAR_THRESHOLD - 0.001), Some("variant"));
-    assert_eq!(dup_edge_kind(DUP_VARIANT_THRESHOLD), Some("variant"), "阈值本身算 variant");
-    assert_eq!(dup_edge_kind(DUP_VARIANT_THRESHOLD - 0.001), None, "低于变体阈值不成边");
+    assert_eq!(
+        dup_edge_kind(DUP_VARIANT_THRESHOLD),
+        Some("variant"),
+        "阈值本身算 variant"
+    );
+    assert_eq!(
+        dup_edge_kind(DUP_VARIANT_THRESHOLD - 0.001),
+        None,
+        "低于变体阈值不成边"
+    );
     assert_eq!(dup_edge_kind(f32::NAN), None, "脏分数不造边");
     assert_eq!(dup_edge_kind(f32::INFINITY), None, "脏分数不造边");
 }
@@ -145,10 +157,24 @@ fn judge_writes_near_and_variant_edges_but_not_trash_or_strangers() {
     assert_eq!(written, 2, "只有 0.99 与 0.95 两个邻居成边");
     let edges = edge_rows(&conn);
     assert_eq!(edges.len(), 2);
-    assert_eq!((edges[0].0, edges[0].1, edges[0].3.as_str()), (a1, ids[1].0, "near_visual"));
-    assert!((edges[0].2 - 0.99).abs() < 1e-3, "score 落在 0.99 附近: {}", edges[0].2);
-    assert_eq!((edges[1].0, edges[1].1, edges[1].3.as_str()), (a1, ids[2].0, "variant"));
-    assert!((edges[1].2 - 0.95).abs() < 1e-3, "score 落在 0.95 附近: {}", edges[1].2);
+    assert_eq!(
+        (edges[0].0, edges[0].1, edges[0].3.as_str()),
+        (a1, ids[1].0, "near_visual")
+    );
+    assert!(
+        (edges[0].2 - 0.99).abs() < 1e-3,
+        "score 落在 0.99 附近: {}",
+        edges[0].2
+    );
+    assert_eq!(
+        (edges[1].0, edges[1].1, edges[1].3.as_str()),
+        (a1, ids[2].0, "variant")
+    );
+    assert!(
+        (edges[1].2 - 0.95).abs() < 1e-3,
+        "score 落在 0.95 附近: {}",
+        edges[1].2
+    );
 
     // 幂等：再判一次，边不变
     assert_eq!(judge_asset_dup_edges(&conn, MODEL, a1).unwrap(), 2);
@@ -179,7 +205,10 @@ fn judge_is_self_healing_after_reembed() {
     let edges = edge_rows(&conn);
     assert_eq!(edges.len(), 1);
     assert_eq!((edges[0].0, edges[0].1), (a1, ids[2].0));
-    assert!(edges.iter().all(|e| e.0 != a2 && e.1 != a2), "a2 的边已清掉");
+    assert!(
+        edges.iter().all(|e| e.0 != a2 && e.1 != a2),
+        "a2 的边已清掉"
+    );
 }
 
 #[test]
@@ -226,7 +255,10 @@ fn dedup_scope_queue_judges_edges_semantic_scope_does_not() {
     assert!(rep.errors.is_empty(), "判重不该报错: {:?}", rep.errors);
     let edges = edge_rows(&conn);
     assert_eq!(edges.len(), 3, "3 张两两成边: {edges:?}");
-    assert!(edges.iter().all(|e| e.3 == "near_visual"), "score=1.0 全是同一视觉内容");
+    assert!(
+        edges.iter().all(|e| e.3 == "near_visual"),
+        "score=1.0 全是同一视觉内容"
+    );
     // 边落在真实 assetId 上（不是 resourceId），且 a<b 规范化
     let expected: Vec<(i64, i64)> = vec![
         (ids[0].0, ids[1].0),
@@ -285,13 +317,19 @@ fn backfill_without_dedup_vectors_marks_done_but_reports_zero_vectors() {
     let dir = tempfile::tempdir().unwrap();
     let (conn, _ids) = seed(dir.path(), 2);
     let r = backfill_dup_edges(&conn, MODEL, 0).unwrap();
-    assert_eq!(r.vectors, 0, "判重塔没跑过 → vectors=0（UI 该显示「未检测」）");
+    assert_eq!(
+        r.vectors, 0,
+        "判重塔没跑过 → vectors=0（UI 该显示「未检测」）"
+    );
     assert_eq!(r.scanned, 0);
     assert!(!r.truncated);
     assert_eq!(edge_rows(&conn).len(), 0);
     let st = dup_judge_status(&conn, MODEL).unwrap();
     assert_eq!(st.vectors, 0);
-    assert!(st.backfill_done, "没向量=无事可做，别让 UI 永远卡「检测中」");
+    assert!(
+        st.backfill_done,
+        "没向量=无事可做，别让 UI 永远卡「检测中」"
+    );
 }
 
 #[test]
@@ -301,8 +339,11 @@ fn backfill_skips_trash_assets() {
     for (_, rid) in &ids {
         put_vec(&conn, MODEL, *rid, [1.0, 0.0, 0.0, 0.0]);
     }
-    conn.execute("UPDATE assets SET deleted = 1 WHERE assetId = ?1", [ids[2].0])
-        .unwrap();
+    conn.execute(
+        "UPDATE assets SET deleted = 1 WHERE assetId = ?1",
+        [ids[2].0],
+    )
+    .unwrap();
     let r = backfill_dup_edges(&conn, MODEL, 0).unwrap();
     assert_eq!(r.scanned, 2, "回收站资产不扫");
     assert_eq!(r.edges, 1, "只剩 1 对未删资产成边");

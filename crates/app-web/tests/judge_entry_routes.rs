@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)] // vips 全局锁刻意贯穿 await：测试间串行化 libvips（非 DB 锁，无死锁面）
 //! JUDGE-ENTRY（卡 task）回归钉：`/api/compliance/judge` 三件套走真实 HTTP 真跑。
 //!
 //! 背景（WIN-E2E 真机缺陷 D1）：产品里原先没有任何路径能触发合规批量判定——
@@ -52,6 +53,7 @@ fn fixture_images(root: &Path) -> Vec<PathBuf> {
 
 struct Fixture {
     app: axum::Router,
+    #[allow(dead_code)] // 保活 db 文件路径（诊断用）；读侧走 app
     db: PathBuf,
     #[allow(dead_code)]
     data: PathBuf,
@@ -91,7 +93,9 @@ async fn get_json(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -112,7 +116,9 @@ async fn post_json(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_jso
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
@@ -186,7 +192,8 @@ async fn judge_entry_contract_without_legacy_engine() {
                 "逐图通道不产生宿主组级 job：{start}"
             );
             assert_eq!(
-                start["packId"], serde_json::json!("com.soujpg.pack.ecommerce"),
+                start["packId"],
+                serde_json::json!("com.soujpg.pack.ecommerce"),
                 "判定行归属 = 处理插件身份 id：{start}"
             );
             let done = wait_judge_idle(&f.app, Duration::from_secs(120)).await;
@@ -199,10 +206,7 @@ async fn judge_entry_contract_without_legacy_engine() {
                 "装机环境缺插件时必须点名「插件」而不是静默失败：{msg}"
             );
             let (_, cur) = get_json(&f.app, "/api/compliance/jobs/current").await;
-            assert!(
-                cur["run"].is_null(),
-                "准备阶段失败不许留僵尸 run：{cur}"
-            );
+            assert!(cur["run"].is_null(), "准备阶段失败不许留僵尸 run：{cur}");
         }
         other => panic!("judge 只允许 200（插件可用）或 400（插件装不了），收到 {other}: {start}"),
     }

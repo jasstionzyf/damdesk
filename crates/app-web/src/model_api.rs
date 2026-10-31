@@ -617,10 +617,7 @@ mod tests {
             None,
             core_config::DEFAULT_EMBEDDER,
         );
-        assert_eq!(
-            s,
-            vec![core_config::DEFAULT_MODEL_BASE_URL.to_string()]
-        );
+        assert_eq!(s, vec![core_config::DEFAULT_MODEL_BASE_URL.to_string()]);
         assert!(!ov);
         // 可选模型默认 = 镜像组
         let (s, _) = download_sources("", None, "lama-fp32");
@@ -632,8 +629,7 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         // 显式覆盖后 siglip 也不再特判
-        let (s, ov) =
-            download_sources("", Some("file:///tmp/src"), core_config::DEFAULT_EMBEDDER);
+        let (s, ov) = download_sources("", Some("file:///tmp/src"), core_config::DEFAULT_EMBEDDER);
         assert_eq!(s, vec!["file:///tmp/src".to_string()]);
         assert!(ov);
     }
@@ -707,7 +703,10 @@ mod tests {
         let snap = st.snapshot();
         assert_eq!(snap["status"], "done");
         assert_eq!(snap["source"].as_str(), Some(stores[1].base_url()));
-        assert_eq!(snap["outcome"]["baseUrl"].as_str(), Some(stores[1].base_url()));
+        assert_eq!(
+            snap["outcome"]["baseUrl"].as_str(),
+            Some(stores[1].base_url())
+        );
         assert!(stores[0].is_complete(&manifest));
         let _ = std::fs::remove_dir_all(&base);
     }
@@ -748,7 +747,9 @@ mod tests {
         assert!(err.contains(&b.display().to_string()), "{err}");
         let snap = st.snapshot();
         assert_eq!(snap["status"], "failed");
-        assert!(snap["error"].as_str().is_some_and(|e| e.contains("所有分发源")));
+        assert!(snap["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("所有分发源")));
         let _ = std::fs::remove_dir_all(&base);
     }
 

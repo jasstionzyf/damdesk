@@ -11,9 +11,9 @@ use ort::session::Session;
 use ort::value::Tensor;
 
 use crate::{
-    db_boxes, load_dict, rec_prepare, det_normalize, det_resize_plan, models_ready,
-    resize_bilinear_rgb, model_file, DET_FILE, DET_MODEL, DICT_FILE, REC_FILE, REC_HEIGHT,
-    REC_MODEL, Result, TextLine, OcrError,
+    db_boxes, det_normalize, det_resize_plan, load_dict, model_file, models_ready, rec_prepare,
+    resize_bilinear_rgb, OcrError, Result, TextLine, DET_FILE, DET_MODEL, DICT_FILE, REC_FILE,
+    REC_HEIGHT, REC_MODEL,
 };
 
 /// det 会话（动态输入 [1,3,H,W]，H/W 为 32 倍数）。
@@ -38,8 +38,11 @@ impl DetSession {
         let (rw, rh, _, _) = det_resize_plan(w, h);
         let resized = resize_bilinear_rgb(rgb, w, h, rw, rh)?;
         let input = det_normalize(rw, rh, &resized)?;
-        let t = Tensor::from_array((vec![1usize, 3, rh as usize, rw as usize], input.into_boxed_slice()))
-            .map_err(|e| OcrError::Onnx(format!("det input: {e}")))?;
+        let t = Tensor::from_array((
+            vec![1usize, 3, rh as usize, rw as usize],
+            input.into_boxed_slice(),
+        ))
+        .map_err(|e| OcrError::Onnx(format!("det input: {e}")))?;
         let mut session = self.session.lock().expect("det session lock");
         let outputs = session
             .run(ort::inputs![self.in_name.as_str() => t])
@@ -90,7 +93,17 @@ impl RecSession {
     }
 
     /// 裁剪窗 → (text, score)。输入为源图全图缓冲 + 窗口（窗内裁剪在预处理内完成）。
-    pub fn run(&self, w: u32, h: u32, rgb: &[u8], x0: i64, y0: i64, x1: i64, y1: i64) -> Result<(String, f32)> {
+    #[allow(clippy::too_many_arguments)] // OCR 裁剪→识别管线参数固有宽度
+    pub fn run(
+        &self,
+        w: u32,
+        h: u32,
+        rgb: &[u8],
+        x0: i64,
+        y0: i64,
+        x1: i64,
+        y1: i64,
+    ) -> Result<(String, f32)> {
         let (data, img_w, _resized_w) = rec_prepare(w, h, rgb, x0, y0, x1, y1)?;
         let t = Tensor::from_array((
             vec![1usize, 3, REC_HEIGHT as usize, img_w as usize],
@@ -145,7 +158,11 @@ impl OcrEngine {
         if rgb.len() != (w as usize) * (h as usize) * 3 {
             return Err(OcrError::InputMismatch {
                 step: "ocr",
-                msg: format!("RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}", (w as usize) * (h as usize) * 3, rgb.len()),
+                msg: format!(
+                    "RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}",
+                    (w as usize) * (h as usize) * 3,
+                    rgb.len()
+                ),
             });
         }
         let (map, mw, mh) = self.det.run(w, h, rgb)?;
@@ -198,8 +215,9 @@ fn open_session(onnx: &Path, tag: &'static str) -> Result<(Session, String, Stri
 
 // ---------- 会话缓存（批处理 138MB 权重只加载一次） ----------
 
-static ENGINES: Mutex<Option<HashMap<(PathBuf, PathBuf, PathBuf), Arc<OcrEngine>>>> =
-    Mutex::new(None);
+type EngineCache = Mutex<Option<HashMap<(PathBuf, PathBuf, PathBuf), Arc<OcrEngine>>>>;
+
+static ENGINES: EngineCache = Mutex::new(None);
 
 /// 按当前模型根取缓存引擎（首次调用加载；三件路径为缓存键）。
 pub fn engine() -> Result<Arc<OcrEngine>> {

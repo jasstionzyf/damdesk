@@ -354,11 +354,7 @@ pub fn run_chain(
 
     // 收尾：链尾有产物 → 它当工作版本，其余（中间产物）立刻删；
     // 链尾是 rename/跳过 → 用最后一个有产物的步（rename 的特例见模块头）。
-    let asset_name = out
-        .steps
-        .iter()
-        .rev()
-        .find_map(|s| s.asset_name.clone());
+    let asset_name = out.steps.iter().rev().find_map(|s| s.asset_name.clone());
     match produced.pop() {
         Some(final_path) => {
             let tail = out
@@ -373,15 +369,12 @@ pub fn run_chain(
                 .unwrap_or_default();
             // 格式：插件给了就用；没给（如 watermark 只改像素不换容器）按产物扩展名兜底，
             // 不能让「工作版本」的格式字段空着 —— 下游导出/筛选都靠它。
-            let format = tail
-                .as_ref()
-                .and_then(|s| s.format.clone())
-                .or_else(|| {
-                    Path::new(&final_path)
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .map(|e| e.to_ascii_lowercase())
-                });
+            let format = tail.as_ref().and_then(|s| s.format.clone()).or_else(|| {
+                Path::new(&final_path)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_ascii_lowercase())
+            });
             out.artifact = Some(ChainArtifact {
                 path: final_path.to_string_lossy().to_string(),
                 sha256,
@@ -429,7 +422,11 @@ impl ChainStep {
             result: row
                 .and_then(|r| r.get("result"))
                 .and_then(|v| v.as_str())
-                .unwrap_or(if rep.failure.is_some() { "failed" } else { "ok" })
+                .unwrap_or(if rep.failure.is_some() {
+                    "failed"
+                } else {
+                    "ok"
+                })
                 .to_string(),
             op: get("op").and_then(|v| v.as_str()).map(str::to_string),
             ms: rep.duration_ms,
@@ -465,12 +462,10 @@ impl ChainStep {
                     })
                 })
                 .or_else(|| {
-                    rep.failure
-                        .as_ref()
-                        .map(|(kind, detail)| ChainStepError {
-                            code: kind.reason().to_string(),
-                            message: detail.clone(),
-                        })
+                    rep.failure.as_ref().map(|(kind, detail)| ChainStepError {
+                        code: kind.reason().to_string(),
+                        message: detail.clone(),
+                    })
                 }),
             evidence: row.and_then(|r| r.get("evidence")).cloned(),
         }
@@ -622,13 +617,26 @@ mod tests {
             ok_row(&p2.to_string_lossy()),
             ok_row(&p3.to_string_lossy()),
         ]);
-        let actions = vec!["resize".to_string(), "convert".to_string(), "watermark".to_string()];
-        let out = run_chain(&judge, &base("/src/orig.jpg"), &actions, &dir, &AtomicBool::new(false));
+        let actions = vec![
+            "resize".to_string(),
+            "convert".to_string(),
+            "watermark".to_string(),
+        ];
+        let out = run_chain(
+            &judge,
+            &base("/src/orig.jpg"),
+            &actions,
+            &dir,
+            &AtomicBool::new(false),
+        );
 
         assert!(out.ok(), "链应成功：{:?}", out.failure);
         assert_eq!(out.steps.len(), 3);
         assert_eq!(
-            out.steps.iter().map(|s| s.action.as_str()).collect::<Vec<_>>(),
+            out.steps
+                .iter()
+                .map(|s| s.action.as_str())
+                .collect::<Vec<_>>(),
             vec!["resize", "convert", "watermark"]
         );
         let seen = judge.seen.lock().unwrap().clone();
@@ -664,7 +672,13 @@ mod tests {
             },
         ]);
         let actions = vec!["resize".to_string(), "watermark".to_string()];
-        let out = run_chain(&judge, &base("/src/orig.jpg"), &actions, &dir, &AtomicBool::new(false));
+        let out = run_chain(
+            &judge,
+            &base("/src/orig.jpg"),
+            &actions,
+            &dir,
+            &AtomicBool::new(false),
+        );
 
         assert!(!out.ok());
         let f = out.failure.unwrap();
@@ -696,7 +710,13 @@ mod tests {
             },
         ]);
         let actions = vec!["resize".to_string(), "rename".to_string()];
-        let out = run_chain(&judge, &base("/src/orig.jpg"), &actions, &dir, &AtomicBool::new(false));
+        let out = run_chain(
+            &judge,
+            &base("/src/orig.jpg"),
+            &actions,
+            &dir,
+            &AtomicBool::new(false),
+        );
 
         assert!(out.ok(), "{:?}", out.failure);
         assert_eq!(out.asset_name.as_deref(), Some("主图_800x800.png"));
@@ -724,7 +744,13 @@ mod tests {
             ok_row(&p2.to_string_lossy()),
         ]);
         let actions = vec!["resize".to_string(), "convert".to_string()];
-        let out = run_chain(&judge, &base("/src/orig.jpg"), &actions, &dir, &AtomicBool::new(false));
+        let out = run_chain(
+            &judge,
+            &base("/src/orig.jpg"),
+            &actions,
+            &dir,
+            &AtomicBool::new(false),
+        );
 
         assert!(out.ok(), "{:?}", out.failure);
         let seen = judge.seen.lock().unwrap().clone();
@@ -746,7 +772,13 @@ mod tests {
             row_error: None,
             evidence: None,
         }]);
-        let out = run_chain(&judge, &base("/src/orig.jpg"), &["crop".to_string()], &dir, &AtomicBool::new(false));
+        let out = run_chain(
+            &judge,
+            &base("/src/orig.jpg"),
+            &["crop".to_string()],
+            &dir,
+            &AtomicBool::new(false),
+        );
         assert_eq!(out.failure.unwrap().code, "action_no_product");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -777,7 +809,13 @@ mod tests {
                 "limit": {"maxOutputPixels": 100000000, "maxLongEdge": 20000, "maxScale": 1.99},
             })),
         }]);
-        let out = run_chain(&judge, &base("/src/big.jpg"), &["upscale".to_string()], &dir, &AtomicBool::new(false));
+        let out = run_chain(
+            &judge,
+            &base("/src/big.jpg"),
+            &["upscale".to_string()],
+            &dir,
+            &AtomicBool::new(false),
+        );
 
         let f = out.failure.clone().expect("失败行必须让链失败");
         assert_eq!(f.code, "action_failed", "不是宿主兜底的 action_no_product");
@@ -795,7 +833,10 @@ mod tests {
         assert_eq!(err.code, "target_over_limit");
         assert!(err.message.contains("请调小 scale"));
         assert_eq!(
-            step.evidence.as_ref().and_then(|e| e.get("limit")).and_then(|l| l.get("maxScale")),
+            step.evidence
+                .as_ref()
+                .and_then(|e| e.get("limit"))
+                .and_then(|l| l.get("maxScale")),
             Some(&serde_json::json!(1.99)),
             "插件 evidence 原样搬出"
         );
@@ -837,12 +878,12 @@ mod tests {
         let allowed = vec!["resize".to_string(), "rename".to_string()];
         let e = validate_actions(&["blur".to_string()], &allowed).unwrap_err();
         assert!(e.contains("blur") && e.contains("resize"), "{e}");
-        let e = validate_actions(&["rename".to_string(), "resize".to_string()], &allowed).unwrap_err();
+        let e =
+            validate_actions(&["rename".to_string(), "resize".to_string()], &allowed).unwrap_err();
         assert!(e.contains("rename"), "{e}");
         assert!(validate_actions(&[], &allowed).is_err());
-        let long: Vec<String> = std::iter::repeat("resize".to_string())
-            .take(CHAIN_MAX_ACTIONS + 1)
-            .collect();
+        let long: Vec<String> =
+            std::iter::repeat_n("resize".to_string(), CHAIN_MAX_ACTIONS + 1).collect();
         assert!(validate_actions(&long, &allowed).is_err());
         assert!(validate_actions(&["resize".to_string()], &allowed).is_ok());
     }

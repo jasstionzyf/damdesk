@@ -48,7 +48,11 @@ fn seed(data_dir: &Path, lib: &Path, src: &Path) -> Connection {
         conn.execute(
             "INSERT INTO assets (mediaType, absPath, fileName, fileExt, fileSz, mtime, importedAt)
              VALUES ('image', ?1, ?2, 'png', ?3, 0, 0)",
-            rusqlite::params![path.to_str().unwrap(), format!("a{i}.png"), PNG.len() as i64],
+            rusqlite::params![
+                path.to_str().unwrap(),
+                format!("a{i}.png"),
+                PNG.len() as i64
+            ],
         )
         .unwrap();
     }
@@ -62,7 +66,9 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -80,7 +86,9 @@ async fn post(app: &axum::Router, uri: &str, body: Value) -> (u16, Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -95,21 +103,43 @@ async fn capabilities_contract_and_move_precheck() {
     // ---- 1. 契约 + 形态口径（测试二进制是 web 形态：无 local-infer）----
     let (code, caps) = get(&app, "/api/capabilities").await;
     assert_eq!(code, 200, "{caps}");
-    for k in ["isDesktop", "storeMode", "writableRoots", "roots", "features", "featureReasons"] {
+    for k in [
+        "isDesktop",
+        "storeMode",
+        "writableRoots",
+        "roots",
+        "features",
+        "featureReasons",
+    ] {
         assert!(caps.get(k).is_some(), "缺字段 {k}: {caps}");
     }
     // 形态是**编译期事实**：local-infer 开启 = 桌面壳形态。`cargo test -p app-web` 与 web 容器
     // 构建下关闭（本卡原口径），但 `cargo test --workspace` 会被 app-tauri 的特性统一打开
     // （合流卡 task 在 workspace 全量绿灯里踩到）。两形态各断言自己的口径，
     // 不变量（字段齐全 / writableRoots 实测 / 移动前置拦截）两种形态都必须成立。
-    assert_eq!(caps["features"]["copyInImport"], json!(true), "复制入库两形态都可用");
-    assert!(caps["featureReasons"].get("copyInImport").is_none(), "可用能力不该带 reason");
+    assert_eq!(
+        caps["features"]["copyInImport"],
+        json!(true),
+        "复制入库两形态都可用"
+    );
+    assert!(
+        caps["featureReasons"].get("copyInImport").is_none(),
+        "可用能力不该带 reason"
+    );
     if caps["isDesktop"].as_bool().unwrap() {
         assert_eq!(caps["storeMode"], json!("local-disk"), "{caps}");
-        assert_eq!(caps["features"]["moveAsset"], json!(true), "桌面形态允许磁盘移动: {caps}");
+        assert_eq!(
+            caps["features"]["moveAsset"],
+            json!(true),
+            "桌面形态允许磁盘移动: {caps}"
+        );
     } else {
         assert_eq!(caps["storeMode"], json!("server-volume"), "{caps}");
-        assert_eq!(caps["features"]["moveAsset"], json!(false), "网页形态不承诺磁盘移动: {caps}");
+        assert_eq!(
+            caps["features"]["moveAsset"],
+            json!(false),
+            "网页形态不承诺磁盘移动: {caps}"
+        );
         let reason = caps["featureReasons"]["moveAsset"].as_str().unwrap_or("");
         assert!(reason.contains("桌面版"), "reason 要指路桌面版：{reason}");
     }
@@ -121,15 +151,32 @@ async fn capabilities_contract_and_move_precheck() {
         .iter()
         .map(|v| v.as_str().unwrap().to_string())
         .collect();
-    assert!(writable.contains(&data_dir.to_str().unwrap().to_string()), "{writable:?}");
-    assert!(writable.contains(&lib.to_str().unwrap().to_string()), "{writable:?}");
-    assert!(writable.contains(&src.to_str().unwrap().to_string()), "{writable:?}");
+    assert!(
+        writable.contains(&data_dir.to_str().unwrap().to_string()),
+        "{writable:?}"
+    );
+    assert!(
+        writable.contains(&lib.to_str().unwrap().to_string()),
+        "{writable:?}"
+    );
+    assert!(
+        writable.contains(&src.to_str().unwrap().to_string()),
+        "{writable:?}"
+    );
     let roots = caps["roots"].as_array().unwrap();
     assert_eq!(roots.len(), 3, "roots = 数据目录 + 两个批次根: {caps}");
-    assert!(roots.iter().all(|r| r["writable"] == json!(true)), "临时目录都该实测可写: {caps}");
+    assert!(
+        roots.iter().all(|r| r["writable"] == json!(true)),
+        "临时目录都该实测可写: {caps}"
+    );
 
     // ---- 3. 前置拦截 ----
-    let (code, j) = post(&app, "/api/library/move", json!({"ids":[1],"targetDir":"rel/dir"})).await;
+    let (code, j) = post(
+        &app,
+        "/api/library/move",
+        json!({"ids":[1],"targetDir":"rel/dir"}),
+    )
+    .await;
     assert_eq!(code, 400, "{j}");
     assert_eq!(j["code"], json!("bad_path"), "{j}");
 
@@ -142,7 +189,10 @@ async fn capabilities_contract_and_move_precheck() {
     .await;
     assert_eq!(code, 400, "{j}");
     assert_eq!(j["code"], json!("not_writable_root"), "{j}");
-    assert!(j["error"].as_str().unwrap_or("").len() > 10, "要带人话 error: {j}");
+    assert!(
+        j["error"].as_str().unwrap_or("").len() > 10,
+        "要带人话 error: {j}"
+    );
 
     // 库根内合法移动：仍然 200 且逐条回执（② 不回归）
     let target = lib.join("moved");

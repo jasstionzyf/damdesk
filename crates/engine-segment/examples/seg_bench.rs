@@ -10,7 +10,8 @@
 use std::time::Instant;
 
 fn main() {
-    let model = std::env::var("SEG_BENCH_MODEL").unwrap_or_else(|_| "/models/u2net/u2net.onnx".into());
+    let model =
+        std::env::var("SEG_BENCH_MODEL").unwrap_or_else(|_| "/models/u2net/u2net.onnx".into());
     let dir = std::env::var("SEG_BENCH_DIR").unwrap_or_else(|_| "/tmp/c3-corpus".into());
     let limit: usize = std::env::var("SEG_BENCH_N")
         .ok()
@@ -18,8 +19,8 @@ fn main() {
         .unwrap_or(20);
 
     let t0 = Instant::now();
-    let seg = engine_segment::Segmenter::load(std::path::Path::new(&model))
-        .expect("load u2net onnx");
+    let seg =
+        engine_segment::Segmenter::load(std::path::Path::new(&model)).expect("load u2net onnx");
     println!("model loaded in {:.1?} from {model}", t0.elapsed());
 
     let mut paths: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)

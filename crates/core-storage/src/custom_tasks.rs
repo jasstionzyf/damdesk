@@ -377,8 +377,14 @@ mod tests {
         let t = create_task(&c, "色调", "主色调", true).unwrap();
 
         // 重跑覆盖：结果表一行、标签跟着输出走（不留旧值）
-        assert_eq!(upsert_custom_tag(&c, a, t, "色调", "暖橙", "m1").unwrap(), 1);
-        assert_eq!(upsert_custom_tag(&c, a, t, "色调", "冷蓝", "m2").unwrap(), 1);
+        assert_eq!(
+            upsert_custom_tag(&c, a, t, "色调", "暖橙", "m1").unwrap(),
+            1
+        );
+        assert_eq!(
+            upsert_custom_tag(&c, a, t, "色调", "冷蓝", "m2").unwrap(),
+            1
+        );
         let (v, m, tid, score): (String, String, i64, f64) = c
             .query_row(
                 "SELECT value, model, taskId, score FROM tag WHERE assetId = ?1",
@@ -436,7 +442,10 @@ mod tests {
             .map(|r| r.unwrap())
             .collect();
         assert!(cols.iter().any(|x| x == "value"), "cols={cols:?}");
-        assert!(!cols.iter().any(|x| x == "name"), "tag 不应再有 name 列: {cols:?}");
+        assert!(
+            !cols.iter().any(|x| x == "name"),
+            "tag 不应再有 name 列: {cols:?}"
+        );
         assert!(cols.iter().any(|x| x == "taskId"), "cols={cols:?}");
         // 同图同值唯一
         let a = add_asset(&c, "/x/a.jpg");

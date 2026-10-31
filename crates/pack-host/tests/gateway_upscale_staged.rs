@@ -201,7 +201,11 @@ fn beyond_hard_cap_reports_usable_limits() {
         "detail 缺 scale 上限 {}：{detail}",
         limits.max_scale
     );
-    assert!(limits.max_scale < 8.0, "该用例本该撞上限，实际 {:?}", limits);
+    assert!(
+        limits.max_scale < 8.0,
+        "该用例本该撞上限，实际 {:?}",
+        limits
+    );
     // 可用上限填回去一定过：这条门槛是「可达的」，不是拍脑袋的数
     let ok = post(
         &gw,
@@ -265,7 +269,11 @@ fn total_scale_guard_and_params_echo() {
     let body = r.json();
     assert!(r.detail().contains("越界"), "{}", r.body);
     assert_eq!(body["op"], "/op/upscale", "错误帧必须点名 op：{}", r.body);
-    assert_eq!(body["params"]["scale"], 65.0, "错误帧必须带实际参数：{}", r.body);
+    assert_eq!(
+        body["params"]["scale"], 65.0,
+        "错误帧必须带实际参数：{}",
+        r.body
+    );
     assert_eq!(
         body["params"]["out"],
         json!(out.to_string_lossy()),

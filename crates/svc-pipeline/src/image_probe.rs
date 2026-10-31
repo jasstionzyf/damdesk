@@ -100,7 +100,10 @@ pub fn probe(path: &Path) -> Probe {
 }
 
 fn hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(" ")
+    b.iter()
+        .map(|x| format!("{x:02x}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// 纯函数签名判定（单测直接喂字节）。

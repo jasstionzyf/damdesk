@@ -181,7 +181,7 @@ pub fn apply_tags(
     let removed = conn.execute(
         "DELETE FROM tag WHERE assetId = ?1 AND origin = 'path'",
         rusqlite::params![asset_id],
-    )? as usize;
+    )?;
     let mut inserted = 0usize;
     {
         let mut stmt = conn.prepare(
@@ -190,7 +190,7 @@ pub fn apply_tags(
              ON CONFLICT(assetId, value) DO NOTHING",
         )?;
         for t in tags {
-            inserted += stmt.execute(rusqlite::params![asset_id, t])? as usize;
+            inserted += stmt.execute(rusqlite::params![asset_id, t])?;
         }
     }
     Ok((inserted, removed))
@@ -222,10 +222,10 @@ pub fn find_root(conn: &Connection, path: &Path) -> rusqlite::Result<Option<Path
     let mut best: Option<String> = None;
     for r in rows {
         let root = r?;
-        if path.starts_with(Path::new(&root)) {
-            if best.as_deref().map_or(true, |b| root.len() > b.len()) {
-                best = Some(root);
-            }
+        if path.starts_with(Path::new(&root))
+            && best.as_deref().is_none_or(|b| root.len() > b.len())
+        {
+            best = Some(root);
         }
     }
     Ok(best.map(PathBuf::from))

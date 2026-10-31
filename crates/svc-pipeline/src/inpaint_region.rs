@@ -213,15 +213,14 @@ pub fn mask_area_ratio(mask: &[u8]) -> f64 {
 /// 区域整体面积占比（多矩形按并集近似：逐个面积相加 clamp；只用于「是不是太大」的判断，
 /// 保守取上界）。
 pub fn regions_area_ratio(regions: &[[f64; 4]]) -> f64 {
-    regions
-        .iter()
-        .map(|r| area(r))
-        .sum::<f64>()
-        .clamp(0.0, 1.0)
+    regions.iter().map(area).sum::<f64>().clamp(0.0, 1.0)
 }
 
 /// VL bbox 通道：与 OCR 行框交叉验证（默认路径，`region` 未声明时的现行行为 + 复核）。
-pub fn plan_vl_bbox(vl_regions: &[[f64; 4]], ocr_boxes: &[[f64; 4]]) -> Result<RegionPlan, RegionRefusal> {
+pub fn plan_vl_bbox(
+    vl_regions: &[[f64; 4]],
+    ocr_boxes: &[[f64; 4]],
+) -> Result<RegionPlan, RegionRefusal> {
     let vl: Vec<[f64; 4]> = vl_regions.iter().filter_map(normalize_rect).collect();
     let ocr: Vec<[f64; 4]> = ocr_boxes.iter().filter_map(normalize_rect).collect();
     if vl.is_empty() {
@@ -242,7 +241,10 @@ pub fn plan_vl_bbox(vl_regions: &[[f64; 4]], ocr_boxes: &[[f64; 4]]) -> Result<R
     let mut supported: Vec<[f64; 4]> = Vec::new();
     let mut best = 0.0_f64;
     for v in &vl {
-        let ratios: Vec<f64> = ocr.iter().map(|b| overlap_ratio(v, std::slice::from_ref(b))).collect();
+        let ratios: Vec<f64> = ocr
+            .iter()
+            .map(|b| overlap_ratio(v, std::slice::from_ref(b)))
+            .collect();
         let top = ratios.iter().copied().fold(0.0_f64, f64::max);
         best = best.max(top);
         if top <= VL_OCR_OVERLAP_MIN {
@@ -338,7 +340,10 @@ mod tests {
         match plan_vl_bbox(&[vl], &ocr) {
             Err(RegionRefusal::Mismatch { overlap }) => {
                 assert!(overlap < VL_OCR_OVERLAP_MIN);
-                assert_eq!(RegionRefusal::Mismatch { overlap }.reason(), "vl_region_mismatch");
+                assert_eq!(
+                    RegionRefusal::Mismatch { overlap }.reason(),
+                    "vl_region_mismatch"
+                );
             }
             other => panic!("应拒绝，实际 {other:?}"),
         }
@@ -388,7 +393,9 @@ mod tests {
         // 40% 整不拒（阈值是「> 40%」）
         assert!(plan_u2net(&regions, MASK_AREA_MAX).is_ok());
         assert_eq!(
-            plan_u2net(&[[0.1, 0.1, 0.3, 0.3]], 0.9).unwrap_err().reason(),
+            plan_u2net(&[[0.1, 0.1, 0.3, 0.3]], 0.9)
+                .unwrap_err()
+                .reason(),
             "region_too_large"
         );
     }
@@ -412,7 +419,11 @@ mod tests {
         let plan = plan_ocr_text(&boxes).expect("有框");
         assert_eq!(plan.source, RegionSource::OcrText);
         assert_eq!(plan.regions.len(), 2);
-        assert_eq!(plan_ocr_text(&[]).unwrap_err(), RegionRefusal::NoRegion, "无框 → 调用方回落 u2net");
+        assert_eq!(
+            plan_ocr_text(&[]).unwrap_err(),
+            RegionRefusal::NoRegion,
+            "无框 → 调用方回落 u2net"
+        );
     }
 
     #[test]
@@ -425,10 +436,19 @@ mod tests {
 
     #[test]
     fn normalize_rect_swaps_and_clamps() {
-        assert_eq!(normalize_rect(&[0.4, 0.2, 0.1, 0.1]), Some([0.1, 0.1, 0.4, 0.2]));
-        assert_eq!(normalize_rect(&[-1.0, 0.0, 2.0, 1.0]), Some([0.0, 0.0, 1.0, 1.0]));
+        assert_eq!(
+            normalize_rect(&[0.4, 0.2, 0.1, 0.1]),
+            Some([0.1, 0.1, 0.4, 0.2])
+        );
+        assert_eq!(
+            normalize_rect(&[-1.0, 0.0, 2.0, 1.0]),
+            Some([0.0, 0.0, 1.0, 1.0])
+        );
         // NaN 坐标按 0 处理（clamp01），剩下的仍是合法矩形 —— 不是「整框丢弃」
-        assert_eq!(normalize_rect(&[f64::NAN, 0.0, 0.5, 0.5]), Some([0.0, 0.0, 0.5, 0.5]));
+        assert_eq!(
+            normalize_rect(&[f64::NAN, 0.0, 0.5, 0.5]),
+            Some([0.0, 0.0, 0.5, 0.5])
+        );
         // 真退化（零面积）才是 None
         assert_eq!(normalize_rect(&[0.3, 0.3, 0.3, 0.5]), None);
     }

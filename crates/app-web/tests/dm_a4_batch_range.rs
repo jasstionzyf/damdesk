@@ -69,10 +69,7 @@ fn seed_db(path: &PathBuf) -> Connection {
 }
 
 fn state(conn: Connection) -> app_web::AppState {
-    app_web::test_support::state(
-        PathBuf::from(std::env::temp_dir().join("dm-a4-batch-data")),
-        conn,
-    )
+    app_web::test_support::state(std::env::temp_dir().join("dm-a4-batch-data"), conn)
 }
 
 async fn get(app: axum::Router, uri: &str) -> (u16, String, String) {
@@ -86,7 +83,9 @@ async fn get(app: axum::Router, uri: &str) -> (u16, String, String) {
         .get("content-type")
         .map(|v| v.to_str().unwrap_or("").to_string())
         .unwrap_or_default();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, ctype, String::from_utf8_lossy(&body).to_string())
 }
 
@@ -141,9 +140,16 @@ async fn two_batches_same_root_do_not_leak() {
     let (st, b1) = get_json(app.clone(), "/api/dedup/groups?range=batch:1").await;
     assert_eq!(st, 200, "{b1}");
     assert_eq!(b1["rangeMeta"]["kind"], "batch");
-    assert_eq!(b1["rangeMeta"]["approx"], false, "带 batchId 的批次是精确的: {b1}");
+    assert_eq!(
+        b1["rangeMeta"]["approx"], false,
+        "带 batchId 的批次是精确的: {b1}"
+    );
     assert_eq!(b1["rangeMeta"]["batchAssets"], 2, "{b1}");
-    assert_eq!(b1["rangeMeta"]["prefix"], serde_json::Value::Null, "精确范围不该有目录前缀: {b1}");
+    assert_eq!(
+        b1["rangeMeta"]["prefix"],
+        serde_json::Value::Null,
+        "精确范围不该有目录前缀: {b1}"
+    );
     assert_eq!(b1["totalGroups"], 1, "同目录两次导入不许串批: {b1}");
     assert_eq!(shape(&b1)[0], vec![1, 2], "{b1}");
     assert!(
@@ -159,7 +165,10 @@ async fn two_batches_same_root_do_not_leak() {
 
     // 混合库：老行（asset 5, batchId NULL）不进精确范围（它也不在任何组里，
     // 这里断言 batchAssets 只数带批次的 2 行，而不是「前缀下的 5 行」）
-    assert_eq!(b1["rangeMeta"]["batchAssets"], 2, "只数本批，不数同目录老行: {b1}");
+    assert_eq!(
+        b1["rangeMeta"]["batchAssets"], 2,
+        "只数本批，不数同目录老行: {b1}"
+    );
 }
 
 #[tokio::test]
@@ -199,7 +208,10 @@ async fn trashed_batch_assets_are_not_counted() {
 
     let (st, j) = get_json(app.clone(), "/api/dedup/groups?range=batch:1").await;
     assert_eq!(st, 200, "{j}");
-    assert_eq!(j["rangeMeta"]["batchAssets"], 1, "回收站里的本批资产不算在库里: {j}");
+    assert_eq!(
+        j["rangeMeta"]["batchAssets"], 1,
+        "回收站里的本批资产不算在库里: {j}"
+    );
     assert_eq!(
         j["totalGroups"], 0,
         "只剩 1 张凑不出重复组（不是「没重复」，outOfScopeAssets 会说明）: {j}"

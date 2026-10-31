@@ -23,7 +23,13 @@ fn orientation_of(path: &Path) -> u32 {
         .unwrap_or("")
         .to_ascii_lowercase();
     crate::exif::orientation_of_file(path, &ext)
-        .and_then(|o| if (1..=8).contains(&o) { Some(o as u32) } else { None })
+        .and_then(|o| {
+            if (1..=8).contains(&o) {
+                Some(o as u32)
+            } else {
+                None
+            }
+        })
         .unwrap_or(1)
 }
 

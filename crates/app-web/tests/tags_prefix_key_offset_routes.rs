@@ -71,7 +71,9 @@ async fn call(app: &axum::Router, uri: &str) -> (StatusCode, Value) {
         .await
         .unwrap();
     let status = res.status();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -144,7 +146,11 @@ async fn key_scoped_candidates_and_prefix_intersection() {
 
     // key 语义 ≠ prefix：key=sun 找的是 `sun-` 前缀，裸值 Sunset 不算该 key 的值
     let (_, v) = call(&app, "/api/library/tags?key=sun").await;
-    assert_eq!(v["total"], json!(0), "key= 要求 key- 前缀形态，裸值不算: {v}");
+    assert_eq!(
+        v["total"],
+        json!(0),
+        "key= 要求 key- 前缀形态，裸值不算: {v}"
+    );
 
     // key + prefix 组合（在 key 内按 prefix 收窄）
     let (_, v) = call(
@@ -152,11 +158,19 @@ async fn key_scoped_candidates_and_prefix_intersection() {
         "/api/library/tags?key=%E5%B0%BA%E5%AF%B8&prefix=%E5%B0%BA%E5%AF%B8-%E6%BB%9A%E7%AD%92_1",
     )
     .await;
-    assert_eq!(v["total"], json!(1), "key=尺寸 × prefix=尺寸-滚筒_1 → 仅 10KG: {v}");
+    assert_eq!(
+        v["total"],
+        json!(1),
+        "key=尺寸 × prefix=尺寸-滚筒_1 → 仅 10KG: {v}"
+    );
     assert_eq!(values_of(&v), vec!["尺寸-滚筒_10KG"]);
 
     // 范围不相交（key=尺寸 × prefix=Sunset）→ 空集，不报错
-    let (code, v) = call(&app, "/api/library/tags?key=%E5%B0%BA%E5%AF%B8&prefix=Sunset").await;
+    let (code, v) = call(
+        &app,
+        "/api/library/tags?key=%E5%B0%BA%E5%AF%B8&prefix=Sunset",
+    )
+    .await;
     assert_eq!(code, StatusCode::OK);
     assert_eq!(v["total"], json!(0), "不相交范围 = 空集: {v}");
     assert_eq!(values_of(&v), Vec::<String>::new());
@@ -171,15 +185,31 @@ async fn offset_paging_over_stable_order() {
     let app = app_of(&data_dir);
 
     // (count DESC, value ASC) 稳定排序：key=尺寸 的 2 页
-    let (_, v) = call(&app, "/api/library/tags?key=%E5%B0%BA%E5%AF%B8&limit=1&offset=0").await;
+    let (_, v) = call(
+        &app,
+        "/api/library/tags?key=%E5%B0%BA%E5%AF%B8&limit=1&offset=0",
+    )
+    .await;
     assert_eq!(values_of(&v), vec!["尺寸-滚筒_10KG"]);
     assert_eq!(v["total"], json!(2), "total 不随分页变");
     assert_eq!(v["hasMore"], json!(true));
-    let (_, v) = call(&app, "/api/library/tags?key=%E5%B0%BA%E5%AF%B8&limit=1&offset=1").await;
-    assert_eq!(values_of(&v), vec!["尺寸-滚筒_5KG"], "第 2 页 = 次序第 2 项");
+    let (_, v) = call(
+        &app,
+        "/api/library/tags?key=%E5%B0%BA%E5%AF%B8&limit=1&offset=1",
+    )
+    .await;
+    assert_eq!(
+        values_of(&v),
+        vec!["尺寸-滚筒_5KG"],
+        "第 2 页 = 次序第 2 项"
+    );
     assert_eq!(v["hasMore"], json!(false));
     // 翻过尾：空数组、total 仍是真值
-    let (_, v) = call(&app, "/api/library/tags?key=%E5%B0%BA%E5%AF%B8&limit=1&offset=2").await;
+    let (_, v) = call(
+        &app,
+        "/api/library/tags?key=%E5%B0%BA%E5%AF%B8&limit=1&offset=2",
+    )
+    .await;
     assert_eq!(values_of(&v), Vec::<String>::new());
     assert_eq!(v["total"], json!(2));
 
@@ -204,7 +234,10 @@ async fn no_param_keeps_legacy_array_shape() {
     let arr = v.as_array().unwrap();
     assert_eq!(arr.len(), 4, "默认 limit=30 取全部 4 个活值: {v}");
     assert_eq!(arr[0]["value"], json!("尺寸-滚筒_10KG"), "count DESC 在前");
-    assert!(arr[0].get("key").is_none(), "旧形态不带 key 字段（加字段不破契约，但这里证明没误改形态）");
+    assert!(
+        arr[0].get("key").is_none(),
+        "旧形态不带 key 字段（加字段不破契约，但这里证明没误改形态）"
+    );
 
     std::fs::remove_dir_all(&data_dir).ok();
 }
@@ -251,7 +284,8 @@ fn explain_query_plan_range_search_no_scan() {
             "{name}: 必须是范围 SEARCH（value>? AND value<?），实际计划:\n{joined}"
         );
         assert!(
-            !joined.to_lowercase().contains("scan t") && !joined.to_lowercase().contains("scan tag"),
+            !joined.to_lowercase().contains("scan t")
+                && !joined.to_lowercase().contains("scan tag"),
             "{name}: 候选查询不允许任何全表/全索引扫，实际计划:\n{joined}"
         );
     }

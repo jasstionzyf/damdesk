@@ -10,9 +10,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
 use rusqlite::Connection;
-use svc_library::export::{
-    run_export, ExportContent, ExportSource, ExportSpec, ExportTarget,
-};
+use svc_library::export::{run_export, ExportContent, ExportSource, ExportSpec, ExportTarget};
 use svc_pipeline::compliance_queue::{compliance_enq, run_compliance_queue};
 
 fn write_jpg(path: &Path, w: u32, h: u32, paint: impl Fn(u32, u32) -> [u8; 3]) {
@@ -35,7 +33,11 @@ fn c4_do_only_pipeline_export_manifest() {
         let name = format!("IMG_{i}.jpg");
         let p = dir.join("src").join(&name);
         write_jpg(&p, 640, 480, |x, y| {
-            [((x + i as u32 * 40) % 256) as u8, ((y * 2) % 256) as u8, 150]
+            [
+                ((x + i as u32 * 40) % 256) as u8,
+                ((y * 2) % 256) as u8,
+                150,
+            ]
         });
         conn.execute(
             "INSERT INTO assets (assetId, absPath, mediaType, fileName, fileExt, fileSz, mtime, importedAt)
@@ -69,7 +71,13 @@ recheck_max: 1
     )
     .unwrap();
     let out_dir = dir.join("products");
-    compliance_enq(&conn, &ids, pack.id.as_str(), Some(&out_dir.to_string_lossy())).unwrap();
+    compliance_enq(
+        &conn,
+        &ids,
+        pack.id.as_str(),
+        Some(&out_dir.to_string_lossy()),
+    )
+    .unwrap();
     let cancel = AtomicBool::new(false);
     let report = run_compliance_queue(&conn, &pack, &cancel, &mut |_| {}).expect("run");
     assert_eq!(report.done, 3, "{report:?}");
@@ -94,11 +102,17 @@ recheck_max: 1
             let out_path = ev["output"]["path"].as_str().unwrap().to_string();
             if step == "rn1" {
                 // 重命名模板生效：{origName}_listing.webp，最终产物必须在盘
-                assert!(out_path.contains("_listing.webp"), "重命名模板未生效: {out_path}");
+                assert!(
+                    out_path.contains("_listing.webp"),
+                    "重命名模板未生效: {out_path}"
+                );
                 assert!(Path::new(&out_path).is_file(), "最终产物缺失: {out_path}");
                 final_path = out_path;
             } else if step == "cv1" {
-                assert!(out_path.ends_with(".webp"), "convert 应产出 webp: {out_path}");
+                assert!(
+                    out_path.ends_with(".webp"),
+                    "convert 应产出 webp: {out_path}"
+                );
             }
         }
         assert!(!final_path.is_empty());
@@ -115,7 +129,10 @@ recheck_max: 1
     let ev: serde_json::Value = serde_json::from_str(&wm_ev).unwrap();
     let wm_path = ev["output"]["path"].as_str().unwrap().to_string();
     let (_w, _h, px) = core_media::rgb8(Path::new(&wm_path)).unwrap();
-    let reds = px.chunks(3).filter(|c| c[0] > 180 && c[1] < 120 && c[2] < 120).count();
+    let reds = px
+        .chunks(3)
+        .filter(|c| c[0] > 180 && c[1] < 120 && c[2] < 120)
+        .count();
     assert!(reds > 20, "水印红色像素应存在，实际 {reds}");
 
     // 圈选导出（v1 判定报告列模板仅内置包可用——do-only 用普通 manifest.csv；
@@ -137,9 +154,19 @@ recheck_max: 1
     for col in ["fileName", "tags", "width", "height", "assetId"] {
         assert!(header.contains(col), "表头缺列 {col}: {header}");
     }
-    assert_eq!(manifest.lines().count(), 3 + 2, "3 资产行 + 表头 + excludedRejected 行");
-    assert!(manifest.contains("excludedRejected,\"0\""), "缺拒选排除计数行: {manifest}");
+    assert_eq!(
+        manifest.lines().count(),
+        3 + 2,
+        "3 资产行 + 表头 + excludedRejected 行"
+    );
+    assert!(
+        manifest.contains("excludedRejected,\"0\""),
+        "缺拒选排除计数行: {manifest}"
+    );
     for id in &ids {
-        assert!(manifest.contains(&format!("\"{id}\"")), "manifest 缺资产 {id}");
+        assert!(
+            manifest.contains(&format!("\"{id}\"")),
+            "manifest 缺资产 {id}"
+        );
     }
 }

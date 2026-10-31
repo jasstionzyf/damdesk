@@ -28,7 +28,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use rusqlite::Connection;
-use svc_pipeline::compliance_queue::{compliance_enq, compliance_enq_group, run_compliance_queue_par, ConnFactory};
+use svc_pipeline::compliance_queue::{
+    compliance_enq, compliance_enq_group, run_compliance_queue_par, ConnFactory,
+};
 use svc_pipeline::VlConfig;
 
 fn env_or(k: &str, d: &str) -> String {
@@ -89,7 +91,8 @@ fn spawn_mock(label: &str) -> String {
                     }
                 }
             }
-            let body = serde_json::json!({ "choices": [{ "message": { "content": answer } }] }).to_string();
+            let body = serde_json::json!({ "choices": [{ "message": { "content": answer } }] })
+                .to_string();
             let http = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 body.len(),
@@ -180,7 +183,12 @@ fn verdict_counts(conn: &Connection, pack: &str, baseline: i64) -> Vec<serde_jso
     rows.filter_map(|r| r.ok()).collect()
 }
 
-fn group_rows(conn: &Connection, pack: &str, baseline: i64, limit: usize) -> Vec<serde_json::Value> {
+fn group_rows(
+    conn: &Connection,
+    pack: &str,
+    baseline: i64,
+    limit: usize,
+) -> Vec<serde_json::Value> {
     let mut stmt = conn
         .prepare(
             "SELECT ruleId, groupKey, assetId, COALESCE(verdict, CASE result WHEN 'skipped' THEN 'skipped' ELSE 'undetermined' END), score, evidence, jobId FROM rule_verdict
@@ -230,10 +238,8 @@ fn asset_scope_group_rows(
         ids.len() + 3
     );
     let mut stmt = conn.prepare(&sql).unwrap();
-    let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![
-        Box::new(pack.to_string()),
-        Box::new(baseline),
-    ];
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> =
+        vec![Box::new(pack.to_string()), Box::new(baseline)];
     for id in ids {
         params.push(Box::new(id.clone()));
     }
@@ -256,14 +262,23 @@ fn asset_scope_group_rows(
 /// job 队列快照（**本次运行口径**：只数 id > baseline 的 job，避免历史代际混入）。
 fn job_counts(conn: &Connection, kind: &str, baseline: i64) -> serde_json::Value {
     let mut stmt = conn
-        .prepare("SELECT status, COUNT(*) FROM job_queue WHERE kind = ?1 AND id > ?2 GROUP BY status")
+        .prepare(
+            "SELECT status, COUNT(*) FROM job_queue WHERE kind = ?1 AND id > ?2 GROUP BY status",
+        )
         .unwrap();
     let rows: Vec<(String, i64)> = stmt
-        .query_map(rusqlite::params![kind, baseline], |r| Ok((r.get(0)?, r.get(1)?)))
+        .query_map(rusqlite::params![kind, baseline], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
         .unwrap()
         .filter_map(|r| r.ok())
         .collect();
-    let get = |k: &str| rows.iter().find(|(s, _)| s == k).map(|(_, n)| *n).unwrap_or(0);
+    let get = |k: &str| {
+        rows.iter()
+            .find(|(s, _)| s == k)
+            .map(|(_, n)| *n)
+            .unwrap_or(0)
+    };
     serde_json::json!({
         "done": get("done"), "failed": get("failed"),
         "pending": get("pending"), "running": get("running"),
@@ -271,8 +286,10 @@ fn job_counts(conn: &Connection, kind: &str, baseline: i64) -> serde_json::Value
 }
 
 fn max_job_id(conn: &Connection) -> i64 {
-    conn.query_row("SELECT COALESCE(MAX(id),0) FROM job_queue", [], |r| r.get(0))
-        .unwrap()
+    conn.query_row("SELECT COALESCE(MAX(id),0) FROM job_queue", [], |r| {
+        r.get(0)
+    })
+    .unwrap()
 }
 
 fn asset_ids(conn: &Connection) -> Vec<i64> {
@@ -297,7 +314,8 @@ fn migrate() -> i32 {
         let mut stmt = conn
             .prepare("SELECT group_concat(version || ':' || name, ',') FROM (SELECT version, name FROM schema_migrations ORDER BY version)")
             .unwrap();
-        stmt.query_row([], |r| r.get::<_, String>(0)).unwrap_or_default()
+        stmt.query_row([], |r| r.get::<_, String>(0))
+            .unwrap_or_default()
             .split(',')
             .map(|s| s.to_string())
             .collect()
@@ -359,7 +377,7 @@ fn fixture() -> i32 {
     let src = PathBuf::from(env_or("C9_SRC", "/tmp/c7-work/corpus"));
     let root = db.parent().unwrap().parent().unwrap().to_path_buf();
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&db.parent().unwrap()).unwrap();
+    std::fs::create_dir_all(db.parent().unwrap()).unwrap();
 
     // 源图：取语料里前 N 张（真实照片）
     let mut pool: Vec<PathBuf> = std::fs::read_dir(&src)
@@ -555,7 +573,9 @@ fn run() -> i32 {
             )
             .unwrap();
         let rows = stmt
-            .query_map(rusqlite::params![pack.id, baseline], |r| r.get::<_, String>(0))
+            .query_map(rusqlite::params![pack.id, baseline], |r| {
+                r.get::<_, String>(0)
+            })
             .unwrap();
         rows.filter_map(|r| r.ok()).collect()
     };
@@ -606,7 +626,12 @@ fn run_all(
     db: &Path,
     asset_count: usize,
     pack: &core_config::Pack,
-) -> (serde_json::Value, Option<serde_json::Value>, &'static str, i64) {
+) -> (
+    serde_json::Value,
+    Option<serde_json::Value>,
+    &'static str,
+    i64,
+) {
     let conn = Connection::open(db).unwrap();
     let ids = asset_ids(&conn);
     let baseline = max_job_id(&conn);

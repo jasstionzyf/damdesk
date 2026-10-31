@@ -10,6 +10,7 @@
 //! 2. 可修场景（初检 fg_ratio < min，裁剪只能增占比 → 数学上可修）修复后复检 100% 过；
 //! 3. 不可修场景（初检 fg_ratio > max）→ pending_human(guaranteed_fix_failed) 兜底，
 //!    数量如实报告（裁剪修不了过满主体是预期语义，转人工）。
+//!
 //! 末行输出 `C3_E2E_SUMMARY {...}` 供验收脚本归档。
 
 use std::path::Path;
@@ -17,9 +18,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 use rusqlite::Connection;
-use svc_pipeline::compliance_queue::{
-    compliance_enq, compliance_stats, run_compliance_queue,
-};
+use svc_pipeline::compliance_queue::{compliance_enq, compliance_stats, run_compliance_queue};
 
 const RULES: &str = r#"
 - id: R4_subject_ratio
@@ -84,7 +83,10 @@ fn c3_corpus_500_detect_and_smart_crop_recheck() {
     std::fs::create_dir_all(&out_dir).unwrap();
     for (i, p) in paths.iter().enumerate() {
         let (w, h) = core_media::image_size(p).expect("image_size");
-        let name = format!("c3-{i:03}.{}", p.extension().and_then(|e| e.to_str()).unwrap_or("jpg"));
+        let name = format!(
+            "c3-{i:03}.{}",
+            p.extension().and_then(|e| e.to_str()).unwrap_or("jpg")
+        );
         conn.execute(
             "INSERT INTO assets (assetId, absPath, mediaType, fileName, fileExt, fileSz, mtime, importedAt)
              VALUES (NULL, ?1, 'image', ?2, ?3, 1, 0, 0)",
@@ -99,7 +101,9 @@ fn c3_corpus_500_detect_and_smart_crop_recheck() {
         .unwrap();
     }
     let ids: Vec<i64> = {
-        let mut stmt = conn.prepare("SELECT assetId FROM assets ORDER BY assetId").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT assetId FROM assets ORDER BY assetId")
+            .unwrap();
         let rows = stmt.query_map([], |r| r.get::<_, i64>(0)).unwrap();
         rows.map(|r| r.unwrap()).collect()
     };
@@ -113,14 +117,24 @@ fn c3_corpus_500_detect_and_smart_crop_recheck() {
         "summary: [合格, 不合格, 未判定]\ndetail_columns: [imageSN, R4_subject_ratio, R4_subject_ratio_score]\n",
     )
     .unwrap();
-    let enqed = compliance_enq(&conn, &ids, pack.id.as_str(), Some(&out_dir.to_string_lossy())).unwrap();
+    let enqed = compliance_enq(
+        &conn,
+        &ids,
+        pack.id.as_str(),
+        Some(&out_dir.to_string_lossy()),
+    )
+    .unwrap();
     assert_eq!(enqed as usize, n);
 
     let t_run = Instant::now();
     let cancel = AtomicBool::new(false);
     let report = run_compliance_queue(&conn, &pack, &cancel, &mut |_| {}).expect("run");
     let run_secs = t_run.elapsed().as_secs_f64();
-    assert_eq!(report.done as usize, n, "全部完成，errors={:?}", report.errors);
+    assert_eq!(
+        report.done as usize, n,
+        "全部完成，errors={:?}",
+        report.errors
+    );
     assert!(report.failed == 0 && report.retry == 0, "{report:?}");
     let (done, failed, pending) = compliance_stats(&conn).unwrap();
     assert_eq!((done, failed, pending), (n as i64, 0, 0));

@@ -139,7 +139,9 @@ fn parse(gw: &Gateway, raw: &[u8]) -> Resp {
 fn send_raw(gw: &Gateway, raw: &str) -> Resp {
     let addr = gw.base_url().replace("http://", "");
     let mut stream = TcpStream::connect(&addr).expect("连网关失败");
-    stream.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .unwrap();
     // 服务端可能在客户端写完前就回 413 并关连接 → 写失败不算测试失败，照样读应答
     let _ = stream.write_all(raw.as_bytes());
     let _ = stream.flush();
@@ -159,7 +161,10 @@ fn send_raw(gw: &Gateway, raw: &str) -> Resp {
 fn request(gw: &Gateway, method: &str, path: &str, auth: Option<&str>, body: Option<&str>) -> Resp {
     let addr = gw.base_url().replace("http://", "");
     let body = body.unwrap_or("");
-    let mut head = format!("{method} {path} HTTP/1.1\r\nhost: {addr}\r\ncontent-length: {}\r\nconnection: close\r\n", body.len());
+    let mut head = format!(
+        "{method} {path} HTTP/1.1\r\nhost: {addr}\r\ncontent-length: {}\r\nconnection: close\r\n",
+        body.len()
+    );
     if let Some(token) = auth {
         head.push_str(&format!("authorization: {token}\r\n"));
     }
@@ -167,11 +172,23 @@ fn request(gw: &Gateway, method: &str, path: &str, auth: Option<&str>, body: Opt
 }
 
 fn post(gw: &Gateway, path: &str, body: &Value) -> Resp {
-    request(gw, "POST", path, Some(&format!("Bearer {TOKEN}")), Some(&body.to_string()))
+    request(
+        gw,
+        "POST",
+        path,
+        Some(&format!("Bearer {TOKEN}")),
+        Some(&body.to_string()),
+    )
 }
 
 fn post_raw(gw: &Gateway, path: &str, body: &str) -> Resp {
-    request(gw, "POST", path, Some(&format!("Bearer {TOKEN}")), Some(body))
+    request(
+        gw,
+        "POST",
+        path,
+        Some(&format!("Bearer {TOKEN}")),
+        Some(body),
+    )
 }
 
 fn make_png(path: &Path, w: i32, h: i32) {
@@ -205,12 +222,24 @@ fn http_auth_and_routing_order() {
     assert_eq!(r.json()["error"], "method_not_allowed");
 
     // Bearer 前缀大小写敏感（协议 §6 字面量）：小写 → 401
-    let r = request(&gw, "POST", "/io/read", Some("bearer edges-token"), Some(&body.to_string()));
+    let r = request(
+        &gw,
+        "POST",
+        "/io/read",
+        Some("bearer edges-token"),
+        Some(&body.to_string()),
+    );
     assert_eq!(r.status, 401, "{}", r.body);
     assert_json_headers(&r);
 
     // 前缀之后的空白由宿主 trim（避免客户端多打空格就 401）
-    let r = request(&gw, "POST", "/io/read", Some("Bearer   edges-token  "), Some(&body.to_string()));
+    let r = request(
+        &gw,
+        "POST",
+        "/io/read",
+        Some("Bearer   edges-token  "),
+        Some(&body.to_string()),
+    );
     assert_eq!(r.status, 200, "{}", r.body);
     assert_json_headers(&r);
 
@@ -256,7 +285,10 @@ fn http_parse_errors_are_classified() {
     );
     assert_eq!(r.status, 400, "{}", r.body);
     assert_json_headers(&r);
-    assert!(r.json()["detail"].as_str().unwrap().contains("请求头不合法"));
+    assert!(r.json()["detail"]
+        .as_str()
+        .unwrap()
+        .contains("请求头不合法"));
 
     // content-length 不是数字 → 400
     let r = send_raw(
@@ -264,7 +296,10 @@ fn http_parse_errors_are_classified() {
         "POST /io/read HTTP/1.1\r\ncontent-length: 12ab\r\nconnection: close\r\n\r\n",
     );
     assert_eq!(r.status, 400, "{}", r.body);
-    assert!(r.json()["detail"].as_str().unwrap().contains("content-length"));
+    assert!(r.json()["detail"]
+        .as_str()
+        .unwrap()
+        .contains("content-length"));
 
     // 请求行缺 target → 400
     let r = send_raw(&gw, "POST\r\ncontent-length: 0\r\n\r\n");
@@ -273,9 +308,13 @@ fn http_parse_errors_are_classified() {
     // 请求体短于 content-length（客户端提前关写）→ 400「请求体提前结束」
     let addr = gw.base_url().replace("http://", "");
     let mut stream = TcpStream::connect(&addr).unwrap();
-    stream.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
     stream
-        .write_all(b"POST /io/read HTTP/1.1\r\ncontent-length: 100\r\nconnection: close\r\n\r\n{\"path\"")
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .unwrap();
+    stream
+        .write_all(
+            b"POST /io/read HTTP/1.1\r\ncontent-length: 100\r\nconnection: close\r\n\r\n{\"path\"",
+        )
         .unwrap();
     stream.shutdown(std::net::Shutdown::Write).unwrap();
     let mut buf = Vec::new();
@@ -283,7 +322,10 @@ fn http_parse_errors_are_classified() {
     let r = parse(&gw, &buf);
     assert_eq!(r.status, 400, "{}", r.body);
     assert!(
-        r.json()["detail"].as_str().unwrap().contains("请求体提前结束"),
+        r.json()["detail"]
+            .as_str()
+            .unwrap()
+            .contains("请求体提前结束"),
         "{}",
         r.body
     );
@@ -324,7 +366,10 @@ fn body_shape_and_size_edges() {
         assert_eq!(r.status, 400, "{raw} → {}", r.body);
         assert_eq!(r.json()["error"], "invalid_params");
         assert!(
-            r.json()["detail"].as_str().unwrap().contains("必须是 JSON 对象"),
+            r.json()["detail"]
+                .as_str()
+                .unwrap()
+                .contains("必须是 JSON 对象"),
             "{raw} → {}",
             r.body
         );
@@ -356,11 +401,26 @@ fn crop_param_edges() {
 
     let cases: Vec<(Value, &str)> = vec![
         (json!({ "path": p, "out": out }), "缺字段 box"),
-        (json!({ "path": p, "box": [0, 0, 10], "out": out }), "长度为 4"),
-        (json!({ "path": p, "box": [0, 0, 10.5, 10], "out": out }), "必须是整数"),
-        (json!({ "path": p, "box": [10, 10, 10, 20], "out": out }), "退化"),
-        (json!({ "path": p, "box": [0, 0, 500, 100], "out": out }), "越界"),
-        (json!({ "path": p, "box": [-1, 0, 10, 10], "out": out }), "越界"),
+        (
+            json!({ "path": p, "box": [0, 0, 10], "out": out }),
+            "长度为 4",
+        ),
+        (
+            json!({ "path": p, "box": [0, 0, 10.5, 10], "out": out }),
+            "必须是整数",
+        ),
+        (
+            json!({ "path": p, "box": [10, 10, 10, 20], "out": out }),
+            "退化",
+        ),
+        (
+            json!({ "path": p, "box": [0, 0, 500, 100], "out": out }),
+            "越界",
+        ),
+        (
+            json!({ "path": p, "box": [-1, 0, 10, 10], "out": out }),
+            "越界",
+        ),
         (json!({ "path": p, "box": [0, 0, 10, 10] }), "缺字段 out"),
     ];
     for (body, needle) in cases {
@@ -401,7 +461,10 @@ fn letterbox_param_edges() {
             json!({ "path": p, "target_ratio": 0.01, "out": out }),
             "越界",
         ),
-        (json!({ "path": p, "target_ratio": 25.0, "out": out }), "越界"),
+        (
+            json!({ "path": p, "target_ratio": 25.0, "out": out }),
+            "越界",
+        ),
         (
             json!({ "path": p, "target_ratio": 1.0, "background": "zzz", "out": out }),
             "不合法",
@@ -447,10 +510,7 @@ fn letterbox_param_edges() {
     );
     assert_eq!(r.status, 400, "{}", r.body);
     assert!(
-        r.json()["detail"]
-            .as_str()
-            .unwrap()
-            .contains("像素上限"),
+        r.json()["detail"].as_str().unwrap().contains("像素上限"),
         "{}",
         r.body
     );
@@ -640,7 +700,11 @@ fn io_read_file_and_mime_edges() {
     }
 
     // 目录不是可读文件 → 404（不是 panic，也不是 200）
-    let r = post(&gw, "/io/read", &json!({ "path": tmp.path().to_string_lossy() }));
+    let r = post(
+        &gw,
+        "/io/read",
+        &json!({ "path": tmp.path().to_string_lossy() }),
+    );
     assert_eq!(r.status, 404, "{}", r.body);
     assert_eq!(r.json()["error"], "asset_unreadable");
 
@@ -766,7 +830,10 @@ struct RecordingVl {
 
 impl VlJudge for RecordingVl {
     fn judge(&self, _path: &Path, prompt: &str, max_tokens: u32) -> Result<VlReply, VlError> {
-        self.seen.lock().unwrap().push((prompt.to_string(), max_tokens));
+        self.seen
+            .lock()
+            .unwrap()
+            .push((prompt.to_string(), max_tokens));
         let mode = *self.mode.lock().unwrap();
         if mode == "flip" {
             // K07-FIX-H：逐次翻转，用来证明 samples 拿的是**新样本**而不是同一份复制
@@ -826,9 +893,16 @@ fn vl_judge_param_and_reply_edges() {
     }
 
     // max_tokens: null 等同于缺省 → 上限
-    let r = post(&gw, "/vl/judge", &json!({ "path": p, "prompt": "p", "max_tokens": null }));
+    let r = post(
+        &gw,
+        "/vl/judge",
+        &json!({ "path": p, "prompt": "p", "max_tokens": null }),
+    );
     assert_eq!(r.status, 200, "{}", r.body);
-    assert_eq!(stub.seen.lock().unwrap().last().unwrap().1, VL_MAX_TOKENS_CAP);
+    assert_eq!(
+        stub.seen.lock().unwrap().last().unwrap().1,
+        VL_MAX_TOKENS_CAP
+    );
 
     // 边界：恰好等于上限可用
     let r = post(
@@ -837,7 +911,10 @@ fn vl_judge_param_and_reply_edges() {
         &json!({ "path": p, "prompt": "p", "max_tokens": VL_MAX_TOKENS_CAP }),
     );
     assert_eq!(r.status, 200, "{}", r.body);
-    assert_eq!(stub.seen.lock().unwrap().last().unwrap().1, VL_MAX_TOKENS_CAP);
+    assert_eq!(
+        stub.seen.lock().unwrap().last().unwrap().1,
+        VL_MAX_TOKENS_CAP
+    );
 
     // 后端说参数错 → 400（不是 undetermined：这是调用方的问题）
     *stub.mode.lock().unwrap() = "badparams";
@@ -873,7 +950,11 @@ fn vl_judge_samples_edges() {
     let p = img.to_string_lossy().to_string();
 
     // 显式 samples=1 = 与 1.1 完全同形（不带 raws 键）
-    let r = post(&gw, "/vl/judge", &json!({ "path": p, "prompt": "p", "samples": 1 }));
+    let r = post(
+        &gw,
+        "/vl/judge",
+        &json!({ "path": p, "prompt": "p", "samples": 1 }),
+    );
     assert_eq!(r.status, 200, "{}", r.body);
     assert_eq!(r.json()["undetermined"], false);
     assert!(r.json().get("raws").is_none(), "{}", r.body);
@@ -892,9 +973,17 @@ fn vl_judge_samples_edges() {
 
     // samples=3：后端被问 3 次，raws 三份，顶层 raw 仍是第一份（1.1 兼容）
     stub.seen.lock().unwrap().clear();
-    let r = post(&gw, "/vl/judge", &json!({ "path": p, "prompt": "p", "samples": 3 }));
+    let r = post(
+        &gw,
+        "/vl/judge",
+        &json!({ "path": p, "prompt": "p", "samples": 3 }),
+    );
     assert_eq!(r.status, 200, "{}", r.body);
-    assert_eq!(stub.seen.lock().unwrap().len(), 3, "samples 必须真的问 N 次");
+    assert_eq!(
+        stub.seen.lock().unwrap().len(),
+        3,
+        "samples 必须真的问 N 次"
+    );
     assert_eq!(r.json()["samples"], 3);
     let raws = r.json()["raws"].as_array().expect("raws 数组").clone();
     assert_eq!(raws.len(), 3);
@@ -903,26 +992,43 @@ fn vl_judge_samples_edges() {
     // 后端逐次翻转 → raws 内容不同（证明不是把同一份复制三遍）
     *stub.mode.lock().unwrap() = "flip";
     *stub.flips.lock().unwrap() = 0;
-    let r = post(&gw, "/vl/judge", &json!({ "path": p, "prompt": "p", "samples": 3 }));
+    let r = post(
+        &gw,
+        "/vl/judge",
+        &json!({ "path": p, "prompt": "p", "samples": 3 }),
+    );
     assert_eq!(r.status, 200, "{}", r.body);
     let statuses: Vec<String> = r.json()["raws"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|item| item["rules"][0]["status"].as_str().unwrap_or("").to_string())
+        .map(|item| {
+            item["rules"][0]["status"]
+                .as_str()
+                .unwrap_or("")
+                .to_string()
+        })
         .collect();
     assert_eq!(statuses, vec!["pass", "fail", "pass"], "{}", r.body);
 
     // 采样整体不可用 → undetermined（不冒充 pass/fail），raws 为空
     *stub.mode.lock().unwrap() = "silent";
-    let r = post(&gw, "/vl/judge", &json!({ "path": p, "prompt": "p", "samples": 3 }));
+    let r = post(
+        &gw,
+        "/vl/judge",
+        &json!({ "path": p, "prompt": "p", "samples": 3 }),
+    );
     assert_eq!(r.status, 200, "{}", r.body);
     assert_eq!(r.json()["undetermined"], true);
     assert_eq!(r.json()["raws"].as_array().unwrap().len(), 3);
 
     // 参数错（后端说 prompt 不合法）→ 400
     *stub.mode.lock().unwrap() = "badparams";
-    let r = post(&gw, "/vl/judge", &json!({ "path": p, "prompt": "p", "samples": 2 }));
+    let r = post(
+        &gw,
+        "/vl/judge",
+        &json!({ "path": p, "prompt": "p", "samples": 2 }),
+    );
     assert_eq!(r.status, 400, "{}", r.body);
 }
 
@@ -938,7 +1044,10 @@ fn report_emit_accounting_edges() {
         (json!({ "entry": {} }), "缺字段 job_id"),
         (json!({ "job_id": "  ", "entry": {} }), "缺字段 job_id"),
         (json!({ "job_id": "j" }), "缺字段 entry"),
-        (json!({ "job_id": "j", "entry": "not-an-object" }), "JSON 对象"),
+        (
+            json!({ "job_id": "j", "entry": "not-an-object" }),
+            "JSON 对象",
+        ),
     ] {
         let r = post(&gw, "/report/emit", &body);
         assert_eq!(r.status, 400, "{body} → {}", r.body);
@@ -1011,8 +1120,14 @@ fn debug_output_redacts_secrets() {
     let cfg = GatewayConfig::new(all_caps(), "/tmp/work-root").with_token("super-secret-token");
     let text = format!("{cfg:?}");
     assert!(text.contains("<redacted>"), "{text}");
-    assert!(!text.contains("super-secret-token"), "配置调试输出泄露令牌：{text}");
-    assert!(text.contains("vl: None"), "未注入 VL 时调试输出应显式写 None：{text}");
+    assert!(
+        !text.contains("super-secret-token"),
+        "配置调试输出泄露令牌：{text}"
+    );
+    assert!(
+        text.contains("vl: None"),
+        "未注入 VL 时调试输出应显式写 None：{text}"
+    );
 
     let (_tmp, work) = workdir("debug");
     let gw = gateway(&work);
@@ -1080,10 +1195,8 @@ fn from_manifest_limits_capabilities_to_declared_subset() {
         "timeout_secs": 10
     }))
     .unwrap();
-    let gw = Gateway::start(
-        GatewayConfig::from_manifest(&manifest, &work).with_token(TOKEN),
-    )
-    .unwrap();
+    let gw =
+        Gateway::start(GatewayConfig::from_manifest(&manifest, &work).with_token(TOKEN)).unwrap();
     let img = work.join("src.png");
     make_png(&img, 80, 60);
 
@@ -1098,7 +1211,11 @@ fn from_manifest_limits_capabilities_to_declared_subset() {
         ("/report/emit", "report.emit"),
         ("/op/inpaint", "op.generative"),
     ] {
-        let r = post(&gw, path, &json!({ "path": img.to_string_lossy(), "prompt": "p" }));
+        let r = post(
+            &gw,
+            path,
+            &json!({ "path": img.to_string_lossy(), "prompt": "p" }),
+        );
         assert_eq!(r.status, 403, "{path} → {}", r.body);
         assert_eq!(r.json()["error"], "capability_missing", "{path}");
         assert_eq!(r.json()["capability"], cap, "{path}");

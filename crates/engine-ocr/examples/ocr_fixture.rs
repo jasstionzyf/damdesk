@@ -11,7 +11,13 @@
 use core_media::{encode_rgb_to, watermark_text, TextWatermark, WatermarkPosition};
 
 /// stamp chain：src → dst，每次用新文件名。
-fn stamp_chain(prev: &std::path::Path, next: &std::path::Path, text: &str, pos: WatermarkPosition, size: f32) {
+fn stamp_chain(
+    prev: &std::path::Path,
+    next: &std::path::Path,
+    text: &str,
+    pos: WatermarkPosition,
+    size: f32,
+) {
     let wm = TextWatermark {
         text: text.to_string(),
         position: pos,
@@ -23,7 +29,13 @@ fn stamp_chain(prev: &std::path::Path, next: &std::path::Path, text: &str, pos: 
     watermark_text(prev, next, &wm).expect("watermark");
 }
 
-fn make(dir: &std::path::Path, name: &str, w: i32, h: i32, lines: &[(&str, WatermarkPosition, f32)]) {
+fn make(
+    dir: &std::path::Path,
+    name: &str,
+    w: i32,
+    h: i32,
+    lines: &[(&str, WatermarkPosition, f32)],
+) {
     let px = vec![245u8; (w * h * 3) as usize]; // 浅灰白底
     let blank = dir.join(format!("{name}.blank.png"));
     encode_rgb_to(w, h, &px, &blank, None).expect("encode blank");
@@ -47,27 +59,75 @@ fn main() {
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp/ocr-corpus"));
     std::fs::create_dir_all(&dir).expect("mkdir");
 
-    make(&dir, "cn.png", 640, 320, &[
-        ("桌面数字资产管理平台", WatermarkPosition::TopLeft, 40.0),
-        ("全库文字识别验收样张", WatermarkPosition::BottomLeft, 36.0),
-    ]);
-    make(&dir, "en.png", 640, 320, &[
-        ("Digital Asset Management 2026", WatermarkPosition::TopLeft, 36.0),
-        ("OCR acceptance fixture 42", WatermarkPosition::BottomLeft, 32.0),
-    ]);
-    make(&dir, "mixed.png", 800, 400, &[
-        ("DAMDesk 图库平台", WatermarkPosition::TopLeft, 44.0),
-        ("SKU-8891 降价 15%", WatermarkPosition::Center, 40.0),
-        ("Model Release v6 medium", WatermarkPosition::BottomRight, 32.0),
-    ]);
+    make(
+        &dir,
+        "cn.png",
+        640,
+        320,
+        &[
+            ("桌面数字资产管理平台", WatermarkPosition::TopLeft, 40.0),
+            ("全库文字识别验收样张", WatermarkPosition::BottomLeft, 36.0),
+        ],
+    );
+    make(
+        &dir,
+        "en.png",
+        640,
+        320,
+        &[
+            (
+                "Digital Asset Management 2026",
+                WatermarkPosition::TopLeft,
+                36.0,
+            ),
+            (
+                "OCR acceptance fixture 42",
+                WatermarkPosition::BottomLeft,
+                32.0,
+            ),
+        ],
+    );
+    make(
+        &dir,
+        "mixed.png",
+        800,
+        400,
+        &[
+            ("DAMDesk 图库平台", WatermarkPosition::TopLeft, 44.0),
+            ("SKU-8891 降价 15%", WatermarkPosition::Center, 40.0),
+            (
+                "Model Release v6 medium",
+                WatermarkPosition::BottomRight,
+                32.0,
+            ),
+        ],
+    );
     // 大图（1920×1080，min 边 ≥ 736 → det 不放大，量 det 原尺寸开销）
-    make(&dir, "big.png", 1920, 1080, &[
-        ("批发零售行业周报 2026 年第 42 期", WatermarkPosition::TopLeft, 48.0),
-        ("华东区销售额同比增长 23.5%", WatermarkPosition::TopRight, 44.0),
-        ("重点 SKU：生鲜/日配/酒水", WatermarkPosition::Center, 44.0),
-        ("数据来源：内部 BI 平台导出", WatermarkPosition::BottomLeft, 40.0),
-        ("单位：万元（不含税）", WatermarkPosition::BottomRight, 40.0),
-    ]);
+    make(
+        &dir,
+        "big.png",
+        1920,
+        1080,
+        &[
+            (
+                "批发零售行业周报 2026 年第 42 期",
+                WatermarkPosition::TopLeft,
+                48.0,
+            ),
+            (
+                "华东区销售额同比增长 23.5%",
+                WatermarkPosition::TopRight,
+                44.0,
+            ),
+            ("重点 SKU：生鲜/日配/酒水", WatermarkPosition::Center, 44.0),
+            (
+                "数据来源：内部 BI 平台导出",
+                WatermarkPosition::BottomLeft,
+                40.0,
+            ),
+            ("单位：万元（不含税）", WatermarkPosition::BottomRight, 40.0),
+        ],
+    );
 
     println!("fixtures written to {}", dir.display());
 }

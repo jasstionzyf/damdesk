@@ -21,7 +21,7 @@ use core_storage::compliance_runs_sqlite::SqliteComplianceRunRepo;
 use rusqlite::Connection;
 use svc_pipeline::compliance_queue::{
     compliance_enq, compliance_enq_in_run, run_compliance_queue_in_run,
-    run_compliance_queue_with_limit_in_run, COMPLIANCE_KINDS, COMPLIANCE_KIND,
+    run_compliance_queue_with_limit_in_run, COMPLIANCE_KIND, COMPLIANCE_KINDS,
 };
 
 /// 1×1 真 PNG（与 custom_queue / tag_queue 测试同源字节）。
@@ -57,8 +57,7 @@ fn pack() -> Pack {
 }
 
 fn db(dir: &Path) -> Connection {
-    let conn = core_storage::open(&dir.join("cmp-job-01.db")).unwrap();
-    conn
+    core_storage::open(&dir.join("cmp-job-01.db")).unwrap()
 }
 
 /// 造一张资产（`bad = true` → 垃圾字节 `.jpg`，模拟 BATCH-01 的坏图）。
@@ -143,7 +142,13 @@ fn each_run_keeps_its_own_result_stats() {
         .finish(run1, run_status::DONE, None, &COMPLIANCE_KINDS)
         .unwrap();
     assert_eq!(
-        (row1.total, row1.done, row1.failed, row1.skipped, row1.cancelled),
+        (
+            row1.total,
+            row1.done,
+            row1.failed,
+            row1.skipped,
+            row1.cancelled
+        ),
         (1, 1, 0, 0, 0),
         "第一轮只该有 1 条任务（历史 NULL 行不算进来）: {row1:?}"
     );
@@ -162,7 +167,13 @@ fn each_run_keeps_its_own_result_stats() {
         .finish(run2, run_status::DONE, None, &COMPLIANCE_KINDS)
         .unwrap();
     assert_eq!(
-        (row2.total, row2.done, row2.failed, row2.skipped, row2.cancelled),
+        (
+            row2.total,
+            row2.done,
+            row2.failed,
+            row2.skipped,
+            row2.cancelled
+        ),
         (1, 1, 0, 0, 0),
         "第二轮的数字只该算自己: {row2:?}"
     );
@@ -212,7 +223,8 @@ fn garbage_image_is_skipped_with_reason_not_failed() {
 
     let run = repo.start(COMPLIANCE_KIND, None).unwrap();
     compliance_enq_in_run(&conn, &[good, bad], &pack.id, Some(&out_s), Some(run)).unwrap();
-    let report = run_compliance_queue_in_run(&conn, &pack, &cancel, &mut |_| {}, Some(run)).unwrap();
+    let report =
+        run_compliance_queue_in_run(&conn, &pack, &cancel, &mut |_| {}, Some(run)).unwrap();
     assert_eq!(report.done, 1, "{report:?}");
     assert_eq!(report.skipped, 1, "坏图应记跳过: {report:?}");
     assert_eq!(report.failed, 0, "坏图不该变成失败: {report:?}");
@@ -319,7 +331,11 @@ fn stale_running_run_is_finalized_as_interrupted() {
     assert_eq!(row.status, run_status::INTERRUPTED);
     assert!(row.finished_at.is_some());
     assert!(row.error.is_some(), "要能解释为什么中断: {row:?}");
-    assert_eq!((row.total, row.cancelled), (1, 1), "未执行算 cancelled: {row:?}");
+    assert_eq!(
+        (row.total, row.cancelled),
+        (1, 1),
+        "未执行算 cancelled: {row:?}"
+    );
     balanced(run, &conn);
     assert!(repo.running().unwrap().is_none(), "自愈后不该还有 running");
 
@@ -402,7 +418,8 @@ fn asset_state_skips_carry_reason_and_overwrite_stale_error() {
     )
     .unwrap();
 
-    let report = run_compliance_queue_in_run(&conn, &pack, &cancel, &mut |_| {}, Some(run)).unwrap();
+    let report =
+        run_compliance_queue_in_run(&conn, &pack, &cancel, &mut |_| {}, Some(run)).unwrap();
     assert_eq!(report.done, 1, "好图照常判完: {report:?}");
     assert_eq!(
         report.skipped, 1,
@@ -489,7 +506,8 @@ fn deleted_and_non_image_media_report_their_own_reason() {
     let cancel = AtomicBool::new(false);
     let run = repo.start(COMPLIANCE_KIND, None).unwrap();
     compliance_enq_in_run(&conn, &[del, video], &pack.id, Some(&out_s), Some(run)).unwrap();
-    let report = run_compliance_queue_in_run(&conn, &pack, &cancel, &mut |_| {}, Some(run)).unwrap();
+    let report =
+        run_compliance_queue_in_run(&conn, &pack, &cancel, &mut |_| {}, Some(run)).unwrap();
     assert_eq!(report.skipped, 2, "{report:?}");
     assert_eq!(report.done, 0, "{report:?}");
     let row = repo

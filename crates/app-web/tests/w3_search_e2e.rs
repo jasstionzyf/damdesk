@@ -341,7 +341,12 @@ async fn embed_all(fx: &Fixture) {
     configure_mock_endpoint(fx).await;
     let (st, body) = post_json(fx, "/api/settings/embed/test", serde_json::json!({})).await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    let (st, body) = post_json(fx, "/api/embed/start", serde_json::json!({"mode":"pending"})).await;
+    let (st, body) = post_json(
+        fx,
+        "/api/embed/start",
+        serde_json::json!({"mode":"pending"}),
+    )
+    .await;
     assert_eq!(st, StatusCode::OK, "{body}");
     for _ in 0..200 {
         let (_, s) = get(fx, "/api/embed/status").await;
@@ -359,11 +364,7 @@ async fn embed_all(fx: &Fixture) {
 }
 
 /// POST /api/search/image（原始字节 body + query）→ (状态码, JSON)。
-async fn post_image(
-    fx: &Fixture,
-    uri: &str,
-    bytes: Vec<u8>,
-) -> (StatusCode, serde_json::Value) {
+async fn post_image(fx: &Fixture, uri: &str, bytes: Vec<u8>) -> (StatusCode, serde_json::Value) {
     let res = fx
         .app
         .clone()
@@ -378,7 +379,9 @@ async fn post_image(
         .await
         .unwrap();
     let status = res.status();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     if raw.is_empty() {
         return (status, serde_json::Value::Null);
     }
@@ -546,8 +549,16 @@ async fn embed_then_text_and_image_search() {
     // W3 相关性下限：mock 模型（openai-compat-embedding:*）未标定 → 后端不过滤，
     // 且响应里把这件事说清楚（前端据此决定是否显示"相似度 ≥ N%"）。
     assert_eq!(body["minScore"], serde_json::json!(0.0), "{body}");
-    assert_eq!(body["minScoreCalibrated"], serde_json::json!(false), "{body}");
-    assert_eq!(body["count"], serde_json::json!(3), "未标定模型 = 不过滤（全部正交向量都在）");
+    assert_eq!(
+        body["minScoreCalibrated"],
+        serde_json::json!(false),
+        "{body}"
+    );
+    assert_eq!(
+        body["count"],
+        serde_json::json!(3),
+        "未标定模型 = 不过滤（全部正交向量都在）"
+    );
 
     // 5b. 显式 minScore 生效：mock 向量两两正交（cos≈0），卡到 0.5 只剩自身（cos=1.0）
     let (st, body) = post_json(
@@ -557,7 +568,11 @@ async fn embed_then_text_and_image_search() {
     )
     .await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["count"], serde_json::json!(1), "0.5 下限只留自身：{body}");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(1),
+        "0.5 下限只留自身：{body}"
+    );
     assert_eq!(
         body["hits"][0]["assetId"],
         serde_json::json!(fx.assets[1].0)
@@ -580,7 +595,9 @@ async fn embed_then_text_and_image_search() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let bytes_body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let bytes_body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&bytes_body).unwrap();
     // 上传字节与库内 a1 完全一致 → 同一向量（cos=1.0）→ 恰好留下这一条
     assert_eq!(body["count"], serde_json::json!(1), "{body}");
@@ -608,9 +625,15 @@ async fn embed_then_text_and_image_search() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let nb = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let nb = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&nb).unwrap();
-    assert_eq!(body["count"], serde_json::json!(0), "库内无同向资产 → 显式空：{body}");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(0),
+        "库内无同向资产 → 显式空：{body}"
+    );
 
     // 6. 上传图搜索：上传资产 1 的同一份字节 → 同一向量 → top1 = 资产 1
     let (_, _, bytes) = &fx.assets[0];
@@ -671,25 +694,49 @@ async fn by_image_honours_k_filter_and_min_score() {
     // c. 标量过滤生效：库里全是 png → ext=jpg 必须 0 条（修复前是 3 条 = 过滤被丢）
     let (st, body) = post_image(&fx, "/api/search/image?ext=jpg", b.clone()).await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["count"], serde_json::json!(0), "ext=jpg 不该命中 png 资产：{body}");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(0),
+        "ext=jpg 不该命中 png 资产：{body}"
+    );
     println!("[EVIDENCE] ext=jpg       -> {body}");
     // 正向控制：ext=png 仍全部命中（别把过滤做成「一律清空」）
     let (st, body) = post_image(&fx, "/api/search/image?ext=png", b.clone()).await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["count"], serde_json::json!(3), "ext=png 应全中：{body}");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(3),
+        "ext=png 应全中：{body}"
+    );
     println!("[EVIDENCE] ext=png       -> {body}");
     // 目录前缀同样生效
-    let (st, body) = post_image(&fx, "/api/search/image?dirPrefix=/definitely-nowhere", b.clone()).await;
+    let (st, body) = post_image(
+        &fx,
+        "/api/search/image?dirPrefix=/definitely-nowhere",
+        b.clone(),
+    )
+    .await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["count"], serde_json::json!(0), "dirPrefix 不匹配应 0 条：{body}");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(0),
+        "dirPrefix 不匹配应 0 条：{body}"
+    );
 
     // d. minScore 生效：同字节上传 → 与 a1 同向量（cos=1.0），0.99 阈值只剩它
     let (st, body) = post_image(&fx, "/api/search/image?minScore=0.99", b.clone()).await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["count"], serde_json::json!(1), "minScore=0.99 只留自匹配：{body}");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(1),
+        "minScore=0.99 只留自匹配：{body}"
+    );
     let score = body["hits"][0]["score"].as_f64().unwrap();
     assert!(score >= 0.99, "score={score}");
-    assert_eq!(body["hits"][0]["assetId"], serde_json::json!(fx.assets[0].0));
+    assert_eq!(
+        body["hits"][0]["assetId"],
+        serde_json::json!(fx.assets[0].0)
+    );
     println!("[EVIDENCE] minScore=0.99 -> {body}");
 
     // e. k + 过滤组合：k=5 & ext=jpg → 仍 0（过滤先于条数）
@@ -766,7 +813,11 @@ async fn text_search_delivers_k_past_trashed_vectors() {
     )
     .await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["count"], serde_json::json!(3), "k=3 必须交付 3 条：{body}");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(3),
+        "k=3 必须交付 3 条：{body}"
+    );
     let ids: Vec<i64> = body["hits"]
         .as_array()
         .unwrap()
@@ -797,7 +848,11 @@ async fn text_search_delivers_k_past_trashed_vectors() {
     )
     .await;
     assert_eq!(st, StatusCode::OK);
-    assert_eq!(body["count"], serde_json::json!(3), "k 大于存活数时交付全部存活：{body}");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(3),
+        "k 大于存活数时交付全部存活：{body}"
+    );
 
     // 5) 以图搜图的同一入口（找相似）也按交付条数收口
     let (st, body) = post_json(
@@ -807,8 +862,16 @@ async fn text_search_delivers_k_past_trashed_vectors() {
     )
     .await;
     assert_eq!(st, StatusCode::OK, "{body}");
-    assert_eq!(body["count"], serde_json::json!(3), "找相似同样不得被回收站吃掉：{body}");
-    assert_eq!(body["hits"][0]["assetId"], serde_json::json!(fx.assets[3].0), "自身 top1");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(3),
+        "找相似同样不得被回收站吃掉：{body}"
+    );
+    assert_eq!(
+        body["hits"][0]["assetId"],
+        serde_json::json!(fx.assets[3].0),
+        "自身 top1"
+    );
 
     // 5b) 卡体验收表里的原始入口 `POST /api/search/image`（上传字节 → 图片向量 → KNN）：
     //     无过滤与带过滤（ext=png 命中全部 6 行）都只交付存活 3 条，回收站不补位。
@@ -831,14 +894,12 @@ async fn text_search_delivers_k_past_trashed_vectors() {
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::OK, "{uri}");
-        let b = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+        let b = axum::body::to_bytes(res.into_body(), 1 << 22)
+            .await
+            .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&b).unwrap();
         assert_eq!(body["count"], serde_json::json!(3), "{uri}: {body}");
-        let trashed = [
-            fx.assets[0].0,
-            fx.assets[1].0,
-            fx.assets[2].0,
-        ];
+        let trashed = [fx.assets[0].0, fx.assets[1].0, fx.assets[2].0];
         assert!(
             body["hits"]
                 .as_array()
@@ -865,8 +926,16 @@ async fn text_search_delivers_k_past_trashed_vectors() {
     )
     .await;
     assert_eq!(st, StatusCode::OK);
-    assert_eq!(body["count"], serde_json::json!(6), "恢复后 6 条全回来：{body}");
-    assert_eq!(body["hits"][0]["assetId"], serde_json::json!(fx.assets[0].0), "最近的那张回到首位");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(6),
+        "恢复后 6 条全回来：{body}"
+    );
+    assert_eq!(
+        body["hits"][0]["assetId"],
+        serde_json::json!(fx.assets[0].0),
+        "最近的那张回到首位"
+    );
 }
 
 // ---------- KI-5：找相似的「精准匹配」模式（mode=visual_precise）----------
@@ -907,9 +976,21 @@ async fn similar_precise_mode_reranks_by_dedup_tower() {
     .await;
     assert_eq!(st, StatusCode::OK, "{body}");
     assert_eq!(body["mode"], serde_json::json!("visual_precise"));
-    assert_eq!(body["count"], serde_json::json!(2), "只留 ≥0.90 的两条：{body}");
-    assert_eq!(body["candidatePool"], serde_json::json!(4), "候选池=自身之外的语义召回：{body}");
-    assert_eq!(body["missingDedupVectors"], serde_json::json!(1), "a5 无判重向量必须计数");
+    assert_eq!(
+        body["count"],
+        serde_json::json!(2),
+        "只留 ≥0.90 的两条：{body}"
+    );
+    assert_eq!(
+        body["candidatePool"],
+        serde_json::json!(4),
+        "候选池=自身之外的语义召回：{body}"
+    );
+    assert_eq!(
+        body["missingDedupVectors"],
+        serde_json::json!(1),
+        "a5 无判重向量必须计数"
+    );
     assert_eq!(body["queryMissingDedupVector"], serde_json::json!(false));
     assert_eq!(body["dedupIndexReady"], serde_json::json!(true));
     assert_eq!(body["selfExcluded"], serde_json::json!(true));
@@ -969,7 +1050,10 @@ async fn similar_precise_rejects_min_score() {
     assert_eq!(st, StatusCode::BAD_REQUEST);
     assert_eq!(body["code"], serde_json::json!("bad_min_score"));
     let msg = body["error"].as_str().unwrap();
-    assert!(msg.contains("90%") && msg.contains("98%"), "文案要点明两档：{msg}");
+    assert!(
+        msg.contains("90%") && msg.contains("98%"),
+        "文案要点明两档：{msg}"
+    );
 }
 
 /// 全库没算过判重向量（KI-2a 之前的历史库）：200 + 空结果 + 三项显式标记，不是报错。

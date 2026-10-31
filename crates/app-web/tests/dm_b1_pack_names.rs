@@ -50,9 +50,15 @@ async fn send(app: &axum::Router, method: &str, uri: &str, body: Option<Value>) 
         }
         None => Body::empty(),
     };
-    let res = app.clone().oneshot(builder.body(body).unwrap()).await.unwrap();
+    let res = app
+        .clone()
+        .oneshot(builder.body(body).unwrap())
+        .await
+        .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 24).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 24)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -69,7 +75,10 @@ fn build_archive_as(out_dir: &Path, id: &str) -> PathBuf {
                 .expect("相对路径")
                 .to_string_lossy()
                 .replace('\\', "/");
-            if rel.split('/').any(|part| part == "tests" || part == "__pycache__") {
+            if rel
+                .split('/')
+                .any(|part| part == "tests" || part == "__pycache__")
+            {
                 continue;
             }
             if path.is_dir() {
@@ -144,7 +153,10 @@ async fn packs_and_specs_rows_carry_manifest_names() {
         .iter()
         .find(|r| r["id"].as_str() == Some(DEMO_ID))
         .unwrap_or_else(|| panic!("装了 {DEMO_ID} 却不在列表里：{list}"));
-    assert_eq!(demo["name"], "图片放大", "能力名要取 manifest short_name：{demo}");
+    assert_eq!(
+        demo["name"], "图片放大",
+        "能力名要取 manifest short_name：{demo}"
+    );
     assert_eq!(
         demo["summary"], "把小图放大 2~4 倍，细节更清楚",
         "一句话描述要取 manifest summary：{demo}"
@@ -164,7 +176,10 @@ async fn packs_and_specs_rows_carry_manifest_names() {
     let items = specs["items"].as_array().expect("items 必须是数组");
     assert!(!items.is_empty(), "首次访问应惰性补默认方案：{specs}");
     for s in items {
-        let pn = s["pluginStatus"]["pluginName"].as_str().unwrap_or("").trim();
+        let pn = s["pluginStatus"]["pluginName"]
+            .as_str()
+            .unwrap_or("")
+            .trim();
         if s["pluginStatus"]["installed"].as_bool() == Some(true) {
             assert!(
                 !pn.is_empty(),
@@ -205,13 +220,22 @@ fn builtin_five_packs_keep_their_user_facing_names() {
         let dir = repo_root().join("packs/plugins").join(dir_name);
         let (m, _ident) = pack_host::load_pack(&dir)
             .unwrap_or_else(|e| panic!("仓库包 {dir_name} 必须能加载：{e}"));
-        assert_eq!(m.short_label("zh-Hans"), want, "包 {dir_name} 的界面名变了（§3 命名表）");
+        assert_eq!(
+            m.short_label("zh-Hans"),
+            want,
+            "包 {dir_name} 的界面名变了（§3 命名表）"
+        );
         assert!(
-            m.summary_text("zh-Hans").map(|s| !s.is_empty()).unwrap_or(false),
+            m.summary_text("zh-Hans")
+                .map(|s| !s.is_empty())
+                .unwrap_or(false),
             "包 {dir_name} 必须带一句话描述（§3.1：每个功能入口配一句「做什么 + 有什么用」）"
         );
         // 名字与描述是**用户面**文案：不得出现内部词（与 ui_copy_guard 同一张红线表）
-        for text in [m.short_label("zh-Hans"), m.summary_text("zh-Hans").unwrap_or("")] {
+        for text in [
+            m.short_label("zh-Hans"),
+            m.summary_text("zh-Hans").unwrap_or(""),
+        ] {
             for bad in ["插件", "规格", "manifest", "job", "verdict", "行业包"] {
                 assert!(
                     !text.contains(bad),
@@ -244,11 +268,23 @@ fn legacy_manifest_without_short_name_falls_back_to_name() {
     let dir = std::env::temp_dir().join(format!("dm-b1-legacy-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("manifest.json"), serde_json::to_vec_pretty(&manifest).unwrap())
-        .unwrap();
+    std::fs::write(
+        dir.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
 
-    let (m, _ident) = pack_host::load_pack(&dir).expect("老 manifest（无 short_name/summary）必须照样能加载");
-    assert_eq!(m.short_label("zh-Hans"), full_name, "没声明 short_name 时回落 manifest name");
-    assert_eq!(m.summary_text("zh-Hans"), None, "没声明 summary 时不给描述（不编造）");
+    let (m, _ident) =
+        pack_host::load_pack(&dir).expect("老 manifest（无 short_name/summary）必须照样能加载");
+    assert_eq!(
+        m.short_label("zh-Hans"),
+        full_name,
+        "没声明 short_name 时回落 manifest name"
+    );
+    assert_eq!(
+        m.summary_text("zh-Hans"),
+        None,
+        "没声明 summary 时不给描述（不编造）"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

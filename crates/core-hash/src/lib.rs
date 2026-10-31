@@ -34,31 +34,28 @@ fn dct8x8(luma: &[u8]) -> [[f64; 8]; 8] {
     let mut cos_u = [[0f64; N]; 8];
     let mut cos_v = [[0f64; N]; 8];
     for (u, cu) in cos_u.iter_mut().enumerate() {
-        for x in 0..N {
-            cu[x] =
-                ((u as f64) * std::f64::consts::FRAC_PI_2 * (2 * x + 1) as f64 / N as f64).cos();
+        for (x, cx) in cu.iter_mut().enumerate() {
+            *cx = ((u as f64) * std::f64::consts::FRAC_PI_2 * (2 * x + 1) as f64 / N as f64).cos();
         }
     }
     for (v, cv) in cos_v.iter_mut().enumerate() {
-        for y in 0..N {
-            cv[y] =
-                ((v as f64) * std::f64::consts::FRAC_PI_2 * (2 * y + 1) as f64 / N as f64).cos();
+        for (y, cy) in cv.iter_mut().enumerate() {
+            *cy = ((v as f64) * std::f64::consts::FRAC_PI_2 * (2 * y + 1) as f64 / N as f64).cos();
         }
     }
     let mut out = [[0f64; 8]; 8];
-    for u in 0..8 {
-        for v in 0..8 {
+    for (u, out_row) in out.iter_mut().enumerate() {
+        for (v, coef) in out_row.iter_mut().enumerate() {
             let mut sum = 0f64;
-            for x in 0..N {
-                let cx = cos_u[u][x];
+            for (x, &cx) in cos_u[u].iter().enumerate() {
                 let mut row_sum = 0f64;
                 let base = x * N;
-                for y in 0..N {
-                    row_sum += luma[base + y] as f64 * cos_v[v][y];
+                for (y, &cy) in cos_v[v].iter().enumerate() {
+                    row_sum += luma[base + y] as f64 * cy;
                 }
                 sum += cx * row_sum;
             }
-            out[u][v] = sum;
+            *coef = sum;
         }
     }
     out
@@ -71,27 +68,20 @@ pub fn phash(luma: &[u8]) -> Result<u64, HashError> {
         return Err(HashError::BadGrid(PHASH_SRC, luma.len()));
     }
     let coefs = dct8x8(luma);
-    let mut mean = 0f64;
-    for u in 0..8 {
-        for v in 0..8 {
-            if !(u == 0 && v == 0) {
-                mean += coefs[u][v];
-            }
-        }
-    }
-    mean /= 63.0;
+    // 行主序铺平后跳过 [0][0]（DC）：其余 63 个系数求均值/阈值
+    let ac: Vec<f64> = coefs
+        .iter()
+        .flat_map(|r| r.iter())
+        .copied()
+        .skip(1)
+        .collect();
+    let mean: f64 = ac.iter().sum::<f64>() / 63.0;
     // 浮点容差：平坦图 AC 系数残差 ~1e-13，不能当有效信号
     const TOL: f64 = 1e-9;
     let mut hash: u64 = 0;
-    let mut bit = 0;
-    for u in 0..8 {
-        for v in 0..8 {
-            if !(u == 0 && v == 0) {
-                if coefs[u][v] > mean + TOL {
-                    hash |= 1 << bit;
-                }
-                bit += 1;
-            }
+    for (bit, &c) in ac.iter().enumerate() {
+        if c > mean + TOL {
+            hash |= 1 << bit;
         }
     }
     Ok(hash)

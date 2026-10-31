@@ -46,7 +46,10 @@ fn large_square_normalized_to_short_side() {
     let img = decode(&bytes);
     assert_short_side(img.width(), img.height(), 512, "3072² ");
     assert_eq!((img.width(), img.height()), (512, 512), "方图应正好 512²");
-    assert!(bytes.len() * 8 < raw.len(), "3072² PNG → 512² JPEG 应显著变小");
+    assert!(
+        bytes.len() * 8 < raw.len(),
+        "3072² PNG → 512² JPEG 应显著变小"
+    );
     let _ = std::fs::remove_file(&src);
 }
 

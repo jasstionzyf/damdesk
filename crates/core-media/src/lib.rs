@@ -12,7 +12,7 @@ mod backend;
 mod backend;
 
 pub use backend::{
-    crop_to, image_size, init as init_backend, luma32, resize_to, rgba8, rgb8, scale_to,
+    crop_to, image_size, init as init_backend, luma32, resize_to, rgb8, rgba8, scale_to,
     thumbnail_to, vl_jpeg,
 };
 // C4 do 型变换底座：共享纯 Rust 编码 + 文字水印（双后端同语义）
@@ -124,17 +124,16 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let tiff = exif::tests::phone_tiff();
         let src = dir.join("portrait.jpg");
-        std::fs::write(
-            &src,
-            exif::tests::jpeg_with_exif(&tiff, 4032, 3024),
-        )
-        .unwrap();
+        std::fs::write(&src, exif::tests::jpeg_with_exif(&tiff, 4032, 3024)).unwrap();
         let ext = "jpg";
 
         // 解析层：orientation=6，oriented 宽高互换
         let summary = exif::parse_file(&src, ext, false).unwrap().unwrap();
         assert_eq!(summary.orientation, Some(6));
-        assert_eq!(exif::oriented_dims(4032, 3024, summary.orientation), (3024, 4032));
+        assert_eq!(
+            exif::oriented_dims(4032, 3024, summary.orientation),
+            (3024, 4032)
+        );
 
         // vips 后端：缩略图输出必须是竖图（摆正后的画面）
         let thumb = dir.join("t256.webp");
@@ -210,8 +209,9 @@ mod tests {
 
     /// 造测试源图（JPEG，dev-dep image crate；两后端均可解码）。
     fn write_test_jpeg(dir: &std::path::Path, name: &str, w: u32, h: u32) -> std::path::PathBuf {
-        let img =
-            image::RgbImage::from_fn(w, h, |x, y| image::Rgb([(x % 256) as u8, (y % 256) as u8, 128]));
+        let img = image::RgbImage::from_fn(w, h, |x, y| {
+            image::Rgb([(x % 256) as u8, (y % 256) as u8, 128])
+        });
         let p = dir.join(name);
         image::DynamicImage::ImageRgb8(img)
             .save_with_format(&p, image::ImageFormat::Jpeg)
@@ -246,7 +246,11 @@ mod tests {
                 "{name}: 出图 {gw}x{gh}，预期 {ew}x{eh}（长边语义）"
             );
             let (dw, dh) = thumb_dims(w as i32, h as i32, 256);
-            assert_eq!((gw as u32, gh as u32), (dw, dh), "{name}: 与 thumb_dims 不符");
+            assert_eq!(
+                (gw as u32, gh as u32),
+                (dw, dh),
+                "{name}: 与 thumb_dims 不符"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -301,13 +305,11 @@ mod tests {
             std::fs::copy(&src, acc.join("portrait_800x3000-src.jpg")).unwrap();
             let json = format!(
                 "{{\"backend\":\"{}\",\"src\":\"800x3000\",\"size\":256,\"out\":\"{}x{}\"}}\n",
-                crate::BACKEND, gw, gh
+                crate::BACKEND,
+                gw,
+                gh
             );
-            std::fs::write(
-                acc.join(format!("result-{}.json", crate::BACKEND)),
-                json,
-            )
-            .unwrap();
+            std::fs::write(acc.join(format!("result-{}.json", crate::BACKEND)), json).unwrap();
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

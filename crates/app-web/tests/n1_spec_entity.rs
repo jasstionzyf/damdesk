@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)] // vips 全局锁刻意贯穿 await：测试间串行化 libvips（非 DB 锁，无死锁面）
 //! N1 规格实体（卡 task）HTTP 面回归钉：**规格 = 配置，不安装不分发**。
 //!
 //! 钉的六件事：
@@ -43,12 +44,20 @@ async fn call(
         req = req.header("content-type", "application/json");
     }
     let req = req
-        .body(body.map(|b| Body::from(b.to_string())).unwrap_or_else(Body::empty))
+        .body(
+            body.map(|b| Body::from(b.to_string()))
+                .unwrap_or_else(Body::empty),
+        )
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null))
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 async fn get(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
@@ -207,7 +216,10 @@ async fn list_lazily_seeds_default_specs() {
     // 3 条检查类（淘宝/Amazon/房源）+ 每个「恰好声明一个动作」的处理包一条官方默认方案
     // （KI-39 / task 定了口径，KI-40 的 upscale 包按同一口径自动多一条）
     let expect_process = expected_process_seeds();
-    assert!(!expect_process.is_empty(), "repo 内置处理包应有可派生的默认方案");
+    assert!(
+        !expect_process.is_empty(),
+        "repo 内置处理包应有可派生的默认方案"
+    );
     assert_eq!(
         j["total"].as_u64().unwrap() as usize,
         CHECK_SEEDS + expect_process.len(),
@@ -226,7 +238,8 @@ async fn list_lazily_seeds_default_specs() {
         &["淘宝主图", "亚马逊主图", "房源照片"],
         "{names:?}"
     );
-    let mut process_names: Vec<String> = names[CHECK_SEEDS..].iter().map(|s| s.to_string()).collect();
+    let mut process_names: Vec<String> =
+        names[CHECK_SEEDS..].iter().map(|s| s.to_string()).collect();
     process_names.sort();
     let mut want: Vec<String> = expect_process.iter().map(|(_, n, _)| n.clone()).collect();
     want.sort();
@@ -234,7 +247,10 @@ async fn list_lazily_seeds_default_specs() {
     // 每条都带现算的 pluginStatus（插件在不在是环境事实，不是规格属性）
     for item in j["items"].as_array().unwrap() {
         assert!(item["pluginStatus"]["installed"].is_boolean(), "{item}");
-        assert!(item["pluginStatus"]["versionMismatch"].is_boolean(), "{item}");
+        assert!(
+            item["pluginStatus"]["versionMismatch"].is_boolean(),
+            "{item}"
+        );
     }
     // 淘宝规格的阈值来自插件 resources/rules.json（IP-K16 起旧 YAML 已删，包资源是唯一权威）
     let taobao = j["items"]
@@ -255,7 +271,11 @@ async fn list_lazily_seeds_default_specs() {
         .iter()
         .find(|i| i["originKey"] == "seed:com.soujpg.pack.segment")
         .expect("段包必须有官方默认方案");
-    assert_eq!(segment["actions"], serde_json::json!([{"action": "white_bg_fill"}]), "{segment}");
+    assert_eq!(
+        segment["actions"],
+        serde_json::json!([{"action": "white_bg_fill"}]),
+        "{segment}"
+    );
     assert_eq!(segment["rules"], serde_json::json!([]), "{segment}");
     assert_eq!(segment["pluginId"], "com.soujpg.pack.segment", "{segment}");
     // 每条处理类方案都按包内声明逐项对账（upscale 包 KI-40 起走同一口径，不是特例）
@@ -302,7 +322,10 @@ async fn migrate_is_idempotent_and_reports_readback() {
     );
     assert_eq!(second["existing"].as_array().unwrap().len(), want_seeds);
     assert_eq!(second["verification"]["ok"], true, "{second}");
-    println!("[N1] migrate(repeat) = {}", serde_json::to_string_pretty(&second).unwrap());
+    println!(
+        "[N1] migrate(repeat) = {}",
+        serde_json::to_string_pretty(&second).unwrap()
+    );
 
     // 房源规格：旧 YAML 的三个数值阈值都在（禁止静默丢）
     let realestate = second["existing"]
@@ -317,9 +340,16 @@ async fn migrate_is_idempotent_and_reports_readback() {
     assert_eq!(code, 200, "{j}");
     let re = &j["items"][0];
     assert_eq!(re["thresholds"]["F1_sharpness"]["min"], 100.0, "{re}");
-    assert_eq!(re["thresholds"]["F2_exposure"]["max_dead_ratio"], 0.3, "{re}");
+    assert_eq!(
+        re["thresholds"]["F2_exposure"]["max_dead_ratio"], 0.3,
+        "{re}"
+    );
     assert_eq!(re["thresholds"]["F3_duplicate"]["threshold"], 8, "{re}");
-    assert_eq!(re["paramsDiff"], serde_json::json!({}), "老包没有 schema，不许造 paramsDiff");
+    assert_eq!(
+        re["paramsDiff"],
+        serde_json::json!({}),
+        "老包没有 schema，不许造 paramsDiff"
+    );
 }
 
 /// 默认规格是**一次性迁移**：用户把三条默认规格删光后，列表不许把它们变回来
@@ -355,15 +385,26 @@ async fn crud_roundtrip_and_validation_errors() {
     let (code, created) = post(&app, "/api/specs", &spec_body("我的 800px webp")).await;
     assert_eq!(code, 201, "{created}");
     let id = created["specId"].as_i64().expect("必须回 specId");
-    assert_eq!(created["rules"], serde_json::json!(["R1_size", "R2_white_bg"]));
+    assert_eq!(
+        created["rules"],
+        serde_json::json!(["R1_size", "R2_white_bg"])
+    );
     assert_eq!(created["paramsDiff"]["shortSideMin"], 800);
-    assert_eq!(created["originKey"], serde_json::Value::Null, "用户自建没有迁移来源");
+    assert_eq!(
+        created["originKey"],
+        serde_json::Value::Null,
+        "用户自建没有迁移来源"
+    );
 
     // 列（按插件过滤）
     let (code, j) = get(&app, "/api/specs?plugin=com.soujpg.pack.ecommerce").await;
     assert_eq!(code, 200, "{j}");
     assert!(
-        j["items"].as_array().unwrap().iter().any(|i| i["specId"] == id),
+        j["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["specId"] == id),
         "自建规格必须能列出来：{j}"
     );
 
@@ -373,10 +414,18 @@ async fn crud_roundtrip_and_validation_errors() {
     assert_eq!(one["name"], "我的 800px webp");
 
     // 改（只给一个字段：其余按现值保留）
-    let (code, updated) = patch(&app, &format!("/api/specs/{id}"), r#"{"name":"我的 800px webp v2"}"#).await;
+    let (code, updated) = patch(
+        &app,
+        &format!("/api/specs/{id}"),
+        r#"{"name":"我的 800px webp v2"}"#,
+    )
+    .await;
     assert_eq!(code, 200, "{updated}");
     assert_eq!(updated["name"], "我的 800px webp v2");
-    assert_eq!(updated["paramsDiff"]["shortSideMin"], 800, "没给的字段不许被清空");
+    assert_eq!(
+        updated["paramsDiff"]["shortSideMin"], 800,
+        "没给的字段不许被清空"
+    );
 
     // 同插件重名 → 409
     let (code, dup) = post(&app, "/api/specs", &spec_body("我的 800px webp v2")).await;
@@ -384,7 +433,12 @@ async fn crud_roundtrip_and_validation_errors() {
     assert_eq!(dup["error"], "spec_duplicate_name");
 
     // 未知规则 → 400
-    let (code, bad_rule) = post(&app, "/api/specs", r#"{"pluginId":"com.soujpg.pack.ecommerce","name":"坏规格","rules":["R9_nope"]}"#).await;
+    let (code, bad_rule) = post(
+        &app,
+        "/api/specs",
+        r#"{"pluginId":"com.soujpg.pack.ecommerce","name":"坏规格","rules":["R9_nope"]}"#,
+    )
+    .await;
     assert_eq!(code, 400, "{bad_rule}");
     assert_eq!(bad_rule["error"], "spec_unknown_rule", "{bad_rule}");
 
@@ -539,7 +593,10 @@ async fn judge_with_spec_id_snapshots_spec_and_rules() {
         "阈值必须进快照：{params}"
     );
     assert_eq!(params["spec"]["rules"], ecommerce_rules_json());
-    println!("[N1] run{run_id} params = {}", serde_json::to_string_pretty(&params).unwrap());
+    println!(
+        "[N1] run{run_id} params = {}",
+        serde_json::to_string_pretty(&params).unwrap()
+    );
 
     // job payload 带上规格的规则清单（「判哪些规则」跟着任务走）
     let payload: String = conn
@@ -558,7 +615,12 @@ async fn judge_with_spec_id_snapshots_spec_and_rules() {
     println!("[N1] job payload = {payload}");
 
     // 停用的规格不许被引用
-    let (code, _) = patch(&app, &format!("/api/specs/{spec_id}"), r#"{"enabled":false}"#).await;
+    let (code, _) = patch(
+        &app,
+        &format!("/api/specs/{spec_id}"),
+        r#"{"enabled":false}"#,
+    )
+    .await;
     assert_eq!(code, 200);
     let (code, disabled) = post(
         &app,
@@ -633,12 +695,23 @@ async fn try_one_runs_a_single_asset_via_judge() {
 #[tokio::test]
 async fn post_jobs_accepts_spec_id_and_reaches_judge() {
     let (_dir, app) = fresh_state("jobs-alias");
-    let (code, j) = post(&app, "/api/jobs", r#"{"specId":99999,"all":true,"scope":"asset"}"#).await;
-    assert_eq!(code, 400, "POST /api/jobs 必须解析 specId 并交给 judge 校验：{j}");
+    let (code, j) = post(
+        &app,
+        "/api/jobs",
+        r#"{"specId":99999,"all":true,"scope":"asset"}"#,
+    )
+    .await;
+    assert_eq!(
+        code, 400,
+        "POST /api/jobs 必须解析 specId 并交给 judge 校验：{j}"
+    );
     assert_eq!(j["error"], "spec_not_found", "{j}");
     // 路由确实挂在 /api 下（不是 /api/compliance/jobs）
     let (code, _) = post(&app, "/api/compliance/jobs", "{}").await;
-    assert_eq!(code, 405, "POST /api/compliance/jobs 仍只有 GET（不新增第二个建任务入口）");
+    assert_eq!(
+        code, 405,
+        "POST /api/compliance/jobs 仍只有 GET（不新增第二个建任务入口）"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -717,10 +790,7 @@ async fn uninstalling_plugin_keeps_spec_rows() {
 
     // 卸载插件（当前版本是 current，先卸 → 接口会拒绝？那就显式卸载该版本）
     let (code, gone) = delete(&app, &format!("/api/compliance/packs/{id}")).await;
-    assert!(
-        code == 200 || code == 409,
-        "卸载接口返回：{code} {gone}"
-    );
+    assert!(code == 200 || code == 409, "卸载接口返回：{code} {gone}");
     if code == 409 {
         // current 版本不许直接卸：先停用（用 rollback/activate 换到别的版本才有意义）；
         // 这里改验「账本仍保留该版本」的口径，规格不受影响

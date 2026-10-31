@@ -170,11 +170,9 @@ async fn tag_review_full_flow() {
         // TAG-VALUE（0021）：维度名在结果表 tag_result，标签值在 tag；
         // 人工改过的值按 manual 落库，并按统一标签规则拍平 key-val（地点-海边）
         let (value, origin): (String, String) = c
-            .query_row(
-                "SELECT value, origin FROM tag WHERE assetId = 2",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
+            .query_row("SELECT value, origin FROM tag WHERE assetId = 2", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
             .unwrap();
         assert_eq!(value, "地点-海边", "修正值拍平成 key-val 落 manual");
         assert_eq!(origin, "manual", "人工改过的提案按 manual 落库");
@@ -185,7 +183,11 @@ async fn tag_review_full_flow() {
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .unwrap();
-        assert_eq!((dim.as_str(), raw.as_str()), ("地点", "海边"), "维度名与输出留结果表");
+        assert_eq!(
+            (dim.as_str(), raw.as_str()),
+            ("地点", "海边"),
+            "维度名与输出留结果表"
+        );
         let n: i64 = c
             .query_row(
                 "SELECT (SELECT COUNT(*) FROM tag WHERE assetId = 3)

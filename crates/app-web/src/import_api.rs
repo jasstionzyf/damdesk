@@ -1,3 +1,4 @@
+#![allow(non_snake_case)] // 本模块 DTO 字段 = 前端 JSON camelCase 契约，勿改
 //! W2 导入链路 API：目录扫描 / 批次启动 / 进度轮询 / 取消 / 断点续跑 / 历史批次。
 //! 复用 svc-import（scan_dir + run/resume_batch + 幂等分类），导入跑在
 //! spawn_blocking 线程、持独立 SQLite 连接（WAL 多连接安全，与 app-tauri 同构）。
@@ -308,7 +309,11 @@ pub async fn retry_failed(
     let paths: Vec<PathBuf> = req.paths.iter().map(PathBuf::from).collect();
     let n = paths.len();
     spawn_retry_job(state.clone(), req.batchId, paths);
-    (StatusCode::OK, Json(json!({ "batchId": req.batchId, "paths": n }))).into_response()
+    (
+        StatusCode::OK,
+        Json(json!({ "batchId": req.batchId, "paths": n })),
+    )
+        .into_response()
 }
 
 /// 后台跑批次：独立连接 + resume_batch（幂等，Unchanged 快路径跳过已完成文件）。
@@ -452,7 +457,9 @@ fn spawn_retry_job(state: AppState, batch_id: i64, paths: Vec<PathBuf>) {
                     }
                     Ok(_) => {}
                     Err(e) => {
-                        eprintln!("dam-web import retry embed: batch {batch_id} enqueue failed: {e}")
+                        eprintln!(
+                            "dam-web import retry embed: batch {batch_id} enqueue failed: {e}"
+                        )
                     }
                 }
             }

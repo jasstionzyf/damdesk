@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)] // vips 全局锁刻意贯穿 await：测试间串行化 libvips（非 DB 锁，无死锁面）
 //! CMP-JOB-01（卡 task）HTTP 面回归钉：**一次批量审核 = 一个独立 job**。
 //!
 //! 用户裁决：跑完一次要能给这次出结果统计，各次之间明显分开；且点开某次执行要能看懂
@@ -94,7 +95,9 @@ async fn get_json(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
@@ -115,7 +118,9 @@ async fn post_json(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_jso
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (
         status,
         serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
@@ -130,7 +135,11 @@ fn assert_balanced(job: &serde_json::Value) {
         g("done") + g("failed") + g("skipped") + g("cancelled"),
         "total 恒等式破了: {job}"
     );
-    assert_eq!(g("queued"), 0, "收工后 queued 必须归零（未执行数看 cancelled）: {job}");
+    assert_eq!(
+        g("queued"),
+        0,
+        "收工后 queued 必须归零（未执行数看 cancelled）: {job}"
+    );
 }
 
 /// 运行中的恒等式：total = done + failed + skipped + queued（cancelled 必须是 0）。
@@ -141,7 +150,11 @@ fn assert_balanced_running(job: &serde_json::Value) {
         g("done") + g("failed") + g("skipped") + g("queued"),
         "运行中恒等式破了（未结算条数必须落在 queued）: {job}"
     );
-    assert_eq!(g("cancelled"), 0, "运行中 cancelled 必须是 0（不是「未执行」）: {job}");
+    assert_eq!(
+        g("cancelled"),
+        0,
+        "运行中 cancelled 必须是 0（不是「未执行」）: {job}"
+    );
 }
 
 /// 轮询判定状态直到 `running=false`（后台线程跑完），返回最后一份状态。
@@ -210,7 +223,11 @@ async fn each_judge_execution_is_its_own_run_on_plugin_path() {
     assert_eq!(j1["status"], serde_json::json!("done"), "{j1}");
     assert_eq!(j1["statusLabel"], serde_json::json!("已完成"));
     assert_eq!(j1["failed"].as_i64(), Some(0), "不该有失败: {j1}");
-    assert_eq!(j1["total"].as_i64(), Some(4), "4 张资产 = 4 条逐图任务: {j1}");
+    assert_eq!(
+        j1["total"].as_i64(),
+        Some(4),
+        "4 张资产 = 4 条逐图任务: {j1}"
+    );
     assert_eq!(j1["done"].as_i64(), Some(4), "{j1}");
     assert!(j1["durationMs"].as_i64().is_some(), "要能给耗时: {j1}");
     assert_balanced(j1);
@@ -252,7 +269,11 @@ async fn each_judge_execution_is_its_own_run_on_plugin_path() {
     assert_eq!(code, 200, "{jobs2}");
     assert_eq!(jobs2["total"].as_i64(), Some(2), "两次执行两行: {jobs2}");
     let rows = jobs2["jobs"].as_array().unwrap();
-    assert_eq!(rows[0]["runId"].as_i64(), Some(run2), "倒序：新的一次在前: {jobs2}");
+    assert_eq!(
+        rows[0]["runId"].as_i64(),
+        Some(run2),
+        "倒序：新的一次在前: {jobs2}"
+    );
     assert_eq!(rows[1]["runId"].as_i64(), Some(run1), "{jobs2}");
     for r in rows {
         assert_balanced(r);
@@ -323,7 +344,11 @@ async fn jobs_list_reports_per_asset_verdict_counts() {
             .unwrap_or_else(|| panic!("run {run} 不在列表: {jobs}"))
     };
     let mine = row(run_judge);
-    assert_eq!(mine["totalAssets"].as_i64(), Some(3), "本次判了 3 张图: {mine}");
+    assert_eq!(
+        mine["totalAssets"].as_i64(),
+        Some(3),
+        "本次判了 3 张图: {mine}"
+    );
     assert_eq!(mine["verdictCounts"]["pass"].as_i64(), Some(1), "{mine}");
     assert_eq!(mine["verdictCounts"]["fail"].as_i64(), Some(1), "{mine}");
     assert_eq!(
@@ -332,7 +357,11 @@ async fn jobs_list_reports_per_asset_verdict_counts() {
         "{mine}"
     );
     let other = row(run_other);
-    assert_eq!(other["totalAssets"].as_i64(), Some(1), "别的 run 不串账: {other}");
+    assert_eq!(
+        other["totalAssets"].as_i64(),
+        Some(1),
+        "别的 run 不串账: {other}"
+    );
     assert_eq!(other["verdictCounts"]["pass"].as_i64(), Some(1), "{other}");
     let proc = row(run_proc);
     assert!(
@@ -341,8 +370,13 @@ async fn jobs_list_reports_per_asset_verdict_counts() {
     );
 
     // 收工后同一行口径不变（快照不漂）
-    repo.finish(run_judge, run_status::DONE, None, &svc_pipeline::COMPLIANCE_KINDS)
-        .unwrap();
+    repo.finish(
+        run_judge,
+        run_status::DONE,
+        None,
+        &svc_pipeline::COMPLIANCE_KINDS,
+    )
+    .unwrap();
     let (code, jobs2) = get_json(&f.app, "/api/compliance/jobs").await;
     assert_eq!(code, 200, "{jobs2}");
     let row2 = jobs2["jobs"]
@@ -402,7 +436,11 @@ async fn running_run_reports_queued_not_cancelled() {
     assert_eq!(live["total"].as_i64(), Some(8), "{cur}");
     assert_eq!(live["done"].as_i64(), Some(2), "{cur}");
     assert_eq!(live["failed"].as_i64(), Some(1), "{cur}");
-    assert_eq!(live["queued"].as_i64(), Some(5), "排队中必须落在 queued: {cur}");
+    assert_eq!(
+        live["queued"].as_i64(),
+        Some(5),
+        "排队中必须落在 queued: {cur}"
+    );
     assert_balanced_running(live);
 
     // queueCurrent 同口径：*Pending/queued 是排队，cancelled 必须是 0
@@ -410,7 +448,11 @@ async fn running_run_reports_queued_not_cancelled() {
     assert_eq!(q["assetPending"].as_i64(), Some(3), "{cur}");
     assert_eq!(q["groupPending"].as_i64(), Some(2), "{cur}");
     assert_eq!(q["queued"].as_i64(), Some(5), "{cur}");
-    assert_eq!(q["cancelled"].as_i64(), Some(0), "运行中 queueCurrent.cancelled 必须是 0: {cur}");
+    assert_eq!(
+        q["cancelled"].as_i64(),
+        Some(0),
+        "运行中 queueCurrent.cancelled 必须是 0: {cur}"
+    );
 
     // 老入口 /judge/status 的 run / queueCurrent 也是同一口径（不是「未执行 5」）
     let (code, st) = get_json(&f.app, "/api/compliance/judge/status").await;
@@ -423,9 +465,18 @@ async fn running_run_reports_queued_not_cancelled() {
 
     // ---- 收工（用户取消）：未执行的 5 条这时才叫 cancelled
     let row = repo
-        .finish(run, run_status::CANCELLED, None, &svc_pipeline::COMPLIANCE_KINDS)
+        .finish(
+            run,
+            run_status::CANCELLED,
+            None,
+            &svc_pipeline::COMPLIANCE_KINDS,
+        )
         .unwrap();
-    assert_eq!((row.total, row.done, row.failed, row.cancelled), (8, 2, 1, 5), "{row:?}");
+    assert_eq!(
+        (row.total, row.done, row.failed, row.cancelled),
+        (8, 2, 1, 5),
+        "{row:?}"
+    );
     let (code, jobs) = get_json(&f.app, "/api/compliance/jobs").await;
     assert_eq!(code, 200, "{jobs}");
     let done_row = &jobs["jobs"][0];

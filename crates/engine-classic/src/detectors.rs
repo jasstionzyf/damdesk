@@ -13,7 +13,9 @@ use serde::Deserialize;
 /// Rec.709 加权灰度（与 `image` crate `to_luma8` 同系数，整型近似截断）。
 /// luma 类检测器（sharpness/exposure）内部用它从 RGB 输入转换。
 pub fn luma_from_rgb(rgb: &[u8]) -> Vec<u8> {
-    rgb.chunks_exact(3)
+    rgb.as_chunks::<3>()
+        .0
+        .iter()
         .map(|px| ((2126 * px[0] as u32 + 7152 * px[1] as u32 + 722 * px[2] as u32) / 10_000) as u8)
         .collect()
 }

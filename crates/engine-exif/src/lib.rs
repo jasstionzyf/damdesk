@@ -63,13 +63,19 @@ pub fn apply_for_asset(
                     let lon = cols.gps_lon.take();
                     cols.gps_source = None;
                     if let (Some(lat), Some(lon)) = (lat, lon) {
-                        match reverse_geocode(&cfg.gps_provider.name, &cfg.gps_provider.base_url, lat, lon) {
+                        match reverse_geocode(
+                            &cfg.gps_provider.name,
+                            &cfg.gps_provider.base_url,
+                            lat,
+                            lon,
+                        ) {
                             Ok(place) => {
                                 let mut raw = summary.raw.clone();
                                 raw["placeName"] = json!(place);
                                 raw["placeProvider"] = json!(cfg.gps_provider.name);
                                 cols.exif_json = raw.to_string();
-                                cols.gps_source = Some(format!("exif_place:{}", cfg.gps_provider.name));
+                                cols.gps_source =
+                                    Some(format!("exif_place:{}", cfg.gps_provider.name));
                             }
                             Err(e) => {
                                 let mut raw = summary.raw.clone();
@@ -135,9 +141,7 @@ pub fn reverse_geocode(
             } else {
                 base_url.trim_end_matches('/')
             };
-            let url = format!(
-                "{base}/reverse?format=jsonv2&zoom=10&lat={lat}&lon={lon}"
-            );
+            let url = format!("{base}/reverse?format=jsonv2&zoom=10&lat={lat}&lon={lon}");
             let agent: ureq::Agent = ureq::Agent::config_builder()
                 .timeout_global(Some(std::time::Duration::from_secs(5)))
                 .http_status_as_error(false)
@@ -158,7 +162,9 @@ pub fn reverse_geocode(
                 .ok_or_else(|| "reverse_geocode: 响应无 display_name".to_string())?;
             Ok(name.to_string())
         }
-        other => Err(format!("未知 GPS provider: {other}（支持 nominatim 兼容端点）")),
+        other => Err(format!(
+            "未知 GPS provider: {other}（支持 nominatim 兼容端点）"
+        )),
     }
 }
 
@@ -168,8 +174,14 @@ mod tests {
 
     fn mem() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(include_str!("../../core-storage/src/migrations/0001_init.sql")).unwrap();
-        conn.execute_batch(include_str!("../../core-storage/src/migrations/0013_exif_meta.sql")).unwrap();
+        conn.execute_batch(include_str!(
+            "../../core-storage/src/migrations/0001_init.sql"
+        ))
+        .unwrap();
+        conn.execute_batch(include_str!(
+            "../../core-storage/src/migrations/0013_exif_meta.sql"
+        ))
+        .unwrap();
         conn
     }
 
@@ -186,8 +198,11 @@ mod tests {
     fn plain_jpeg(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
         let img = image::DynamicImage::new_rgb8(8, 8);
         let mut buf = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut buf), image::ImageFormat::Jpeg)
-            .unwrap();
+        img.write_to(
+            &mut std::io::Cursor::new(&mut buf),
+            image::ImageFormat::Jpeg,
+        )
+        .unwrap();
         let p = dir.join(name);
         std::fs::write(&p, &buf).unwrap();
         p
@@ -203,7 +218,9 @@ mod tests {
         let out = apply_for_asset(&conn, id, &p, "jpg", &ExifSettings::default()).unwrap();
         assert_eq!(out, ExifApplyOutcome::Absent("no_exif".into()));
         let exif: String = conn
-            .query_row("SELECT exif FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row("SELECT exif FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert!(exif.contains("no_exif"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -216,11 +233,16 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("engine_exif2_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = plain_jpeg(&dir, "clean.jpg");
-        let cfg = ExifSettings { parse_on_import: false, ..Default::default() };
+        let cfg = ExifSettings {
+            parse_on_import: false,
+            ..Default::default()
+        };
         let out = apply_for_asset(&conn, id, &p, "jpg", &cfg).unwrap();
         assert_eq!(out, ExifApplyOutcome::SkippedDisabled);
         let exif: Option<String> = conn
-            .query_row("SELECT exif FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row("SELECT exif FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(exif, None, "关着解析就不能写任何 exif 状态，留给回填队列");
         let _ = std::fs::remove_dir_all(&dir);
@@ -237,7 +259,9 @@ mod tests {
         let out = apply_for_asset(&conn, id, &p, "heic", &ExifSettings::default()).unwrap();
         assert_eq!(out, ExifApplyOutcome::Absent("unsupported_format".into()));
         let exif: String = conn
-            .query_row("SELECT exif FROM assets WHERE assetId=?1", [id], |r| r.get(0))
+            .query_row("SELECT exif FROM assets WHERE assetId=?1", [id], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert!(exif.contains("unsupported_format"), "{exif}");
         let _ = std::fs::remove_dir_all(&dir);

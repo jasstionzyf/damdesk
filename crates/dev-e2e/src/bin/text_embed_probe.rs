@@ -56,7 +56,10 @@ fn parse_args() -> Args {
             other => eprintln!("未知参数 {other}"), // 容错：忽略
         }
     }
-    Args { models_root, photos }
+    Args {
+        models_root,
+        photos,
+    }
 }
 
 fn cosine(a: &[f32], b: &[f32]) -> f32 {
@@ -85,10 +88,7 @@ fn main() {
 
     // 语料：dog/car 固定 fixtures + reals 里的 dp-0000..0005（已人工核对内容）
     // + reals 其余任取补足 ≥10 张。词断言只依赖已核对的 8 张。
-    let mut photos: Vec<PathBuf> = vec![
-        args.photos.join("dog.jpg"),
-        args.photos.join("car.jpg"),
-    ];
+    let mut photos: Vec<PathBuf> = vec![args.photos.join("dog.jpg"), args.photos.join("car.jpg")];
     let reals_dir = args.photos.join("reals");
     let mut reals: Vec<PathBuf> = std::fs::read_dir(&reals_dir)
         .expect("reals 目录")
@@ -131,7 +131,11 @@ fn main() {
         .take(10usize.saturating_sub(photos.len()))
         .collect();
     photos.extend(extra);
-    assert!(photos.len() >= 10, "真图语料不足 10 张（got {}）", photos.len());
+    assert!(
+        photos.len() >= 10,
+        "真图语料不足 10 张（got {}）",
+        photos.len()
+    );
     println!("语料 {} 张：", photos.len());
     for p in &photos {
         println!("  {}", p.file_name().unwrap_or_default().to_string_lossy());
@@ -139,20 +143,32 @@ fn main() {
 
     // 词表：中文 ≥3 + 英文 ≥3
     let words = [
-        "狗", "一只狗", "汽车", "雪山", "护士", "地球", "香蕉", "食物",
-        "a dog", "a car", "snow mountain", "nurse", "banana",
+        "狗",
+        "一只狗",
+        "汽车",
+        "雪山",
+        "护士",
+        "地球",
+        "香蕉",
+        "食物",
+        "a dog",
+        "a car",
+        "snow mountain",
+        "nurse",
+        "banana",
     ];
 
-    let img_vecs = provider
-        .embed_images(&photos)
-        .expect("图像塔嵌入");
-    let text_vecs = provider
-        .embed_texts(&words)
-        .expect("文本塔嵌入");
+    let img_vecs = provider.embed_images(&photos).expect("图像塔嵌入");
+    let text_vecs = provider.embed_texts(&words).expect("文本塔嵌入");
 
     let names: Vec<String> = photos
         .iter()
-        .map(|p| p.file_name().unwrap_or_default().to_string_lossy().to_string())
+        .map(|p| {
+            p.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string()
+        })
         .collect();
 
     // 维度/归一自检
@@ -222,7 +238,10 @@ fn main() {
             if ok { "PASS" } else { "FAIL" }
         );
         if !ok {
-            fails.push(format!("「{w}」×{} cos {c:.4} < {MIN_MATCHED_COS}", names[ii]));
+            fails.push(format!(
+                "「{w}」×{} cos {c:.4} < {MIN_MATCHED_COS}",
+                names[ii]
+            ));
         }
     }
 
@@ -235,9 +254,14 @@ fn main() {
             .map(|v| cosine(&text_vecs[wi], v))
             .fold(f32::MIN, f32::max);
         let ok = mx <= MAX_UNRELATED_COS;
-        println!("  「{w}」max={mx:.4}  [{}]", if ok { "PASS" } else { "FAIL" });
+        println!(
+            "  「{w}」max={mx:.4}  [{}]",
+            if ok { "PASS" } else { "FAIL" }
+        );
         if !ok {
-            fails.push(format!("无关词「{w}」max cos {mx:.4} > {MAX_UNRELATED_COS}"));
+            fails.push(format!(
+                "无关词「{w}」max cos {mx:.4} > {MAX_UNRELATED_COS}"
+            ));
         }
     }
 

@@ -272,7 +272,10 @@ pub fn router(state: AppState, dist: PathBuf) -> Router {
         .route("/exif/backfill", post(exif_api::backfill))
         .route("/exif/retry-failed", post(exif_api::retry_failed))
         .route("/exif/status", get(exif_api::status))
-        .route("/settings/exif", get(settings_api::get_exif).put(settings_api::put_exif))
+        .route(
+            "/settings/exif",
+            get(settings_api::get_exif).put(settings_api::put_exif),
+        )
         // 模型获取入口（卡 task）：manifest 落盘状态 / 单飞下载 / 进度轮询
         .route("/models", get(model_api::list))
         .route("/models/download/status", get(model_api::status))
@@ -298,7 +301,10 @@ pub fn router(state: AppState, dist: PathBuf) -> Router {
         .nest("/compliance", compliance_api::routes())
         // K07-I：插件参数声明（GET /api/plugins/{id}/schema，读包内 schema、不启子进程）。
         // 界面按它渲染唯一一份 ParamForm；参数仍在 /api/compliance/judge 的 body 里提交。
-        .route("/plugins/{id}/schema", get(compliance_api::plugin_params_schema))
+        .route(
+            "/plugins/{id}/schema",
+            get(compliance_api::plugin_params_schema),
+        )
         // N1 规格（卡 task）：/api/specs* —— 规格 = 选规则 + 阈值 + 动作链 + 输出 + 参数 diff。
         // 规格不安装不分发；judge 用 `specId` 引用它（替代临时参数堆）。
         .nest("/specs", spec_api::routes())
@@ -493,7 +499,10 @@ pub fn prepare(cfg: &ServeConfig) -> Result<Router, String> {
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         thumbs_root: cfg.data_dir.join("thumbs"),
-        models_root: cfg.models_root.clone().unwrap_or_else(|| cfg.data_dir.clone()),
+        models_root: cfg
+            .models_root
+            .clone()
+            .unwrap_or_else(|| cfg.data_dir.clone()),
         auth: cfg
             .auth
             .clone()
@@ -529,19 +538,13 @@ pub fn prepare(cfg: &ServeConfig) -> Result<Router, String> {
 }
 
 /// 便捷入口：绑定 listener → prepare → serve（无信号处理，适合嵌入宿主进程）。
-pub async fn serve_on(
-    listener: tokio::net::TcpListener,
-    cfg: ServeConfig,
-) -> Result<(), String> {
+pub async fn serve_on(listener: tokio::net::TcpListener, cfg: ServeConfig) -> Result<(), String> {
     let app = prepare(&cfg)?;
     axum::serve(listener, app).await.map_err(|e| e.to_string())
 }
 
 /// 已装配路由的服务（桌面壳：主线程 prepare，服务线程 serve）。
-pub async fn serve_prepared(
-    listener: tokio::net::TcpListener,
-    app: Router,
-) -> std::io::Result<()> {
+pub async fn serve_prepared(listener: tokio::net::TcpListener, app: Router) -> std::io::Result<()> {
     axum::serve(listener, app).await
 }
 
@@ -563,7 +566,9 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = ServeConfig {
         data_dir,
         dist: Some(web_dist_dir()),
-        token: std::env::var("DAM_WEB_TOKEN").ok().filter(|s| !s.is_empty()),
+        token: std::env::var("DAM_WEB_TOKEN")
+            .ok()
+            .filter(|s| !s.is_empty()),
         // 容器/裸机形态没有 WebView2，也没有重建窗口的腿：鉴权句柄由 token 现场构造
         auth: None,
         default_embedder: if desktop_form {
@@ -586,7 +591,10 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let dist_display = cfg.dist.clone().unwrap_or_default();
     let app = prepare(&cfg)?;
-    eprintln!("dam-web listening on http://{addr} (dist: {})", dist_display.display());
+    eprintln!(
+        "dam-web listening on http://{addr} (dist: {})",
+        dist_display.display()
+    );
 
     axum::serve(listener, app)
         .with_graceful_shutdown(async {
@@ -724,7 +732,10 @@ mod tests {
         assert!(s.tag.enabled, "桌面默认开箱即用语义不变");
         assert!(s.tag.api_key.is_empty(), "Key 用户自填，默认空");
         assert!(!s.tag.base_url.contains("host.docker.internal"));
-        assert!(s.tag.configured(), "base_url+model 预填即 configured；UI 引导按 hasKey 判定");
+        assert!(
+            s.tag.configured(),
+            "base_url+model 预填即 configured；UI 引导按 hasKey 判定"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1021,16 +1032,16 @@ mod tests {
     /// 1×1 RGBA PNG（红/绿各一）。D3 起导入会做解码校验，「夹具」必须是**真图片**：
     /// 随便塞 b"xxx" 的 .jpg 现在会被判 failed（这正是 D3 要的行为）。
     const PNG_1X1_RED: [u8; 70] = [
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52,
-        0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0, 0x0D, 0x49,
-        0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0, 5, 0, 1, 0xFF,
-        0x89, 0x99, 0x3D, 0x1D, 0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52, 0,
+        0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0, 0x0D, 0x49, 0x44,
+        0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0, 5, 0, 1, 0xFF, 0x89, 0x99,
+        0x3D, 0x1D, 0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
     ];
     const PNG_1X1_GREEN: [u8; 70] = [
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52,
-        0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0, 0x0D, 0x49,
-        0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0xF8, 0xCF, 0xF0, 0x1F, 0, 4, 1, 1, 0xFF,
-        0x71, 0xEB, 0x47, 0xE5, 0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52, 0,
+        0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0, 0x0D, 0x49, 0x44,
+        0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0xF8, 0xCF, 0xF0, 0x1F, 0, 4, 1, 1, 0xFF, 0x71, 0xEB,
+        0x47, 0xE5, 0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
     ];
 
     /// W2 全链路：临时目录造图（2 张不同 + 1 张哈希重复）→ import/start → 等完成 →
@@ -1168,7 +1179,10 @@ mod tests {
                     tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                     waited += 1;
                 }
-                assert!(!st.import.running.load(std::sync::atomic::Ordering::SeqCst), "import should finish");
+                assert!(
+                    !st.import.running.load(std::sync::atomic::Ordering::SeqCst),
+                    "import should finish"
+                );
             }
         };
 
@@ -1186,7 +1200,9 @@ mod tests {
         assert_eq!(st["outcome"]["status"], "done");
         assert_eq!(st["outcome"]["imported"], 1);
         assert_eq!(st["outcome"]["failed"], 1);
-        let items = st["outcome"]["failedItems"].as_array().expect("failedItems");
+        let items = st["outcome"]["failedItems"]
+            .as_array()
+            .expect("failedItems");
         assert_eq!(items.len(), 1, "{st}");
         assert_eq!(items[0]["fileName"], "denied-read.jpg");
         assert!(
@@ -1295,9 +1311,14 @@ mod tests {
 
         let st = get_json(&app, "/api/import/status").await;
         assert_eq!(st["outcome"]["imported"], 2, "只有两张真图入库：{st}");
-        assert_eq!(st["outcome"]["failed"], 1, "坏图必须计失败，不能算成功：{st}");
+        assert_eq!(
+            st["outcome"]["failed"], 1,
+            "坏图必须计失败，不能算成功：{st}"
+        );
         assert_eq!(st["outcome"]["total"], 3, "扫描只收图片扩展名：{st}");
-        let items = st["outcome"]["failedItems"].as_array().expect("failedItems");
+        let items = st["outcome"]["failedItems"]
+            .as_array()
+            .expect("failedItems");
         assert_eq!(items.len(), 1, "{st}");
         assert_eq!(items[0]["fileName"], "c-broken.jpg", "{st}");
         assert!(
@@ -1376,7 +1397,9 @@ mod tests {
             .unwrap();
         assert_eq!(res.status(), StatusCode::OK, "坏图缩略图不得 500");
         assert_eq!(
-            res.headers().get("x-dam-degraded").map(|v| v.to_str().unwrap()),
+            res.headers()
+                .get("x-dam-degraded")
+                .map(|v| v.to_str().unwrap()),
             Some("1"),
             "降级必须显式可判（不是靠猜 200 的内容）"
         );
@@ -1404,7 +1427,11 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(res.status(), StatusCode::BAD_REQUEST, "非法 broken 值必须 400");
+        assert_eq!(
+            res.status(),
+            StatusCode::BAD_REQUEST,
+            "非法 broken 值必须 400"
+        );
 
         // ③ 核查：文件在盘上但解不开 → 判 broken（不是 missing、也不是 unreadable）
         let (code, r) = post_json(&app, "/api/library/verify", json!({})).await;
@@ -1578,9 +1605,14 @@ mod tests {
         {
             let conn = state.db.lock().await;
             let path: String = conn
-                .query_row("SELECT absPath FROM assets WHERE assetId=?1", [a], |r| r.get(0))
+                .query_row("SELECT absPath FROM assets WHERE assetId=?1", [a], |r| {
+                    r.get(0)
+                })
                 .unwrap();
-            assert!(std::path::Path::new(&path).exists(), "源文件必须还在：{path}");
+            assert!(
+                std::path::Path::new(&path).exists(),
+                "源文件必须还在：{path}"
+            );
         }
 
         // 重复删幂等：已经是 deleted=1 的不再计数

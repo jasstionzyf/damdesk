@@ -134,7 +134,11 @@ pub fn finish_batch(
 
 /// W6 修复（task）：批次级 autoTag 标记（导入完成后自动入队打标）。
 /// 只由 web 导入向导写入；桌面版不受影响（默认 0）。
-pub fn set_batch_auto_tag(conn: &Connection, batch_id: i64, auto_tag: bool) -> rusqlite::Result<()> {
+pub fn set_batch_auto_tag(
+    conn: &Connection,
+    batch_id: i64,
+    auto_tag: bool,
+) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE import_batches SET autoTag=?2 WHERE batchId=?1",
         rusqlite::params![batch_id, auto_tag as i64],
@@ -208,6 +212,7 @@ pub fn unfinished_batches(conn: &Connection) -> rusqlite::Result<Vec<ImportBatch
 ///   **不动**原归属（把老资产搬到新批次 = 篡改来源事实）；这两条路径要在「本批 0 张」时
 ///   由前端/报告如实说「这批没新入库」，而不是稀里糊涂算进别批；
 /// * watcher 捡回的文件（`handle_file_created`）不是导入事件 → `None`（batchId 留 NULL）。
+///
 /// 返回 (分类, 实际参与索引的路径)；失败返回 Err（调用方计数 failed 继续下一个文件）。
 pub fn process_file(
     conn: &Connection,
@@ -285,7 +290,7 @@ pub fn process_file(
     };
 
     match (existing, dup) {
-        (Some((aid, _, _, _)), Some(dup_id)) => {
+        (Some((_aid, _, _, _)), Some(dup_id)) => {
             Ok((FileOutcome::Duplicate(dup_id), effective_path))
         }
         (Some((aid, _, _, _)), None) => {
@@ -366,11 +371,9 @@ fn oriented_size(path: &Path, ext: &str) -> (i32, i32) {
 /// EXIF2：导入路径的元数据落库。设置从 settings 表读（exif key）；
 /// 任何失败只记原因不炸导入（engine_exif 内部已兜底，这里再兜一层防御）。
 fn apply_exif_meta(conn: &Connection, aid: i64, path: &Path, ext: &str) {
-    let cfg: core_config::ExifSettings = core_storage::settings::get_or_default(
-        conn,
-        core_config::EXIF_SETTINGS_KEY,
-    )
-    .unwrap_or_default();
+    let cfg: core_config::ExifSettings =
+        core_storage::settings::get_or_default(conn, core_config::EXIF_SETTINGS_KEY)
+            .unwrap_or_default();
     if !cfg.parse_on_import {
         return;
     }
@@ -394,6 +397,7 @@ fn mtime_of(p: &Path) -> Result<i64, ImportError> {
         .unwrap_or(0))
 }
 
+#[allow(clippy::too_many_arguments)] // INSERT 全列固有宽度
 fn insert_asset(
     conn: &Connection,
     path: &Path,
@@ -651,11 +655,8 @@ pub fn run_batch(
             }
         }
     }
-    out.status = if out.failed > 0 {
-        "done".into()
-    } else {
-        "done".into()
-    };
+    // failed 只影响批次报告计数，批次状态恒为 done
+    out.status = "done".into();
     finish_batch(conn, batch_id, "done", None)?;
     let _ = on_progress(&progress_of(batch_id, &out, total, None, None, Vec::new()));
     Ok(out)
@@ -842,6 +843,8 @@ pub enum ProbeClass {
 }
 
 /// 待核查目标（读一次拿全，避免逐条查库）。
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone)]
 pub struct MissingTarget {
     pub assetId: i64,
@@ -871,6 +874,8 @@ impl MissingTarget {
 
 /// D3：核查期的解码结论。`Skipped` = 没复核（不是「好」）—— 报告里要能区分，
 /// 不能把「跳过」说成「正常」。
+// 变体字段名 = JSON 线上 camelCase 契约（pHash/pHashes 列名同源），勿改。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum DecodeOutcome {
     /// 没复核（记录有正尺寸且文件未动 / 该入口不做解码）
@@ -888,6 +893,8 @@ pub enum DecodeOutcome {
 }
 
 /// 单条探测结果。
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone)]
 pub struct MissingProbe {
     pub assetId: i64,
@@ -902,6 +909,8 @@ pub struct MissingProbe {
 
 /// 核查报告（HTTP 直返 + 落 settings）。
 #[derive(Debug, Clone, Serialize)]
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 pub struct MissingVerifyReport {
     /// 本次实际 stat 的资产数
     pub checked: i64,
@@ -929,6 +938,8 @@ pub struct MissingVerifyReport {
 }
 
 #[derive(Debug, Clone, Serialize)]
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 pub struct MissingSample {
     /// notFound / permissionDenied / other / unparseable
     pub class: String,
@@ -1038,7 +1049,10 @@ where
 ///   - Some(..) → 对需要复核的资产解码校验，解得出就顺手重生成两档缩略图（修复）。
 ///     HTTP「重新核查」走这条（用户显式动作，值得多花这点 IO）。
 ///   - None → 只 stat（启动期静默核查走这条：不在启动路径上批量解码）。
-pub fn probe_paths_checked(targets: &[MissingTarget], thumbs_root: Option<&Path>) -> Vec<MissingProbe> {
+pub fn probe_paths_checked(
+    targets: &[MissingTarget],
+    thumbs_root: Option<&Path>,
+) -> Vec<MissingProbe> {
     targets
         .iter()
         .map(|t| {
@@ -1485,16 +1499,16 @@ mod tests {
     /// 最小合法 PNG（1×1 RGBA，A/B 两种颜色；哈希不同 → 去重逻辑仍可验）。
     /// 故意不用 libvips 造图：单测二进制里别为夹具去抢 vips 全局锁。
     const PNG_A: [u8; 70] = [
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52, 0, 0,
-        0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0, 0x0D, 0x49, 0x44, 0x41,
-        0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0, 5, 0, 1, 0xFF, 0x89, 0x99, 0x3D,
-        0x1D, 0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52, 0,
+        0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0, 0x0D, 0x49, 0x44,
+        0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0, 5, 0, 1, 0xFF, 0x89, 0x99,
+        0x3D, 0x1D, 0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
     ];
     const PNG_B: [u8; 70] = [
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52, 0, 0,
-        0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0, 0x0D, 0x49, 0x44, 0x41,
-        0x54, 0x78, 0x9C, 0x63, 0x60, 0xF8, 0xCF, 0xF0, 0x1F, 0, 4, 1, 1, 0xFF, 0x71, 0xEB, 0x47,
-        0xE5, 0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52, 0,
+        0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1F, 0x15, 0xC4, 0x89, 0, 0, 0, 0x0D, 0x49, 0x44,
+        0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0xF8, 0xCF, 0xF0, 0x1F, 0, 4, 1, 1, 0xFF, 0x71, 0xEB,
+        0x47, 0xE5, 0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
     ];
 
     #[test]
@@ -1822,7 +1836,7 @@ mod tests {
 
     /// 无关图（强条纹 + 亮块）：与上面的纹理 pHash 相距很远。
     fn unrelated_px(x: u32, y: u32) -> [u8; 3] {
-        let striped = ((x / 3) + (y / 3)) % 2 == 0;
+        let striped = ((x / 3) + (y / 3)).is_multiple_of(2);
         let in_block = (2..10).contains(&x) && (18..30).contains(&y);
         let v: u8 = if in_block {
             250
@@ -1861,9 +1875,7 @@ mod tests {
                 let [r, g, b] = px(x, y);
                 out.extend_from_slice(&[b, g, r]); // BMP 是 BGR
             }
-            for _ in 0..row_pad {
-                out.push(0u8);
-            }
+            out.resize(out.len() + row_pad, 0u8);
         }
         std::fs::write(path, out).unwrap();
     }
@@ -1984,7 +1996,8 @@ mod tests {
             );
         }
         // 无关图：最小距离仍 > 阈值（八变体不引入误判）
-        let m = engine_dedup::best_variant_match(&orig, &variants_of(id_of("unrelated.bmp"))).unwrap();
+        let m =
+            engine_dedup::best_variant_match(&orig, &variants_of(id_of("unrelated.bmp"))).unwrap();
         assert!(
             m.distance > engine_dedup::PHASH_THRESHOLD,
             "无关图不该判近邻，最小距离 {}",
@@ -2021,14 +2034,16 @@ mod tests {
         got.sort();
         assert_eq!(
             got,
-            vec!["mirror.bmp", "orig.bmp", "rot180.bmp", "rot270.bmp", "rot90.bmp"],
+            vec![
+                "mirror.bmp",
+                "orig.bmp",
+                "rot180.bmp",
+                "rot270.bmp",
+                "rot90.bmp"
+            ],
             "组内应恰好是原件 + 4 个变体"
         );
-        let labels: Vec<String> = groups[0]
-            .edges
-            .iter()
-            .map(|e| e.evidence_label())
-            .collect();
+        let labels: Vec<String> = groups[0].edges.iter().map(|e| e.evidence_label()).collect();
         for t in [
             engine_dedup::D4::Rot90,
             engine_dedup::D4::Rot180,

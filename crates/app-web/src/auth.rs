@@ -182,7 +182,12 @@ mod tests {
         assert!(auth.enabled());
         // 启动引导：旧 token 交换成功并焚毁
         assert!(auth.exchange("first"));
-        let session = auth.session.lock().unwrap().clone().expect("session issued");
+        let session = auth
+            .session
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("session issued");
         assert!(auth.session_valid(Some(&session)));
         // 旧 token 已焚：再交换恒失败（一次性语义不变）
         assert!(!auth.exchange("first"));
@@ -192,7 +197,12 @@ mod tests {
         assert_ne!(fresh, "first");
         assert!(auth.enabled(), "reissue 后鉴权必须仍处于启用态");
         assert!(auth.exchange(&fresh), "重新签发的 token 必须可交换");
-        let session2 = auth.session.lock().unwrap().clone().expect("session reissued");
+        let session2 = auth
+            .session
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("session reissued");
         assert!(auth.session_valid(Some(&session2)));
         // 上一轮会话随重建失效（桌面单窗口：旧 webview 已死，不构成体验退化）
         assert!(!auth.session_valid(Some(&session)));

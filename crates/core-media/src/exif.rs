@@ -41,10 +41,7 @@ pub fn oriented_dims(w: i32, h: i32, orientation: Option<i64>) -> (i32, i32) {
 /// 把 `image` crate 解码出的原始像素按 EXIF Orientation 摆正（rustimg 后端 +
 /// 跨后端一致性用例共用；vips 后端的 thumbnail 自带同语义旋转）。
 /// 与 vips `rgb8` 的「不旋转」契约无关——那些路径不走本函数。
-pub fn apply_orientation(
-    img: image::DynamicImage,
-    orientation: u32,
-) -> image::DynamicImage {
+pub fn apply_orientation(img: image::DynamicImage, orientation: u32) -> image::DynamicImage {
     use image::imageops as ops;
     match orientation {
         2 => ops::flip_horizontal(&img).into(),
@@ -84,7 +81,11 @@ pub struct ExifSummary {
 ///
 /// 返回 `Ok(None)` = 容器合法但**没有** EXIF 元数据（干净无标签）；
 /// `Err` = 解析失败 / 容器不支持（错误文本可直接落 exif json 的 reason）。
-pub fn parse_file(path: &Path, ext: &str, want_gps: bool) -> Result<Option<ExifSummary>, MediaError> {
+pub fn parse_file(
+    path: &Path,
+    ext: &str,
+    want_gps: bool,
+) -> Result<Option<ExifSummary>, MediaError> {
     let e = ext.trim_start_matches('.').to_ascii_lowercase();
     let blob: Option<Vec<u8>> = match e.as_str() {
         "jpg" | "jpeg" => jpeg_exif_blob(path)?,
@@ -168,7 +169,11 @@ pub fn validate_tiff(blob: &[u8]) -> Result<(), MediaError> {
     };
     let u16at = |b: &[u8], o: usize| -> Option<u16> {
         let s = b.get(o..o + 2)?;
-        Some(if le { u16::from_le_bytes([s[0], s[1]]) } else { u16::from_be_bytes([s[0], s[1]]) })
+        Some(if le {
+            u16::from_le_bytes([s[0], s[1]])
+        } else {
+            u16::from_be_bytes([s[0], s[1]])
+        })
     };
     let u32at = |b: &[u8], o: usize| -> Option<u32> {
         let s = b.get(o..o + 4)?;
@@ -271,13 +276,16 @@ fn summary_from(exif: &exif::Exif, want_gps: bool) -> ExifSummary {
     use exif::{In, Tag, Value};
 
     let text = |tag: Tag| -> Option<String> {
-        exif.get_field(tag, In::PRIMARY).and_then(|f| match &f.value {
-            Value::Ascii(v) => v.first().map(|b| {
-                let s = String::from_utf8_lossy(b).trim_end_matches('\0').to_string();
-                collapse_ws(&s)
-            }),
-            _ => Some(short_text(f)),
-        })
+        exif.get_field(tag, In::PRIMARY)
+            .and_then(|f| match &f.value {
+                Value::Ascii(v) => v.first().map(|b| {
+                    let s = String::from_utf8_lossy(b)
+                        .trim_end_matches('\0')
+                        .to_string();
+                    collapse_ws(&s)
+                }),
+                _ => Some(short_text(f)),
+            })
     };
 
     let make = text(Tag::Make);
@@ -285,28 +293,30 @@ fn summary_from(exif: &exif::Exif, want_gps: bool) -> ExifSummary {
     let lens = text(Tag::LensModel).or_else(|| text(Tag::LensMake));
 
     let uint_of = |tag: Tag| -> Option<i64> {
-        exif.get_field(tag, In::PRIMARY).and_then(|f| match &f.value {
-            Value::Short(v) => v.first().map(|&x| x as i64),
-            Value::Long(v) => v.first().map(|&x| x as i64),
-            Value::Byte(v) => v.first().map(|&x| x as i64),
-            // EXIF2 修复（2026-10-16 验收捕获）：**有真实相机/工具把 SHORT/LONG 系的标签
-            // 写成有符号类型 8/9（SShort/SLong）** —— kamadak 会原样给出 SShort/SLong，
-            // 漏掉这两支就会把「文件里明明有」的 Orientation/ISO 判成缺失。
-            // 实测：exiftool 测试集 exv_FujiTags*.jpg 的 Orientation(0x0112) 存成 SLong=1 →
-            // 旧实现落 NULL，验收比对 python 基线时被判不一致（22 条 orientation 差异里 10 条）。
-            Value::SShort(v) => v.first().map(|&x| x as i64),
-            Value::SLong(v) => v.first().map(|&x| x as i64),
-            _ => None,
-        })
+        exif.get_field(tag, In::PRIMARY)
+            .and_then(|f| match &f.value {
+                Value::Short(v) => v.first().map(|&x| x as i64),
+                Value::Long(v) => v.first().map(|&x| x as i64),
+                Value::Byte(v) => v.first().map(|&x| x as i64),
+                // EXIF2 修复（2026-10-16 验收捕获）：**有真实相机/工具把 SHORT/LONG 系的标签
+                // 写成有符号类型 8/9（SShort/SLong）** —— kamadak 会原样给出 SShort/SLong，
+                // 漏掉这两支就会把「文件里明明有」的 Orientation/ISO 判成缺失。
+                // 实测：exiftool 测试集 exv_FujiTags*.jpg 的 Orientation(0x0112) 存成 SLong=1 →
+                // 旧实现落 NULL，验收比对 python 基线时被判不一致（22 条 orientation 差异里 10 条）。
+                Value::SShort(v) => v.first().map(|&x| x as i64),
+                Value::SLong(v) => v.first().map(|&x| x as i64),
+                _ => None,
+            })
     };
     let rational_of = |tag: Tag| -> Option<(u32, u32)> {
-        exif.get_field(tag, In::PRIMARY).and_then(|f| match &f.value {
-            Value::Rational(v) => v.first().map(|r| (r.num, r.denom)),
-            Value::SRational(v) => v
-                .first()
-                .map(|r| (r.num.unsigned_abs(), r.denom.unsigned_abs())),
-            _ => None,
-        })
+        exif.get_field(tag, In::PRIMARY)
+            .and_then(|f| match &f.value {
+                Value::Rational(v) => v.first().map(|r| (r.num, r.denom)),
+                Value::SRational(v) => v
+                    .first()
+                    .map(|r| (r.num.unsigned_abs(), r.denom.unsigned_abs())),
+                _ => None,
+            })
     };
     let ratio_f = |r: (u32, u32)| -> Option<f64> {
         if r.1 == 0 {
@@ -325,8 +335,7 @@ fn summary_from(exif: &exif::Exif, want_gps: bool) -> ExifSummary {
     // ---- 拍摄时间（口径见模块头注释） ----
     let dto_raw = text(Tag::DateTimeOriginal);
     let mod_raw = text(Tag::DateTime);
-    let offset_raw = text(Tag::OffsetTimeOriginal)
-        .or_else(|| text(Tag::OffsetTime));
+    let offset_raw = text(Tag::OffsetTimeOriginal).or_else(|| text(Tag::OffsetTime));
     let (dt_source, dt_raw) = match (&dto_raw, &mod_raw) {
         (Some(s), _) => ("DateTimeOriginal", Some(s.clone())),
         (None, Some(s)) => ("DateTime", Some(s.clone())),
@@ -447,7 +456,12 @@ fn parse_exif_datetime(s: &str) -> Option<(i64, i64, i64, i64, i64, i64)> {
         return None;
     }
     let (y, mo, d, h, mi, sec) = (nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]);
-    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || !(0..=23).contains(&h) || mi > 59 || sec > 60 {
+    if !(1..=12).contains(&mo)
+        || !(1..=31).contains(&d)
+        || !(0..=23).contains(&h)
+        || mi > 59
+        || sec > 60
+    {
         return None;
     }
     Some((y, mo, d, h, mi, sec))
@@ -476,8 +490,8 @@ fn civil_to_unix(c: (i64, i64, i64, i64, i64, i64)) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = if y >= 0 { y } else { y - 399 } / 400;
     let yoe = y - era * 400;
-    let mp = ((m + 9) % 12) as i64;
-    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let days = era * 146_097 + doe - 719_468;
     days * 86_400 + hh * 3_600 + mm * 60 + ss
@@ -572,7 +586,7 @@ fn decode_im_raw_profile(val: &[u8]) -> Option<Vec<u8>> {
         }
         hex.push_str(line);
     }
-    if !seen_len || hex.len() < 16 || hex.len() % 2 != 0 {
+    if !seen_len || hex.len() < 16 || !hex.len().is_multiple_of(2) {
         return None;
     }
     let b = hex.as_bytes();
@@ -623,6 +637,106 @@ fn webp_exif_blob(path: &Path) -> Result<Option<Vec<u8>>, MediaError> {
         pos = body + size + (size & 1); // chunk 按偶数对齐
     }
     Ok(None)
+}
+
+/// GPS 剥离（导出链路）：JPEG 重排 APP1（去掉 GPS IFD 全部字段 + IFD0 的 GPSInfo
+/// 指针），其余 EXIF 原样保留。无 EXIF / 无 GPS 的图原样返回。
+/// PNG/WebP 的整 chunk 剥离 v1 未做（见报告未覆盖清单）。
+pub fn strip_gps_jpeg(jpeg: &[u8]) -> Result<Vec<u8>, MediaError> {
+    let mut rdr = std::io::Cursor::new(jpeg);
+    let tiff = exif::Reader::new()
+        .read_from_container(&mut rdr)
+        .map_err(exif_err)?;
+    let has_gps = tiff.fields().any(|f| is_gps_tag(f.tag.number()));
+    if !has_gps {
+        return Ok(jpeg.to_vec());
+    }
+    let little = tiff.little_endian();
+    // 重建 TIFF：过滤 GPS 段字段（In::PRIMARY 且 tag < 0x20）+ IFD0 GPSInfo 指针
+    let kept: Vec<exif::Field> = tiff
+        .fields()
+        .filter(|f| {
+            !is_gps_tag(f.tag.number())
+                && !(f.ifd_num == exif::In::PRIMARY && f.tag.number() == 0x8825)
+        })
+        .cloned()
+        .collect();
+    let out: Vec<u8>;
+    {
+        let mut buf: Vec<u8> = Vec::new();
+        let mut writer = exif::experimental::Writer::new();
+        for f in &kept {
+            writer.push_field(f);
+        }
+        writer
+            .write(&mut std::io::Cursor::new(&mut buf), little)
+            .map_err(exif_err)?;
+        out = buf;
+    }
+    rebuild_jpeg_app1(jpeg, &out)
+}
+
+fn is_gps_tag(code: u16) -> bool {
+    // GPS IFD 字段 tag 恒在 0x0000..=0x001F（kamadak 把它们挂 In::PRIMARY）
+    code <= 0x001F
+}
+
+/// JPEG 段级重排：替换（或删除空的）Exif APP1；其余段字节原样。
+fn rebuild_jpeg_app1(jpeg: &[u8], new_tiff: &[u8]) -> Result<Vec<u8>, MediaError> {
+    if jpeg.len() < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8 {
+        return Err(MediaError::Exif("not a JPEG".into()));
+    }
+    let mut out = vec![0xFF, 0xD8];
+    let mut i = 2usize;
+    let mut inserted = false;
+    while i + 4 <= jpeg.len() && jpeg[i] == 0xFF {
+        let marker = jpeg[i + 1];
+        if marker == 0xD8 || (0xD0..=0xD7).contains(&marker) || marker == 0x01 {
+            out.extend_from_slice(&jpeg[i..i + 2]);
+            i += 2;
+            continue;
+        }
+        if marker == 0xD9 {
+            out.extend_from_slice(&jpeg[i..]);
+            break;
+        }
+        let len = u16::from_be_bytes([jpeg[i + 2], jpeg[i + 3]]) as usize;
+        let seg_end = i + 2 + len;
+        let is_exif_app1 =
+            marker == 0xE1 && jpeg.len() >= i + 10 && &jpeg[i + 4..i + 10] == b"Exif\x00\x00";
+        if is_exif_app1 {
+            if !inserted && !new_tiff.is_empty() {
+                push_app1(&mut out, new_tiff);
+                inserted = true;
+            }
+            i = seg_end;
+            continue;
+        }
+        // SOS 之后的扫描数据整块拷贝
+        if marker == 0xDA {
+            out.extend_from_slice(&jpeg[i..]);
+            return Ok(out);
+        }
+        out.extend_from_slice(&jpeg[i..seg_end]);
+        i = seg_end;
+    }
+    if !inserted && !new_tiff.is_empty() {
+        // 原图没有 APP1 却有 GPS？不可能；防御性插入
+        let _ = out.split_off(2); // 不应走到这里；保守恢复 SOI+新 APP1
+        let mut out2 = vec![0xFF, 0xD8];
+        push_app1(&mut out2, new_tiff);
+        out2.extend_from_slice(&jpeg[2..]);
+        return Ok(out2);
+    }
+    Ok(out)
+}
+
+fn push_app1(out: &mut Vec<u8>, tiff: &[u8]) {
+    let len = (2 + 6 + tiff.len()) as u16;
+    out.extend_from_slice(&[0xFF, 0xE1]);
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(b"Exif\x00\x00");
+    out.extend_from_slice(tiff);
 }
 
 // ---------------------------------------------------------------- 测试
@@ -706,14 +820,7 @@ pub(crate) mod tests {
                 Ifd::Exif => (&mut self.exif_ifd, &mut self.data),
                 Ifd::Gps => (&mut self.gps_ifd, &mut self.data),
             };
-            store_pair(
-                ifd,
-                data,
-                tag,
-                TYPE_SHORT,
-                1,
-                v.to_le_bytes().to_vec(),
-            );
+            store_pair(ifd, data, tag, TYPE_SHORT, 1, v.to_le_bytes().to_vec());
         }
 
         fn rational(&mut self, w: Ifd, tag: u16, n: u32, d: u32) {
@@ -757,9 +864,17 @@ pub(crate) mod tests {
             let ifd0_off = out.len() as u32;
             let ifd0_size = 2 + 12 * self.ifd0.len() as u32 + 4;
             let exif_off = ifd0_off + ifd0_size;
-            let exif_size = if exif_ptr { 2 + 12 * self.exif_ifd.len() as u32 + 4 } else { 0 };
+            let exif_size = if exif_ptr {
+                2 + 12 * self.exif_ifd.len() as u32 + 4
+            } else {
+                0
+            };
             let gps_off = exif_off + exif_size;
-            let gps_size = if gps_ptr { 2 + 12 * self.gps_ifd.len() as u32 + 4 } else { 0 };
+            let gps_size = if gps_ptr {
+                2 + 12 * self.gps_ifd.len() as u32 + 4
+            } else {
+                0
+            };
             let data_off = gps_off + gps_size;
 
             let patch = |e: &mut [u8; 12], tag: u16, off: u32| {
@@ -780,7 +895,7 @@ pub(crate) mod tests {
                 }
             }
 
-            let mut emit = |out: &mut Vec<u8>, ifd: &Vec<[u8; 12]>, next: u32| {
+            let emit = |out: &mut Vec<u8>, ifd: &Vec<[u8; 12]>, next: u32| {
                 out.extend_from_slice(&(ifd.len() as u16).to_le_bytes());
                 for mut e in ifd.clone() {
                     let cnt = u32::from_le_bytes(e[4..8].try_into().unwrap());
@@ -852,7 +967,11 @@ pub(crate) mod tests {
         t.rational(Ifd::Exif, 0x829A, 1, 250); // ExposureTime 1/250
         t.rational(Ifd::Exif, 0x829D, 56, 10); // FNumber 5.6
         t.rational(Ifd::Exif, 0x920A, 24, 1); // FocalLength 24mm
-        t.ascii(Ifd::Exif, 0xA434, "iPhone 14 Pro back triple camera 6.86mm f/1.78");
+        t.ascii(
+            Ifd::Exif,
+            0xA434,
+            "iPhone 14 Pro back triple camera 6.86mm f/1.78",
+        );
         t.build()
     }
 
@@ -881,8 +1000,11 @@ pub(crate) mod tests {
         // image crate 默认不写 EXIF
         let img = image::DynamicImage::new_rgb8(8, 8);
         let mut base = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut base), image::ImageFormat::Jpeg)
-            .unwrap();
+        img.write_to(
+            &mut std::io::Cursor::new(&mut base),
+            image::ImageFormat::Jpeg,
+        )
+        .unwrap();
         let p = tmpfile("noexif.jpg", &base);
         assert!(parse_file(&p, "jpg", false).unwrap().is_none());
         std::fs::remove_file(&p).unwrap();
@@ -906,8 +1028,16 @@ pub(crate) mod tests {
 
         // 显式开启：22°32′36″N 114°03′72″E
         let s = parse_file(&p, "jpg", true).unwrap().unwrap();
-        assert!((s.gps_lat.unwrap() - 22.543333).abs() < 1e-5, "{:?}", s.gps_lat);
-        assert!((s.gps_lon.unwrap() - 114.07).abs() < 1e-5, "{:?}", s.gps_lon);
+        assert!(
+            (s.gps_lat.unwrap() - 22.543333).abs() < 1e-5,
+            "{:?}",
+            s.gps_lat
+        );
+        assert!(
+            (s.gps_lon.unwrap() - 114.07).abs() < 1e-5,
+            "{:?}",
+            s.gps_lon
+        );
         std::fs::remove_file(&p).unwrap();
     }
 
@@ -940,8 +1070,11 @@ pub(crate) mod tests {
     fn webp_exif_chunk_parsed() {
         let img = image::DynamicImage::new_rgb8(8, 8);
         let mut webp = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut webp), image::ImageFormat::WebP)
-            .unwrap();
+        img.write_to(
+            &mut std::io::Cursor::new(&mut webp),
+            image::ImageFormat::WebP,
+        )
+        .unwrap();
         let tiff = phone_tiff();
         // RIFF 尾插 EXIF chunk（偶对齐）
         let mut body = webp[12..].to_vec();
@@ -1007,8 +1140,6 @@ pub(crate) mod tests {
         std::fs::remove_file(&p).unwrap();
     }
 
-
-
     #[test]
     fn validate_tiff_rejects_out_of_range_values() {
         // 正常 blob：IFD0 两条 ASCII（值 > 4B → 走值偏移，才有可改的偏移字段）
@@ -1039,7 +1170,10 @@ pub(crate) mod tests {
         t[8 + 2 + 12 + 8..8 + 2 + 12 + 12].copy_from_slice(&0x00FF_0000u32.to_le_bytes());
         let p = tmpfile("corrupt.jpg", &jpeg_with_exif(&t, 64, 48));
         let r = parse_file(&p, "jpg", false);
-        assert!(r.is_err(), "畸形 EXIF 必须走 Err（落 parse_failed），不得 panic/abort");
+        assert!(
+            r.is_err(),
+            "畸形 EXIF 必须走 Err（落 parse_failed），不得 panic/abort"
+        );
         std::fs::remove_file(&p).unwrap();
     }
 
@@ -1064,7 +1198,7 @@ pub(crate) mod tests {
         assert!(s.gps_lat.is_none() && s.gps_lon.is_none());
         assert_eq!(s.model.as_deref(), None); // 该用例没写 Model
         assert_eq!(s.make.as_deref(), Some("Apple"));
-        assert_eq!(s.taken_at.is_some(), true);
+        assert!(s.taken_at.is_some());
         std::fs::remove_file(&p).unwrap();
         std::fs::remove_file(&ps).unwrap();
     }
@@ -1099,7 +1233,11 @@ pub(crate) mod tests {
         for (i, e) in table.iter_mut().enumerate() {
             let mut c = i as u32;
             for _ in 0..8 {
-                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+                c = if c & 1 != 0 {
+                    0xEDB8_8320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
             }
             *e = c;
         }
@@ -1116,103 +1254,4 @@ pub(crate) mod tests {
         let hex: Vec<String> = t.iter().map(|b| format!("{b:02x}")).collect();
         println!("HEXDUMP len={} {}", t.len(), hex.join(" "));
     }
-}
-
-
-/// GPS 剥离（导出链路）：JPEG 重排 APP1（去掉 GPS IFD 全部字段 + IFD0 的 GPSInfo
-/// 指针），其余 EXIF 原样保留。无 EXIF / 无 GPS 的图原样返回。
-/// PNG/WebP 的整 chunk 剥离 v1 未做（见报告未覆盖清单）。
-pub fn strip_gps_jpeg(jpeg: &[u8]) -> Result<Vec<u8>, MediaError> {
-    let mut rdr = std::io::Cursor::new(jpeg);
-    let tiff = exif::Reader::new()
-        .read_from_container(&mut rdr)
-        .map_err(exif_err)?;
-    let has_gps = tiff.fields().any(|f| is_gps_tag(f.tag.number()));
-    if !has_gps {
-        return Ok(jpeg.to_vec());
-    }
-    let little = tiff.little_endian();
-    // 重建 TIFF：过滤 GPS 段字段（In::PRIMARY 且 tag < 0x20）+ IFD0 GPSInfo 指针
-    let kept: Vec<exif::Field> = tiff
-        .fields()
-        .filter(|f| {
-            !is_gps_tag(f.tag.number())
-                && !(f.ifd_num == exif::In::PRIMARY && f.tag.number() == 0x8825)
-        })
-        .cloned()
-        .collect();
-    let out: Vec<u8>;
-    {
-        let mut buf: Vec<u8> = Vec::new();
-        let mut writer = exif::experimental::Writer::new();
-        for f in &kept {
-            writer.push_field(f);
-        }
-        writer.write(&mut std::io::Cursor::new(&mut buf), little).map_err(exif_err)?;
-        out = buf;
-    }
-    rebuild_jpeg_app1(jpeg, &out)
-}
-
-fn is_gps_tag(code: u16) -> bool {
-    // GPS IFD 字段 tag 恒在 0x0000..=0x001F（kamadak 把它们挂 In::PRIMARY）
-    code <= 0x001F
-}
-
-/// JPEG 段级重排：替换（或删除空的）Exif APP1；其余段字节原样。
-fn rebuild_jpeg_app1(jpeg: &[u8], new_tiff: &[u8]) -> Result<Vec<u8>, MediaError> {
-    if jpeg.len() < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8 {
-        return Err(MediaError::Exif("not a JPEG".into()));
-    }
-    let mut out = vec![0xFF, 0xD8];
-    let mut i = 2usize;
-    let mut inserted = false;
-    while i + 4 <= jpeg.len() && jpeg[i] == 0xFF {
-        let marker = jpeg[i + 1];
-        if marker == 0xD8 || (0xD0..=0xD7).contains(&marker) || marker == 0x01 {
-            out.extend_from_slice(&jpeg[i..i + 2]);
-            i += 2;
-            continue;
-        }
-        if marker == 0xD9 {
-            out.extend_from_slice(&jpeg[i..]);
-            i = jpeg.len();
-            break;
-        }
-        let len = u16::from_be_bytes([jpeg[i + 2], jpeg[i + 3]]) as usize;
-        let seg_end = i + 2 + len;
-        let is_exif_app1 = marker == 0xE1 && jpeg.len() >= i + 10 && &jpeg[i + 4..i + 10] == b"Exif\x00\x00";
-        if is_exif_app1 {
-            if !inserted && !new_tiff.is_empty() {
-                push_app1(&mut out, new_tiff);
-                inserted = true;
-            }
-            i = seg_end;
-            continue;
-        }
-        // SOS 之后的扫描数据整块拷贝
-        if marker == 0xDA {
-            out.extend_from_slice(&jpeg[i..]);
-            return Ok(out);
-        }
-        out.extend_from_slice(&jpeg[i..seg_end]);
-        i = seg_end;
-    }
-    if !inserted && !new_tiff.is_empty() {
-        // 原图没有 APP1 却有 GPS？不可能；防御性插入
-        let _ = out.split_off(2); // 不应走到这里；保守恢复 SOI+新 APP1
-        let mut out2 = vec![0xFF, 0xD8];
-        push_app1(&mut out2, new_tiff);
-        out2.extend_from_slice(&jpeg[2..]);
-        return Ok(out2);
-    }
-    Ok(out)
-}
-
-fn push_app1(out: &mut Vec<u8>, tiff: &[u8]) {
-    let len = (2 + 6 + tiff.len()) as u16;
-    out.extend_from_slice(&[0xFF, 0xE1]);
-    out.extend_from_slice(&len.to_be_bytes());
-    out.extend_from_slice(b"Exif\x00\x00");
-    out.extend_from_slice(tiff);
 }

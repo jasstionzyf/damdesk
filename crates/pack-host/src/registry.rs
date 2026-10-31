@@ -368,7 +368,7 @@ impl PackStore {
         std::fs::remove_dir_all(&dir).map_err(|e| io_err(&dir, e))?;
         // 该 id 下已无版本 → 删空父目录（失败不影响结果）
         if self.installed_versions(id).is_empty() {
-            let _ = std::fs::remove_dir(&self.root.join(id));
+            let _ = std::fs::remove_dir(self.root.join(id));
         }
         Ok(true)
     }
@@ -1095,6 +1095,8 @@ mod tests {
     /// 只有带 `local-infer` 的宿主（桌面形态）装配得出这三项；关掉该特征时安装会如实报
     /// `pack_capability_missing`，所以这里按编译期取值分支断言，不做一刀切。
     #[test]
+    // cfg!(local-infer) 是编译期常量：无 local-infer 时该 Err 分支钉住「不该走到」
+    #[allow(clippy::assertions_on_constants)]
     fn official_ecommerce_pack_installs_into_version_dir() {
         let pack_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
@@ -1246,12 +1248,10 @@ mod tests {
             .unwrap();
         // 装好后宿主能按 manifest 声明读到它（读 schema 接口走的就是这条）
         let (manifest, _) = crate::manifest::load_pack(&out.dir).unwrap();
-        let schema = crate::params::ParamSchema::load_declared(
-            &out.dir,
-            manifest.params.as_deref(),
-        )
-        .unwrap()
-        .expect("声明了 params 就应能读到 schema");
+        let schema =
+            crate::params::ParamSchema::load_declared(&out.dir, manifest.params.as_deref())
+                .unwrap()
+                .expect("声明了 params 就应能读到 schema");
         assert_eq!(schema.required(), ["format".to_string()]);
     }
 
@@ -1264,10 +1264,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.code(), "pack_params_missing", "{err}");
         assert!(err.to_string().contains("params.schema.json"), "{err}");
-        assert!(
-            store.installed_ids().is_empty(),
-            "拒装后不许留下半装的目录"
-        );
+        assert!(store.installed_ids().is_empty(), "拒装后不许留下半装的目录");
     }
 
     #[test]

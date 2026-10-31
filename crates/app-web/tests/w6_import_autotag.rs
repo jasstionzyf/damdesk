@@ -1,3 +1,4 @@
+#![allow(clippy::await_holding_lock)] // vips 全局锁刻意贯穿 await：测试间串行化 libvips（非 DB 锁，无死锁面）
 //! W6 修复（task）回归钉：导入向导「导入后自动打标」全链路接线。
 //!
 //! 走真实 HTTP 路由 + 真实图片（libvips 合成）+ 真实 SQLite：
@@ -60,7 +61,9 @@ async fn post_json(app: &axum::Router, uri: &str, body: &str) -> serde_json::Val
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let j: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(status, 200, "{uri} → {j}");
     j
@@ -73,7 +76,9 @@ async fn get_json(app: &axum::Router, uri: &str) -> serde_json::Value {
         .await
         .unwrap();
     assert_eq!(res.status().as_u16(), 200, "{uri}");
-    let body = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     serde_json::from_slice(&body).unwrap()
 }
 

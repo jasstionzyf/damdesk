@@ -131,10 +131,26 @@ struct FlatMap {
 
 /// 电商包（有声明 schema 的插件）：每一项都必须在源阈值里取到值，取不到 = 迁移报错。
 const ECOMMERCE_FLAT: &[FlatMap] = &[
-    FlatMap { flat_key: "shortSideMin", rule_id: "R1_size", pack_key: "short_side_min" },
-    FlatMap { flat_key: "whiteMaxDev", rule_id: "R2_white_bg", pack_key: "max_dev" },
-    FlatMap { flat_key: "subjectRatioMin", rule_id: "R4_subject_ratio", pack_key: "min" },
-    FlatMap { flat_key: "subjectRatioMax", rule_id: "R4_subject_ratio", pack_key: "max" },
+    FlatMap {
+        flat_key: "shortSideMin",
+        rule_id: "R1_size",
+        pack_key: "short_side_min",
+    },
+    FlatMap {
+        flat_key: "whiteMaxDev",
+        rule_id: "R2_white_bg",
+        pack_key: "max_dev",
+    },
+    FlatMap {
+        flat_key: "subjectRatioMin",
+        rule_id: "R4_subject_ratio",
+        pack_key: "min",
+    },
+    FlatMap {
+        flat_key: "subjectRatioMax",
+        rule_id: "R4_subject_ratio",
+        pack_key: "max",
+    },
 ];
 
 /// 从插件包资源派生规格（电商 / 房产两族）。
@@ -187,7 +203,9 @@ fn from_plugin_resources(
         // 改参数改不到）；其余键原样留在 thresholds（不是丢失，是插件没打算让用户逐键改）。
         if !flat.is_empty() {
             for key in nums.keys() {
-                let mapped = flat.iter().any(|m| m.rule_id == rule_id && m.pack_key == key);
+                let mapped = flat
+                    .iter()
+                    .any(|m| m.rule_id == rule_id && m.pack_key == key);
                 if !mapped {
                     rule_level_only.push(format!("{rule_id}.{key}"));
                 }
@@ -212,7 +230,9 @@ fn from_plugin_resources(
             }
             if !flat.is_empty() {
                 for key in nums.keys() {
-                    let mapped = flat.iter().any(|m| m.rule_id == *rule_id && m.pack_key == key);
+                    let mapped = flat
+                        .iter()
+                        .any(|m| m.rule_id == *rule_id && m.pack_key == key);
                     if !mapped {
                         rule_level_only.push(format!("{rule_id}.{key}"));
                     }
@@ -552,7 +572,10 @@ fn outcome(rec: &SpecRecord, notes: Vec<String>) -> SeedOutcome {
 /// 调用点两处（同一个函数，避免「启动跑一遍 / 接口跑一遍」两套语义）：
 /// * `/api/specs` 读接口的惰性补齐（老库首次打开时补）；
 /// * `POST /api/specs/migrate` 显式重跑（返回完整回读报告）。
-pub fn ensure_legacy_specs(conn: &Connection, data_dir: &std::path::Path) -> Result<SeedReport, String> {
+pub fn ensure_legacy_specs(
+    conn: &Connection,
+    data_dir: &std::path::Path,
+) -> Result<SeedReport, String> {
     let seeds = default_seeds(conn, data_dir)?;
     let repo = SqliteSpecRepo::new(conn);
     let mut created = Vec::new();
@@ -603,7 +626,11 @@ pub fn ensure_legacy_specs(conn: &Connection, data_dir: &std::path::Path) -> Res
 }
 
 /// 回读校验：只信库里的行，不信内存里的期望值。
-fn verify(conn: &Connection, seeds: &[SeedSpec], created_ids: &[i64]) -> Result<Verification, String> {
+fn verify(
+    conn: &Connection,
+    seeds: &[SeedSpec],
+    created_ids: &[i64],
+) -> Result<Verification, String> {
     let repo = SqliteSpecRepo::new(conn);
     let all = repo.list(None).map_err(|e| e.to_string())?;
     let mut detail = Vec::new();
@@ -634,8 +661,8 @@ fn verify(conn: &Connection, seeds: &[SeedSpec], created_ids: &[i64]) -> Result<
         // 消灭的「装了插件跑不了」）。这类行按现值保留，只在 detail 里留痕。
         // 只对「显然不是种子产物」的行放行：规则为空且阈值全空（N1 之前的空壳/老库遗留）。
         // 种子写出的行恒有规则；被存储吃掉阈值但规则还在的行仍然要响亮失败（下面的硬校验）。
-        let empty_row = row.rules.is_empty()
-            && matches!(&row.thresholds, Value::Object(m) if m.is_empty());
+        let empty_row =
+            row.rules.is_empty() && matches!(&row.thresholds, Value::Object(m) if m.is_empty());
         if !created_ids.contains(&row.spec_id) && empty_row {
             detail.push(format!(
                 "规格 #{}（{}）是既有行（originKey {}）：按现值保留，不做源值比对",
@@ -690,10 +717,7 @@ fn verify(conn: &Connection, seeds: &[SeedSpec], created_ids: &[i64]) -> Result<
                     for key in src_params.keys() {
                         if !have.contains_key(key) {
                             thresholds_match = false;
-                            detail.push(format!(
-                                "规格 #{} 丢了阈值 {rule}.{key}",
-                                row.spec_id
-                            ));
+                            detail.push(format!("规格 #{} 丢了阈值 {rule}.{key}", row.spec_id));
                         }
                     }
                 }
@@ -725,7 +749,10 @@ fn action_names(list: &Value) -> Vec<String> {
 }
 
 /// 默认规格的**来源清单**（`/api/specs/migrate?dryRun=true` 与报告用：不写库也能看见会长什么样）。
-pub fn planned_seeds(conn: &Connection, data_dir: &std::path::Path) -> Result<Vec<SeedSpec>, String> {
+pub fn planned_seeds(
+    conn: &Connection,
+    data_dir: &std::path::Path,
+) -> Result<Vec<SeedSpec>, String> {
     default_seeds(conn, data_dir)
 }
 
@@ -757,7 +784,8 @@ mod tests {
     /// 刻意不复用 `from_plugin_resources` 的实现（否则测的是「自己等于自己」）：
     /// 这里只认包资源事实 —— 规则 id + 数值参数 —— 用来钉「迁移不丢阈值」。
     fn source_thresholds(rel: &str) -> serde_json::Value {
-        let raw = std::fs::read_to_string(pack_dir(rel).join("resources").join("rules.json")).unwrap();
+        let raw =
+            std::fs::read_to_string(pack_dir(rel).join("resources").join("rules.json")).unwrap();
         let data: Value = serde_json::from_str(&raw).unwrap();
         let mut out = Map::new();
         for rule in data["rules"].as_array().unwrap() {
@@ -766,7 +794,10 @@ mod tests {
             };
             let nums: Map<String, Value> = m.into_iter().filter(|(_, v)| v.is_number()).collect();
             if !nums.is_empty() {
-                out.insert(rule["id"].as_str().unwrap().to_string(), Value::Object(nums));
+                out.insert(
+                    rule["id"].as_str().unwrap().to_string(),
+                    Value::Object(nums),
+                );
             }
         }
         Value::Object(out)
@@ -826,12 +857,18 @@ mod tests {
             .expect("必须有房源照片规格");
         // 房产包的阈值声明在 rules.json **顶层 thresholds**（规则本身没有 params）→
         // 必须按规则级并进规格：旧 YAML 时代的 100 / 0.3 / 8 一个都不能丢
-        assert_eq!(re.thresholds["F1_sharpness"]["min"], serde_json::json!(100.0));
+        assert_eq!(
+            re.thresholds["F1_sharpness"]["min"],
+            serde_json::json!(100.0)
+        );
         assert_eq!(
             re.thresholds["F2_exposure"]["max_dead_ratio"],
             serde_json::json!(0.3)
         );
-        assert_eq!(re.thresholds["F3_duplicate"]["threshold"], serde_json::json!(8));
+        assert_eq!(
+            re.thresholds["F3_duplicate"]["threshold"],
+            serde_json::json!(8)
+        );
         assert_eq!(
             re.thresholds["F5_min_size"]["short_side_min"],
             serde_json::json!(600)
@@ -856,11 +893,26 @@ mod tests {
             .expect("必须有亚马逊主图规格");
         // N9：平台差异 = 规格。Amazon 阈值写死在规格里（A1 500 / A2 1600 / A3 3 / A4 0.55~0.85），
         // 不吃插件默认值 —— 否则改插件默认值会悄悄改掉 Amazon 判定。
-        assert_eq!(amz.thresholds["R1_size"]["short_side_min"], serde_json::json!(500));
-        assert_eq!(amz.thresholds["R1_size"]["long_side_min"], serde_json::json!(1600));
-        assert_eq!(amz.thresholds["R2_white_bg"]["max_dev"], serde_json::json!(3));
-        assert_eq!(amz.thresholds["R4_subject_ratio"]["min"], serde_json::json!(0.55));
-        assert_eq!(amz.thresholds["R4_subject_ratio"]["max"], serde_json::json!(0.85));
+        assert_eq!(
+            amz.thresholds["R1_size"]["short_side_min"],
+            serde_json::json!(500)
+        );
+        assert_eq!(
+            amz.thresholds["R1_size"]["long_side_min"],
+            serde_json::json!(1600)
+        );
+        assert_eq!(
+            amz.thresholds["R2_white_bg"]["max_dev"],
+            serde_json::json!(3)
+        );
+        assert_eq!(
+            amz.thresholds["R4_subject_ratio"]["min"],
+            serde_json::json!(0.55)
+        );
+        assert_eq!(
+            amz.thresholds["R4_subject_ratio"]["max"],
+            serde_json::json!(0.85)
+        );
         // 平铺参数与阈值同源（插件 schema 键），宿主合并后就是全量生效值
         assert_eq!(amz.params_diff["shortSideMin"], serde_json::json!(500));
         assert_eq!(amz.params_diff["longSideMin"], serde_json::json!(1600));
@@ -978,7 +1030,10 @@ mod tests {
             .unwrap()
             .expect("段包必须声明 resources/actions.json");
         assert_eq!(declared.len(), 1);
-        assert_eq!(seg.actions, serde_json::json!([{ "action": declared[0]["id"] }]));
+        assert_eq!(
+            seg.actions,
+            serde_json::json!([{ "action": declared[0]["id"] }])
+        );
         assert_eq!(seg.name, declared[0]["name"]);
         assert_eq!(seg.plugin_id, declared_actions_plugin_id());
         // 处理类方案没有规则/阈值：参数全用包内 schema 默认值（规格只存 diff）
@@ -1017,11 +1072,17 @@ mod tests {
         );
         // 没有 actions.json = 该包没声明宿主可读的动作 → 不派生（不是错误）
         let bare = tempfile::tempdir().unwrap();
-        assert!(process_seed_from_pack(bare.path(), "any.pack").unwrap().is_none());
+        assert!(process_seed_from_pack(bare.path(), "any.pack")
+            .unwrap()
+            .is_none());
         // 坏清单 = 响亮失败（坏包不许静默变成一个「没有方案」）
         let broken = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(broken.path().join("resources")).unwrap();
-        std::fs::write(broken.path().join("resources").join("actions.json"), "{not json").unwrap();
+        std::fs::write(
+            broken.path().join("resources").join("actions.json"),
+            "{not json",
+        )
+        .unwrap();
         assert!(process_seed_from_pack(broken.path(), "any.pack").is_err());
     }
 
@@ -1040,7 +1101,10 @@ mod tests {
             .find_by_origin("seed:com.soujpg.pack.segment")
             .unwrap()
             .expect("段包默认方案必须落库");
-        assert_eq!(action_names(&row.actions), vec!["white_bg_fill".to_string()]);
+        assert_eq!(
+            action_names(&row.actions),
+            vec!["white_bg_fill".to_string()]
+        );
         assert!(row.enabled, "默认方案必须可直接执行");
     }
 }

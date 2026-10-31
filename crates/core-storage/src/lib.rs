@@ -9,8 +9,8 @@ pub mod compliance_runs_sqlite;
 pub mod compliance_sqlite;
 // N6e（task）：资产工作版本账本（migration 0029；一资产至多一张 current=1）
 pub mod asset_versions;
-pub mod exif_meta;
 pub mod custom_tasks;
+pub mod exif_meta;
 pub mod migrations;
 // OCR-MATCH：ocr_text 字面检索的 FTS5 倒排（中文 2-gram + 单字允许；见模块头）
 pub mod ocr_index;

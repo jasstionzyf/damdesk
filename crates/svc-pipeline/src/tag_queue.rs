@@ -84,13 +84,13 @@ pub fn tag_failed_list(conn: &Connection, limit: i64) -> Result<Vec<TagFailedIte
          ORDER BY updatedAt DESC LIMIT ?1",
     )?;
     let rows = stmt.query_map([limit], |r| {
-        let lastError: String = r.get(3)?;
+        let last_error: String = r.get(3)?;
         Ok(TagFailedItem {
             jobId: r.get(0)?,
             assetId: r.get(1)?,
             attempts: r.get(2)?,
-            errorClass: classify_tag_failure(&lastError).to_string(),
-            lastError,
+            errorClass: classify_tag_failure(&last_error).to_string(),
+            lastError: last_error,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -119,10 +119,8 @@ pub fn retry_failed_class(conn: &Connection, class: Option<&str>) -> Result<usiz
     let truncated_like =
         "(lastError LIKE '%truncated%' OR lastError LIKE '%EOF while parsing%' OR lastError LIKE '%max_tokens%')";
     let sql = match class.map(str::trim).filter(|c| !c.is_empty()) {
-        None => format!(
-            "UPDATE job_queue SET status = 'pending', attempts = 0, lastError = NULL,
-             updatedAt = unixepoch() WHERE kind = 'tag' AND status = 'failed'"
-        ),
+        None => "UPDATE job_queue SET status = 'pending', attempts = 0, lastError = NULL,
+             updatedAt = unixepoch() WHERE kind = 'tag' AND status = 'failed'".to_string(),
         Some("truncated") => format!(
             "UPDATE job_queue SET status = 'pending', attempts = 0, lastError = NULL,
              updatedAt = unixepoch() WHERE kind = 'tag' AND status = 'failed' AND {truncated_like}"

@@ -172,7 +172,8 @@ fn row_to_record(r: &rusqlite::Row<'_>) -> rusqlite::Result<SpecRecord> {
 impl SqliteSpecRepo<'_> {
     fn insert(&self, new: &NewSpec) -> Result<i64> {
         let rules = serde_json::to_string(&new.rules).map_err(|e| self.bad(e.to_string()))?;
-        let thresholds = serde_json::to_string(&new.thresholds).map_err(|e| self.bad(e.to_string()))?;
+        let thresholds =
+            serde_json::to_string(&new.thresholds).map_err(|e| self.bad(e.to_string()))?;
         let actions = serde_json::to_string(&new.actions).map_err(|e| self.bad(e.to_string()))?;
         let output = serde_json::to_string(&new.output).map_err(|e| self.bad(e.to_string()))?;
         let diff = serde_json::to_string(&new.params_diff).map_err(|e| self.bad(e.to_string()))?;
@@ -209,7 +210,9 @@ impl SqliteSpecRepo<'_> {
         let msg = e.to_string();
         if msg.contains("UNIQUE constraint failed") {
             if msg.contains("plugin_spec.originKey") {
-                return crate::StorageError::Invalid(format!("该迁移来源已有规格（originKey 重复）：{msg}"));
+                return crate::StorageError::Invalid(format!(
+                    "该迁移来源已有规格（originKey 重复）：{msg}"
+                ));
             }
             return crate::StorageError::Invalid(format!("同一插件下已有同名规格：{msg}"));
         }
@@ -257,9 +260,8 @@ impl SpecRepo for SqliteSpecRepo<'_> {
         let mut out = Vec::new();
         match plugin {
             Some(pid) => {
-                let sql = format!(
-                    "SELECT {COLS} FROM plugin_spec WHERE pluginId = ?1 ORDER BY specId"
-                );
+                let sql =
+                    format!("SELECT {COLS} FROM plugin_spec WHERE pluginId = ?1 ORDER BY specId");
                 let mut stmt = self.conn.prepare(&sql)?;
                 let mut rows = stmt.query(rusqlite::params![pid])?;
                 while let Some(r) = rows.next()? {
@@ -293,9 +295,9 @@ impl SpecRepo for SqliteSpecRepo<'_> {
         let mut sets: Vec<&str> = Vec::new();
         let mut vals: Vec<rusqlite::types::Value> = Vec::new();
         let push_json = |sets: &mut Vec<&'static str>,
-                             vals: &mut Vec<rusqlite::types::Value>,
-                             col: &'static str,
-                             v: &Value|
+                         vals: &mut Vec<rusqlite::types::Value>,
+                         col: &'static str,
+                         v: &Value|
          -> Result<()> {
             let s = serde_json::to_string(v).map_err(|e| self.bad(e.to_string()))?;
             sets.push(col);
@@ -352,7 +354,10 @@ impl SpecRepo for SqliteSpecRepo<'_> {
             .collect();
         assignments.push("updatedAt = MAX(updatedAt + 1, unixepoch())".to_string());
         let assignments = assignments.join(", ");
-        let sql = format!("UPDATE plugin_spec SET {assignments} WHERE specId = ?{}", vals.len() + 1);
+        let sql = format!(
+            "UPDATE plugin_spec SET {assignments} WHERE specId = ?{}",
+            vals.len() + 1
+        );
         vals.push(rusqlite::types::Value::Integer(spec_id));
         let n = self
             .conn
@@ -362,9 +367,10 @@ impl SpecRepo for SqliteSpecRepo<'_> {
     }
 
     fn delete(&self, spec_id: i64) -> Result<bool> {
-        let n = self
-            .conn
-            .execute("DELETE FROM plugin_spec WHERE specId = ?1", rusqlite::params![spec_id])?;
+        let n = self.conn.execute(
+            "DELETE FROM plugin_spec WHERE specId = ?1",
+            rusqlite::params![spec_id],
+        )?;
         Ok(n > 0)
     }
 }
@@ -407,7 +413,10 @@ mod tests {
         assert_eq!(got.thresholds, json!({"R1_size": {"min": 700}}));
         assert_eq!(got.params_diff, json!({"shortSideMin": 700}));
         assert!(got.enabled);
-        assert_eq!(repo.list(Some("com.soujpg.pack.ecommerce")).unwrap().len(), 1);
+        assert_eq!(
+            repo.list(Some("com.soujpg.pack.ecommerce")).unwrap().len(),
+            1
+        );
         assert!(repo.list(Some("other")).unwrap().is_empty());
         assert_eq!(repo.list(None).unwrap().len(), 1);
     }
@@ -492,7 +501,10 @@ mod tests {
         let repo = SqliteSpecRepo::new(&conn);
         let id = repo.create(&sample("淘宝主图", None)).unwrap();
         let before = repo.get(id).unwrap().unwrap();
-        assert_eq!(before.created_at, before.updated_at, "新行：两个时间戳相等 = 未被编辑");
+        assert_eq!(
+            before.created_at, before.updated_at,
+            "新行：两个时间戳相等 = 未被编辑"
+        );
         repo.update(
             id,
             &SpecPatch {

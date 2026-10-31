@@ -155,7 +155,12 @@ fn engine_needles() -> Vec<(String, String)> {
 // ---------------------------------------------------------------------------
 
 /// 逐行扫一个文件，命中即记违规。返回 (是否文本文件, 扫过的行数)。
-fn scan_file(g: &mut Guard, rule: &str, path: &Path, needles: &[(String, String)]) -> (bool, usize) {
+fn scan_file(
+    g: &mut Guard,
+    rule: &str,
+    path: &Path,
+    needles: &[(String, String)],
+) -> (bool, usize) {
     let Ok(bytes) = fs::read(path) else {
         return (false, 0);
     };
@@ -228,7 +233,8 @@ fn parse_crate_toml(dir_name: &str, path: &Path) -> Option<CrateToml> {
         let is_dep_zone = matches!(
             section.as_str(),
             "dependencies" | "dev-dependencies" | "build-dependencies"
-        ) || (section.starts_with("target.") && section.ends_with("dependencies"));
+        ) || (section.starts_with("target.")
+            && section.ends_with("dependencies"));
         if is_dep_zone {
             if let Some((k, _)) = line.split_once('=') {
                 let raw_key = k.trim().trim_matches('"');
@@ -277,7 +283,11 @@ fn workspace_crates(root: &Path) -> Vec<CrateToml> {
     let Ok(rd) = fs::read_dir(root.join("crates")) else {
         return out;
     };
-    let mut dirs: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    let mut dirs: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
     dirs.sort();
     for dir in dirs {
         let toml = dir.join("Cargo.toml");
@@ -301,7 +311,11 @@ fn plugin_pack_dirs(root: &Path) -> Vec<PathBuf> {
     let Ok(rd) = fs::read_dir(&base) else {
         return Vec::new();
     };
-    let mut out: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    let mut out: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
     out.sort();
     out
 }
@@ -323,7 +337,12 @@ fn scan_manifests(g: &mut Guard) -> usize {
         let manifest = dir.join("manifest.json");
         if !manifest.is_file() {
             let rel = g.rel(dir);
-            g.hit_at("R1", &rel, "(缺 manifest.json)", "插件包目录里没有 manifest，不是可装载的包");
+            g.hit_at(
+                "R1",
+                &rel,
+                "(缺 manifest.json)",
+                "插件包目录里没有 manifest，不是可装载的包",
+            );
             continue;
         }
         scan_file(g, "R1", &manifest, &needles);
@@ -331,7 +350,12 @@ fn scan_manifests(g: &mut Guard) -> usize {
 
         let Ok(raw) = fs::read_to_string(&manifest) else {
             let rel = g.rel(&manifest);
-            g.hit_at("R1", &rel, "(manifest 不可读)", "manifest 读不出来 → 扫描面为空");
+            g.hit_at(
+                "R1",
+                &rel,
+                "(manifest 不可读)",
+                "manifest 读不出来 → 扫描面为空",
+            );
             continue;
         };
         let line_of = |needle: &str| {
@@ -399,8 +423,9 @@ fn scan_manifests(g: &mut Guard) -> usize {
         // 拒装面（api_version / 未知键 / 能力白名单）只记 note：那是 manifest 校验单测的判据
         if let Err(e) = pack_host::manifest::Manifest::from_path(&manifest) {
             let rel = g.rel(&manifest);
-            g.notes
-                .push(format!("R1 {rel} 按宿主拒装口径不可装载（非本守卫判据，仅记录）：{e}"));
+            g.notes.push(format!(
+                "R1 {rel} 按宿主拒装口径不可装载（非本守卫判据，仅记录）：{e}"
+            ));
         }
     }
     scanned
@@ -516,7 +541,12 @@ fn scan_dampack(g: &mut Guard) -> (usize, usize) {
         }
         let rel = g.rel(&dir);
         if !names.iter().any(|n| n == "manifest.json") {
-            g.hit_at("R3", &rel, "(归档缺 manifest.json)", "打包清单里没有 manifest，装不了");
+            g.hit_at(
+                "R3",
+                &rel,
+                "(归档缺 manifest.json)",
+                "打包清单里没有 manifest，装不了",
+            );
         }
         if names.len() < 2 {
             g.hit_at(
@@ -607,7 +637,8 @@ fn scan_pack_host_closure(g: &mut Guard) -> usize {
     for (dep, file, line) in edges.get("pack-host").cloned().unwrap_or_default() {
         if BUILTIN_ENGINES.iter().any(|(e, _)| *e == dep) {
             let loc = format!("{}:{}", g.rel(&file), line);
-            g.notes.push(format!("R4 pack-host 直接依赖 {dep}（{loc}）"));
+            g.notes
+                .push(format!("R4 pack-host 直接依赖 {dep}（{loc}）"));
         }
     }
     seen.len()
@@ -744,7 +775,12 @@ fn scan_registry_surfaces(g: &mut Guard) -> usize {
         let d = g.root.join("packs").join("plugins").join(fam);
         if d.exists() {
             let rel = g.rel(&d);
-            g.hit_at("R5", &rel, fam, "内置族名出现在插件目录里 = 内置功能被包成插件");
+            g.hit_at(
+                "R5",
+                &rel,
+                fam,
+                "内置族名出现在插件目录里 = 内置功能被包成插件",
+            );
         }
     }
     scanned
@@ -789,7 +825,10 @@ fn scan_host_wiring(g: &mut Guard) {
         } else {
             g.notes.push(format!(
                 "P2 {engine} 宿主侧引用：{}",
-                real.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                real.iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
     }

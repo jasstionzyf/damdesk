@@ -1,3 +1,4 @@
+#![allow(dead_code)] // 测试共享 HTTP 桩：探针方法按用例取用，未用到也保留
 //! 极简 HTTP mock 服务器（测试专用）：单线程 accept 循环 + 可注入 responder。
 //!
 //! 为什么要自己写：D3 的 tag/embed 客户端必须能在「无外网、无 vLLM」的环境里被真实验证
@@ -120,7 +121,7 @@ fn read_request(stream: &mut TcpStream) -> Option<(String, String, String)> {
 fn write_response(stream: &mut TcpStream, status: u16, body: &str) -> std::io::Result<()> {
     let resp = format!(
         "HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.as_bytes().len()
+        body.len()
     );
     stream.write_all(resp.as_bytes())?;
     stream.flush()

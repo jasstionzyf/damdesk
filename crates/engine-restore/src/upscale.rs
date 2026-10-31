@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use ort::session::Session;
 use ort::value::Tensor;
 
-use crate::{RestoreError, REALESR_GENERAL_X4V3, Result};
+use crate::{RestoreError, Result, REALESR_GENERAL_X4V3};
 
 /// 单图输入像素上限（~4MP；4× 后 64MP）。卡内裁决：超限响亮报错，不静默降采样。
 pub const MAX_INPUT_PIXELS: u64 = 4_000_000;
@@ -28,7 +28,9 @@ pub struct Upscaler {
 
 impl std::fmt::Debug for Upscaler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Upscaler").field("input", &self.in_name).finish()
+        f.debug_struct("Upscaler")
+            .field("input", &self.in_name)
+            .finish()
     }
 }
 
@@ -43,29 +45,6 @@ impl Upscaler {
             .min(8);
         let session = Session::builder()
             .and_then(|b| b.with_intra_threads(threads))
-            .and_then(|b| {
-                // 独显高性能档：cuda feature 编译进包 且 检测到独显 → 优先 CUDA EP；
-                // EP 注册失败（驱动/运行时缺失）→ 保留默认 CPU（不炸会话）。
-                #[cfg(feature = "cuda")]
-                {
-                    use ort::execution_providers::ExecutionProviderDispatch;
-                    if matches!(crate::detect_device(), crate::Device::Cuda) {
-                        let eps: Vec<ExecutionProviderDispatch> =
-                            vec![ort::execution_providers::CUDAExecutionProvider::default().build()];
-                        match b.with_execution_providers(eps) {
-                            Ok(b) => Ok(b),
-                            Err(e) => {
-                                eprintln!("engine-restore: CUDA EP 注册失败，回退 CPU: {e}");
-                                Ok(b)
-                            }
-                        }
-                    } else {
-                        Ok(b)
-                    }
-                }
-                #[cfg(not(feature = "cuda"))]
-                Ok(b)
-            })
             .and_then(|b| b.commit_from_file(onnx))
             .map_err(|e| RestoreError::Onnx(format!("{}: {e}", onnx.display())))?;
         let in_name = session
@@ -92,7 +71,11 @@ impl Upscaler {
         if w == 0 || h == 0 || pixels.len() != w * h * 3 {
             return Err(RestoreError::Failed {
                 plugin: "upscale",
-                msg: format!("RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}", w * h * 3, pixels.len()),
+                msg: format!(
+                    "RGB 缓冲 {w}x{h} 期望 {} 字节，实际 {}",
+                    w * h * 3,
+                    pixels.len()
+                ),
             });
         }
         if (w as u64) * (h as u64) > MAX_INPUT_PIXELS {
@@ -218,9 +201,17 @@ mod tests {
     #[test]
     fn output_gain_handles_real_photo_overshoot() {
         assert_eq!(output_gain(0.7992), 255.0, "0..1 兜底导出");
-        assert_eq!(output_gain(1.1584), 255.0, "真实照片过冲仍在 0..1 量纲（旧实现这里翻车）");
+        assert_eq!(
+            output_gain(1.1584),
+            255.0,
+            "真实照片过冲仍在 0..1 量纲（旧实现这里翻车）"
+        );
         assert_eq!(output_gain(1.4999), 255.0, "过冲边界");
         assert_eq!(output_gain(1.5001), 1.0, "0..255 导出");
-        assert_eq!(output_gain(605.63), 1.0, "0..255 导出（实测直喂 0..255 时的峰值）");
+        assert_eq!(
+            output_gain(605.63),
+            1.0,
+            "0..255 导出（实测直喂 0..255 时的峰值）"
+        );
     }
 }

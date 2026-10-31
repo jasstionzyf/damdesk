@@ -57,36 +57,55 @@ pub mod compliance_queue;
 pub mod image_probe;
 // CMP-JOB-FIX-1 — 跳过原因词表（唯一口径：资产状态分支与坏图分支都从这里取前缀，
 // 每条计入 run.skipped 的 task 必须带原因；界面 / E2E 探针同口径）
-pub mod skip_reason;
 /// C5 — compliance `executor: vl` 通道（judge + 打标 + bbox→inpaint 闭环）。
 pub mod compliance_vl;
 /// DM-C1（task）— inpaint 重绘区域三态（explicit/ocr_text/u2net）+ VL bbox × OCR 行框交叉验证。
 pub mod inpaint_region;
+pub mod skip_reason;
 // C8 — 装载期 lint（注册表层：检测器/参数键/插件 id）+ 规则级失败隔离的输入
 pub mod compliance_lint;
 // C9 — 组级判定（per_group）：L2 组级检测器注册表（phash_dup）+ 组键解析
-pub mod compliance_group;
 /// N6e — 宿主侧动作链（一条 job 串多个动作、只落一张工作版本；插件不互相调用）
 pub mod compliance_chain;
+pub mod compliance_group;
 pub use compliance_chain::{
-    chain_budget, run_chain, validate_actions, ChainArtifact, ChainFailure, ChainOutcome, ChainStep,
-    CHAIN_BUDGET_CAP_SECS, CHAIN_DEFAULT_STEP_SECS, CHAIN_MAX_ACTIONS,
+    chain_budget, run_chain, validate_actions, ChainArtifact, ChainFailure, ChainOutcome,
+    ChainStep, CHAIN_BUDGET_CAP_SECS, CHAIN_DEFAULT_STEP_SECS, CHAIN_MAX_ACTIONS,
 };
 pub use compliance_group::{
     GroupDetectorOutput, GroupInput, GroupMemberInput, ResolvedGroups, GROUP_DETECTORS,
 };
 pub use compliance_queue::{
-    compliance_enq, compliance_enq_actions_in_run, compliance_enq_group, compliance_enq_group_in_run,
+    compliance_enq,
+    compliance_enq_actions_in_run,
+    compliance_enq_group,
+    compliance_enq_group_in_run,
     compliance_enq_in_run,
-    compliance_group_stats, compliance_retry_failed, compliance_stats,
-    run_compliance_queue, run_compliance_queue_in_run, run_compliance_queue_par,
+    compliance_group_stats,
+    compliance_retry_failed,
+    compliance_stats,
+    run_compliance_queue,
+    run_compliance_queue_in_run,
+    run_compliance_queue_par,
     run_compliance_queue_par_in_run,
     // IP-K05：执行通道（插件）入口 + 端口
-    run_compliance_queue_par_in_run_engine, run_compliance_queue_with_limit_in_run_engine,
-    PackIdentityInfo, PackJudge, PluginAsset, PluginFailure, PluginOutcome, PluginVerdict,
+    run_compliance_queue_par_in_run_engine,
     run_compliance_queue_with_limit,
-    ComplianceProgress, ComplianceRunReport, ConnFactory, COMPLIANCE_BATCH,
-    COMPLIANCE_GROUP_KIND, COMPLIANCE_KINDS, COMPLIANCE_KIND, VERDICT_SCOPE_ASSET,
+    run_compliance_queue_with_limit_in_run_engine,
+    ComplianceProgress,
+    ComplianceRunReport,
+    ConnFactory,
+    PackIdentityInfo,
+    PackJudge,
+    PluginAsset,
+    PluginFailure,
+    PluginOutcome,
+    PluginVerdict,
+    COMPLIANCE_BATCH,
+    COMPLIANCE_GROUP_KIND,
+    COMPLIANCE_KIND,
+    COMPLIANCE_KINDS,
+    VERDICT_SCOPE_ASSET,
     VERDICT_SCOPE_GROUP,
 };
 pub use compliance_vl::{
@@ -98,9 +117,8 @@ pub use compliance_vl::{
 pub mod exif_queue;
 pub use exif_queue::{
     enqueue_missing as exif_enqueue_missing, enqueue_missing,
-    reset_for_reparse as exif_reset_for_reparse, retry_failed as exif_retry_failed,
-    run_exif_queue, run_exif_queue_with_limit, status as exif_status, ExifQueueStatus,
-    EXIF_BATCH,
+    reset_for_reparse as exif_reset_for_reparse, retry_failed as exif_retry_failed, run_exif_queue,
+    run_exif_queue_with_limit, status as exif_status, ExifQueueStatus, EXIF_BATCH,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -145,7 +163,12 @@ pub struct EmbRunReport {
     pub vectors: Vec<(i64, Vec<f32>)>,
 }
 
+/// SELECT absPath, title_ch, title_en, description 的行形状。
+type AssetCopyRow = (String, Option<String>, Option<String>, Option<String>);
+
 /// 逐图进度回调载荷（上层转 app 事件）。
+// 字段名即 JSON 线上格式（camelCase），非 snake_case 是对外契约，勿改。
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EmbProgress {
     pub assetId: i64,
@@ -344,7 +367,7 @@ pub fn tag_one(
             provider.spec().name.clone(),
         ));
     }
-    let row: Option<(String, Option<String>, Option<String>, Option<String>)> = conn
+    let row: Option<AssetCopyRow> = conn
         .query_row(
             "SELECT absPath, title_ch, title_en, description FROM assets
              WHERE assetId = ?1 AND deleted = 0",

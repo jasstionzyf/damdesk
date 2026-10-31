@@ -18,8 +18,13 @@ async fn get(app: &axum::Router, uri: &str) -> (u16, serde_json::Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let body = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null))
+    let body = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 async fn post(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_json::Value) {
@@ -36,8 +41,13 @@ async fn post(app: &axum::Router, uri: &str, body: &str) -> (u16, serde_json::Va
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
-    (status, serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null))
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&raw).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 /// 独立 data_dir（空库：一个资产都没有 —— 本卡不跑语料）。
@@ -140,7 +150,10 @@ async fn plugin_mode_enqueues_assets_and_registers_pack() {
     assert_eq!(res["engine"], "plugin", "{res}");
     assert_eq!(res["queuedAssets"], 1, "{res}");
     assert_eq!(res["queuedGroups"], 0, "插件模式不排组级 job：{res}");
-    assert_eq!(res["groupSkipped"], true, "scope=both 时组级被跳过要明说：{res}");
+    assert_eq!(
+        res["groupSkipped"], true,
+        "scope=both 时组级被跳过要明说：{res}"
+    );
     assert!(res["runId"].as_i64().unwrap_or(0) > 0, "{res}");
     // 0026：包身份登记（current=1 且 manifest_hash 是 sha256 全文）
     let conn = core_storage::open(&dir.join("dam.db")).unwrap();
@@ -150,10 +163,10 @@ async fn plugin_mode_enqueues_assets_and_registers_pack() {
         .current("com.soujpg.pack.ecommerce")
         .unwrap()
         .expect("插件包必须登记进 packs 账本");
-    assert_eq!(cur.version.len() > 0, true);
+    assert!(!cur.version.is_empty());
     assert_eq!(cur.manifest_hash.len(), 64, "manifest_hash = sha256 全文");
     assert_eq!(cur.api_version, "1.1");
     assert_eq!(cur.signature_status, "unsigned");
-    assert_eq!(cur.current, true);
+    assert!(cur.current);
     let _ = std::fs::remove_dir_all(&dir);
 }

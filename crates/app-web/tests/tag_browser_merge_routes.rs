@@ -72,10 +72,7 @@ fn seed(data_dir: &std::path::Path) {
 }
 
 fn fresh_dir(tag: &str) -> std::path::PathBuf {
-    let d = std::env::temp_dir().join(format!(
-        "dam-task-{tag}-{}",
-        std::process::id()
-    ));
+    let d = std::env::temp_dir().join(format!("dam-task-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
@@ -110,7 +107,9 @@ async fn get(app: &axum::Router, uri: &str) -> (StatusCode, Value) {
         .await
         .unwrap();
     let status = res.status();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -128,7 +127,9 @@ async fn post(app: &axum::Router, uri: &str, body: Value) -> (StatusCode, Value)
         .await
         .unwrap();
     let status = res.status();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -164,7 +165,11 @@ async fn tag_groups_values_match_key_page_total() {
     // 裸值组 key='' 必须存在（Sunset；旧标签 只在回收站 → 不计）
     assert_eq!(group_of(&g, ""), 1, "裸值组只算 Sunset: {g}");
     assert_eq!(group_of(&g, "颜色"), 3, "{g}");
-    assert_eq!(group_of(&g, "尺寸"), 2, "尺寸-旧款 只在回收站，不进值数: {g}");
+    assert_eq!(
+        group_of(&g, "尺寸"),
+        2,
+        "尺寸-旧款 只在回收站，不进值数: {g}"
+    );
     assert_eq!(group_of(&g, "风格"), 1, "{g}");
     assert_eq!(g["total"], json!(7), "在库值共 7 个: {g}");
 
@@ -172,7 +177,11 @@ async fn tag_groups_values_match_key_page_total() {
     for (key, want) in [("尺寸", 2), ("颜色", 3), ("风格", 1)] {
         let (code, v) = get(&app, &format!("/api/library/tags?page=1&key={}", enc(key))).await;
         assert_eq!(code, StatusCode::OK, "{v}");
-        assert_eq!(v["total"], json!(want), "key={key} 的 total 与左栏值数一致: {v}");
+        assert_eq!(
+            v["total"],
+            json!(want),
+            "key={key} 的 total 与左栏值数一致: {v}"
+        );
         assert_eq!(values_of(&v).len() as i64, want, "{v}");
     }
     // 裸值组：keyless 页的 total 与左栏 '' 组一致
@@ -191,7 +200,11 @@ async fn page_mode_requires_a_scope() {
     seed(&dir);
     let app = app_of(&dir);
     let (code, v) = get(&app, "/api/library/tags?page=1").await;
-    assert_eq!(code, StatusCode::BAD_REQUEST, "必须拒绝无范围的全量请求: {v}");
+    assert_eq!(
+        code,
+        StatusCode::BAD_REQUEST,
+        "必须拒绝无范围的全量请求: {v}"
+    );
     assert!(v["error"].as_str().unwrap().contains("key"), "{v}");
 
     // 不相交（key=尺寸 × prefix=Sunset）→ 空集不报错
@@ -294,7 +307,11 @@ async fn merge_sources_into_target_with_dedup_and_audit() {
     .await;
     assert_eq!(after["total"], json!(1), "旧值从列表消失: {after}");
     assert_eq!(values_of(&after), vec!["颜色-白色"]);
-    assert_eq!(after["items"][0]["count"], json!(4), "目标值承接全部资产: {after}");
+    assert_eq!(
+        after["items"][0]["count"],
+        json!(4),
+        "目标值承接全部资产: {after}"
+    );
 
     // 资产上的标签真的变成目标值（不是只改列表）
     let conn = core_storage::open(&dir.join("dam.db")).unwrap();
@@ -469,7 +486,10 @@ async fn delete_refuses_values_with_assets() {
     .await;
     assert_eq!(code, StatusCode::BAD_REQUEST, "{v}");
     let msg = v["error"].as_str().unwrap();
-    assert!(msg.contains("颜色-白色") && msg.contains('2'), "可读原因要带值和张数: {msg}");
+    assert!(
+        msg.contains("颜色-白色") && msg.contains('2'),
+        "可读原因要带值和张数: {msg}"
+    );
     assert!(msg.contains("合并"), "要提示先合并: {msg}");
 
     // 混合请求（一个能删一个不能）→ 整批拒绝，不能半删
@@ -482,7 +502,11 @@ async fn delete_refuses_values_with_assets() {
     assert_eq!(code, StatusCode::BAD_REQUEST, "{v}");
     let conn = core_storage::open(&dir.join("dam.db")).unwrap();
     let still: i64 = conn
-        .query_row("SELECT COUNT(*) FROM tag WHERE value='旧标签'", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM tag WHERE value='旧标签'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(still, 1, "整批拒绝时不能半删");
 

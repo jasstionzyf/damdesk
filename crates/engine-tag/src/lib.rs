@@ -112,11 +112,7 @@ pub trait TagProvider: Send + Sync {
     /// 统一标签通道（2026-10-19 裁决）：inline prompt → 标签值**数组**。
     /// 默认实现走旧单值通道 [`Self::tag_inline`] + [`parse_inline_values`]
     /// （JSON 数组与旧分隔符串都能吃）；provider 直出数组时覆盖本方法。
-    fn tag_inline_values(
-        &self,
-        path: &std::path::Path,
-        user_prompt: &str,
-    ) -> Result<Vec<String>> {
+    fn tag_inline_values(&self, path: &std::path::Path, user_prompt: &str) -> Result<Vec<String>> {
         let s = self.tag_inline(path, user_prompt)?;
         Ok(parse_inline_values(&s))
     }
@@ -185,9 +181,9 @@ pub fn first_balanced_json(s: &str) -> Option<&str> {
             return Some(cand);
         }
         // 该配平段不是合法 JSON（前导闲话里凑巧配平的 {..}）：从其后找下一个 '{'
-        match s[e..].find('{') {
-            Some(rel) => start = e + rel,
-            None => return None,
+        {
+            let rel = s[e..].find('{')?;
+            start = e + rel
         }
     }
 }
@@ -233,9 +229,9 @@ pub fn parse_inline_values(text: &str) -> Vec<String> {
         return Vec::new();
     }
     let mut out: Vec<String> = Vec::new();
-    let mut push = |v: &str, out: &mut Vec<String>| {
+    let push = |v: &str, out: &mut Vec<String>| {
         if let Some(n) = normalize_inline_value(v) {
-            if !out.iter().any(|x| *x == n) {
+            if !out.contains(&n) {
                 out.push(n);
             }
         }
@@ -405,7 +401,10 @@ pub fn parse_tagging_output_ex(text: &str) -> std::result::Result<TagParse, TagP
     };
     let detail = match &intact_err {
         Some(e) => format!("json: {e}; raw={}", tail_snippet(slice, 600)),
-        None => format!("no json end (output cut off); raw={}", tail_snippet(slice, 600)),
+        None => format!(
+            "no json end (output cut off); raw={}",
+            tail_snippet(slice, 600)
+        ),
     };
     Err(if truncated {
         TagParseError::Truncated(detail)
@@ -513,7 +512,6 @@ fn repair_truncated_json(slice: &str) -> Option<String> {
     None
 }
 
-
 /// 结构化解析：tags 支持 [{"name","score"}] 与 ["纯字符串"] 两种写法。
 fn from_json(v: &serde_json::Value) -> TaggingOutput {
     let s = |k: &str| {
@@ -608,6 +606,7 @@ fn strip_code_fence(text: &str) -> String {
 /// 2. 只有闭合 `</think>`（qwen3.5-4b 无 reasoning parser 实测：思考文本
 ///    直接开头、仅以 `</think>` 收尾）→ 剥离闭合标签之前的整段；
 /// 3. 只有未闭合 `<think>`（截断输出）→ 之后整段按思考处理。
+///
 /// reasoning_content 类字段本就不读取（chat_content 只取 message.content）。
 pub fn strip_thinking(content: &str) -> String {
     let lower = content.to_lowercase();
@@ -667,7 +666,10 @@ mod tests {
         // 普通回复原样（trim）
         assert_eq!(strip_thinking("OK"), "OK");
         // 思考段在前，最终回复在后（qwen3.5-4b 实测形态）
-        assert_eq!(strip_thinking("<think>\n分析：用户要 OK。\n</think>\nOK"), "OK");
+        assert_eq!(
+            strip_thinking("<think>\n分析：用户要 OK。\n</think>\nOK"),
+            "OK"
+        );
         // 多行 + 大写标签
         assert_eq!(
             strip_thinking("<THINK>long\nreasoning</THINK>final answer"),
@@ -677,7 +679,10 @@ mod tests {
         assert_eq!(strip_thinking("<think>truncated"), "");
         // 孤立闭合 </think>（qwen3.5-4b 实测：无 reasoning parser，思考正文
         // 直接开头，仅以 </think> 收尾）→ 之前整段剥离
-        assert_eq!(strip_thinking("Thinking Process:\n1. analyze\n</think>\n\nOK"), "OK");
+        assert_eq!(
+            strip_thinking("Thinking Process:\n1. analyze\n</think>\n\nOK"),
+            "OK"
+        );
         // 无标签的普通多行回复不受影响
         assert_eq!(strip_thinking("line1\nline2"), "line1\nline2");
     }
@@ -696,13 +701,17 @@ mod tests {
                 preprocess: Default::default(),
             }
         }
-        let mut cfg = TagSettings::default();
-        cfg.provider = core_config::TAG_PROVIDER_DAMAI.into();
+        let cfg = TagSettings {
+            provider: core_config::TAG_PROVIDER_DAMAI.into(),
+            ..Default::default()
+        };
         let p = build_provider(spec(), cfg);
         assert_eq!(p.spec().name, "openai-compat-tagger");
         // 非 damai（含未知/老配置）一律 openai_compat
-        let mut cfg2 = TagSettings::default();
-        cfg2.provider = "unknown-legacy".into();
+        let cfg2 = TagSettings {
+            provider: "unknown-legacy".into(),
+            ..Default::default()
+        };
         let _p2 = build_provider(spec(), cfg2);
         let p3 = build_provider(
             spec(),
@@ -810,7 +819,11 @@ mod tests {
         let cut = r#"{"title_ch":"猫","description":"窗台上的猫","tags":[{"name":"猫","score":0.9},{"name":"室内","score":0.8},{"na"#;
         let parsed = parse_tagging_output_ex(cut).expect("半截 tag 应能补齐");
         assert!(parsed.repaired);
-        assert_eq!(parsed.output.tags.len(), 2, "半截 tag 丢弃，完整的前两个保留");
+        assert_eq!(
+            parsed.output.tags.len(),
+            2,
+            "半截 tag 丢弃，完整的前两个保留"
+        );
         assert_eq!(parsed.output.title_ch, "猫");
         assert_eq!(parsed.output.description, "窗台上的猫");
 
@@ -855,7 +868,10 @@ mod tests {
         let cfg = TagSettings::default();
         assert_eq!(cfg.effective_max_tokens(), TagSettings::DEFAULT_MAX_TOKENS);
         assert_eq!(cfg.max_tokens_source(), "default");
-        assert_eq!(cfg.max_tokens_label(), format!("{}（默认）", TagSettings::DEFAULT_MAX_TOKENS));
+        assert_eq!(
+            cfg.max_tokens_label(),
+            format!("{}（默认）", TagSettings::DEFAULT_MAX_TOKENS)
+        );
         // 0 = 未设置 → 默认值；显式改小 → 标记为设置页覆盖
         let zero = TagSettings {
             max_tokens: 0,
@@ -913,11 +929,10 @@ mod tests {
     fn parse_inline_values_eats_json_array_with_normalization() {
         // 契约形态：JSON 字符串数组；值带空白/句末标点 → 归一；重复 → 去重
         assert_eq!(
-            parse_inline_values(r#"["MacBook Pro 13寸", "海尔 冰箱 501L。", "MacBook   Pro 13寸"]"#),
-            vec![
-                "MacBook_Pro_13寸".to_string(),
-                "海尔_冰箱_501L".to_string()
-            ]
+            parse_inline_values(
+                r#"["MacBook Pro 13寸", "海尔 冰箱 501L。", "MacBook   Pro 13寸"]"#
+            ),
+            vec!["MacBook_Pro_13寸".to_string(), "海尔_冰箱_501L".to_string()]
         );
         // 围栏包裹 + 前后废话都能抠出数组
         assert_eq!(
@@ -946,13 +961,14 @@ mod tests {
         // 纯文本兜底：分号/换行拆分
         assert_eq!(
             parse_inline_values("海边日落; 沙滩\n山顶。"),
-            vec!["海边日落".to_string(), "沙滩".to_string(), "山顶".to_string()]
+            vec![
+                "海边日落".to_string(),
+                "沙滩".to_string(),
+                "山顶".to_string()
+            ]
         );
         // 单值纯文本（旧 tag_inline 通道的常规返回）
-        assert_eq!(
-            parse_inline_values("\"暖橙\""),
-            vec!["暖橙".to_string()]
-        );
+        assert_eq!(parse_inline_values("\"暖橙\""), vec!["暖橙".to_string()]);
         // 全是无效值 → 空
         assert!(parse_inline_values("  ;;  ").is_empty());
         // 旧通道的空回（damai schema {"value": ""}）→ 空，不把 JSON 文本拆成碎片

@@ -69,7 +69,10 @@ const NEGS: &[&str] = &[
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let models = PathBuf::from(args.next().unwrap_or("/models/siglip2-base-p224-onnx".into()));
+    let models = PathBuf::from(
+        args.next()
+            .unwrap_or("/models/siglip2-base-p224-onnx".into()),
+    );
     let corpus = PathBuf::from(args.next().unwrap_or("/corpus".into()));
 
     let spec = core_config::load_registry(None)
@@ -81,7 +84,8 @@ fn main() {
     prov.load().unwrap();
 
     let mj: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(corpus.join("manifest.json")).unwrap()).unwrap();
+        serde_json::from_str(&std::fs::read_to_string(corpus.join("manifest.json")).unwrap())
+            .unwrap();
     let files: Vec<String> = mj["items"]
         .as_array()
         .unwrap()
@@ -251,5 +255,5 @@ fn main() {
 
 /// 查询序号奇偶 = 真值表里「先中文后英文」的排列（0=中文）。
 fn q_is_zh(qi: usize) -> bool {
-    qi % 2 == 0 && qi < TRUTH.len() * 2
+    qi.is_multiple_of(2) && qi < TRUTH.len() * 2
 }

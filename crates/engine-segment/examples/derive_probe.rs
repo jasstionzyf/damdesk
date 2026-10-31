@@ -50,7 +50,11 @@ fn main() {
         let win = s.crop_window(0.75).map(|(w_, _)| w_);
         // A) 只抬尺寸（不裁）→ 测占比：检验「缩放是否改变占比语义」
         let sc = dir.join(format!("sc{i}.jpg"));
-        let r_scaled = if scale_min700(path, &sc).is_ok() { measure(&sc) } else { -2.0 };
+        let r_scaled = if scale_min700(path, &sc).is_ok() {
+            measure(&sc)
+        } else {
+            -2.0
+        };
         // B) 裁（原图网格窗）→ 抬尺寸 → 测占比：与 c5_e2e 主组同链
         let r_crop_scaled = match win {
             Some(w0) => {

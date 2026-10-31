@@ -105,7 +105,9 @@ mod tests {
             !is_skip(&format!("{PREFIX_UNREADABLE} permission denied")),
             "读不出是失败，不是跳过"
         );
-        assert!(!is_skip("compliance: rule R0 vl: io: No such file or directory"));
+        assert!(!is_skip(
+            "compliance: rule R0 vl: io: No such file or directory"
+        ));
         assert!(!is_skip(""));
     }
 

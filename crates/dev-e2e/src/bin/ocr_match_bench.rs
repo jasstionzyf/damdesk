@@ -19,18 +19,31 @@
 
 use std::time::Instant;
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 /// 查询词（真实工单/票据场景词）。
-const QUERIES: &[&str] = &["授权书", "发票号", "数字资产", "报销", "合同编号", "Model Release"];
+const QUERIES: &[&str] = &[
+    "授权书",
+    "发票号",
+    "数字资产",
+    "报销",
+    "合同编号",
+    "Model Release",
+];
 
 fn ocr_text_for(i: i64, scrub: bool) -> String {
     // 真实语料：填充词撞关键词 2-gram（授权 / 资产 / 编号…）
     // 净化语料：填充词刻意避开所有查询 2-gram，只在「关键词行」出现查询词
     let (base, filler) = if scrub {
-        ("图库平台 档案 DAM-{:06}", "模型声明 拍摄日期 摄影师 张伟 影像 号 IMG-{:06}-{}")
+        (
+            "图库平台 档案 DAM-{:06}",
+            "模型声明 拍摄日期 摄影师 张伟 影像 号 IMG-{:06}-{}",
+        )
     } else {
-        ("数字资产管理平台 资产编号 DAM-{:06}", "模型授权 拍摄日期 摄影师 张伟 编号 IMG-{:06}-{}")
+        (
+            "数字资产管理平台 资产编号 DAM-{:06}",
+            "模型授权 拍摄日期 摄影师 张伟 编号 IMG-{:06}-{}",
+        )
     };
     let mut s = String::with_capacity(1600);
     s.push_str(&format!("{}\n", base.replace("{:06}", &format!("{i:06}"))));
@@ -139,7 +152,8 @@ fn stats(samples: &[f64]) -> (f64, f64, f64) {
 }
 
 fn open_lib(name: &str) -> Connection {
-    let dir = std::env::temp_dir().join(format!("dam-ocrmatch-bench-{}-{name}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("dam-ocrmatch-bench-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     core_storage::open(&dir.join("dam.db")).unwrap()
@@ -153,10 +167,16 @@ fn main() {
 
     // ---------- A) 真实语料 ----------
     let a = open_lib("real");
-    println!("== A) 真实语料：{n} 张资产（{:.0}% 带文本，≈1.5KB/篇）", frac * 100.0);
+    println!(
+        "== A) 真实语料：{n} 张资产（{:.0}% 带文本，≈1.5KB/篇）",
+        frac * 100.0
+    );
     let t0 = Instant::now();
     let with_text = build_lib(&a, n, frac, false);
-    println!("   建库+建索引 {:.1}s；带文本 {with_text}", t0.elapsed().as_secs_f64());
+    println!(
+        "   建库+建索引 {:.1}s；带文本 {with_text}",
+        t0.elapsed().as_secs_f64()
+    );
     let indexed = core_storage::ocr_index::indexed_count(&a).unwrap();
     let dirty = core_storage::ocr_index::dirty_count(&a).unwrap();
     println!("   索引行 {indexed} / dirty {dirty}");
@@ -179,7 +199,10 @@ fn main() {
     for q in QUERIES {
         let tokens = legacy_tokens(q);
         let terms = core_storage::ocr_index::query_terms(q);
-        assert!(!tokens.is_empty() && !terms.is_empty(), "查询词应产出 token：{q}");
+        assert!(
+            !tokens.is_empty() && !terms.is_empty(),
+            "查询词应产出 token：{q}"
+        );
         let old = old_like_scan(&a, &tokens);
         let new_all = core_storage::ocr_index::match_counts(&a, &terms, 1_000_000).unwrap();
         let new_capped = core_storage::ocr_index::match_counts(&a, &terms, cap).unwrap();
@@ -220,7 +243,10 @@ fn main() {
             widened.push((q, old.len(), new_ids.len(), why));
         }
     }
-    assert!(!widened.is_empty(), "真实语料上应有可量化的 2-gram 变宽样本（口径变更必须可见）");
+    assert!(
+        !widened.is_empty(),
+        "真实语料上应有可量化的 2-gram 变宽样本（口径变更必须可见）"
+    );
 
     println!("\n== A) 计时（旧 = 全表扫描 + 逐行 LIKE；新 = FTS5 倒排 + 生产 cap）");
     println!(
@@ -236,7 +262,10 @@ fn main() {
             .iter()
             .map(|t| core_storage::ocr_index::term_match_count(&a, t).unwrap())
             .collect();
-        let branch = if face.iter().any(|c| *c as usize > core_storage::ocr_index::RANK_BUDGET) {
+        let branch = if face
+            .iter()
+            .any(|c| *c as usize > core_storage::ocr_index::RANK_BUDGET)
+        {
             "rowid 序（超 RANK_BUDGET）"
         } else {
             "rank（bm25 重要性序）"
@@ -318,8 +347,19 @@ fn main() {
         let tokens = legacy_tokens(q);
         let terms = core_storage::ocr_index::query_terms(q);
         let old = old_like_scan(&b, &tokens);
-        let new_ids = ids_of(&core_storage::ocr_index::match_counts(&b, &terms, 1_000_000).unwrap());
-        println!("{:<14} {:>10} {:>10} | {}", q, old.len(), new_ids.len(), if old == new_ids { "完全一致 ✓" } else { "不一致 ✗" });
+        let new_ids =
+            ids_of(&core_storage::ocr_index::match_counts(&b, &terms, 1_000_000).unwrap());
+        println!(
+            "{:<14} {:>10} {:>10} | {}",
+            q,
+            old.len(),
+            new_ids.len(),
+            if old == new_ids {
+                "完全一致 ✓"
+            } else {
+                "不一致 ✗"
+            }
+        );
         assert_eq!(old, new_ids, "净化语料上命中集必须完全一致：{q}");
     }
 

@@ -120,7 +120,10 @@ fn batch_id_stays_with_original_import() {
     std::fs::copy(&a, other.join("a-copy.png")).unwrap();
     let b2 = create_batch(&conn, &other, "reference", 1).unwrap();
     let out2 = run_batch(&conn, b2, None, &thumbs, |_| Ok(())).unwrap();
-    assert_eq!(out2.duplicates, 1, "同内容复制品判 Duplicate（不新增资产行）");
+    assert_eq!(
+        out2.duplicates, 1,
+        "同内容复制品判 Duplicate（不新增资产行）"
+    );
     let assets: i64 = conn
         .query_row("SELECT COUNT(*) FROM assets", [], |r| r.get(0))
         .unwrap();

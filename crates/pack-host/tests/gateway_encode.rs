@@ -28,7 +28,8 @@ use serde_json::{json, Value};
 static ENV_ONCE: Once = Once::new();
 
 fn use_empty_models_root() {
-    let root = std::env::temp_dir().join(format!("pack-host-empty-models-enc-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("pack-host-empty-models-enc-{}", std::process::id()));
     std::fs::create_dir_all(root.join("models")).unwrap();
     ENV_ONCE.call_once(|| {
         std::env::set_var("DAM_MODELS_ROOT", &root);
@@ -79,8 +80,8 @@ fn parse_response(raw: &[u8]) -> Response {
         .and_then(|l| l.split_whitespace().nth(1))
         .and_then(|s| s.parse().ok())
         .unwrap_or_else(|| panic!("应答状态行不合法：{head:?}"));
-    let body: Value = serde_json::from_str(body)
-        .unwrap_or_else(|e| panic!("应答体不是 JSON（{e}）：{body:?}"));
+    let body: Value =
+        serde_json::from_str(body).unwrap_or_else(|e| panic!("应答体不是 JSON（{e}）：{body:?}"));
     Response { status, body }
 }
 
@@ -260,7 +261,10 @@ fn encode_format_field_must_agree_with_out_extension() {
     assert_eq!(r.status, 400, "{}", r.body);
     assert_eq!(r.body["error"], "invalid_params");
     let detail = r.body["detail"].as_str().unwrap_or("");
-    assert!(detail.contains("不一致"), "detail 必须说清哪里不一致：{detail}");
+    assert!(
+        detail.contains("不一致"),
+        "detail 必须说清哪里不一致：{detail}"
+    );
     assert!(!out.exists(), "参数不合法时不许留下半成品");
 
     // 未知格式 → 400
@@ -284,8 +288,8 @@ fn encode_quality_affects_lossy_and_is_reported_for_lossless() {
     let gw = start_gateway(&work);
     // 造一张有噪点的图（纯色图在 jpeg 下字节几乎不随 q 变，量不出单调）
     let mut rgb = vec![0u8; 400 * 300 * 3];
-    for i in 0..rgb.len() {
-        rgb[i] = ((i * 37 + i / 7) % 256) as u8;
+    for (i, b) in rgb.iter_mut().enumerate() {
+        *b = ((i * 37 + i / 7) % 256) as u8;
     }
     let src = tmp.path().join("noise.png");
     core_media::encode_rgb_to(400, 300, &rgb, &src, None).unwrap();
@@ -299,7 +303,10 @@ fn encode_quality_affects_lossy_and_is_reported_for_lossless() {
     );
     assert_eq!(r90.status, 200, "{}", r90.body);
     assert_eq!(r90.body["quality"], 90);
-    assert!(r90.body["quality_applied"].as_bool().unwrap(), "jpeg 的 quality 必须真生效");
+    assert!(
+        r90.body["quality_applied"].as_bool().unwrap(),
+        "jpeg 的 quality 必须真生效"
+    );
     let r30 = post(
         &gw,
         "/op/encode",
@@ -321,7 +328,10 @@ fn encode_quality_affects_lossy_and_is_reported_for_lossless() {
     );
     assert_eq!(r.status, 200, "{}", r.body);
     assert_eq!(r.body["quality"], 30, "请求值原样回显");
-    assert!(!r.body["quality_applied"].as_bool().unwrap(), "png 是无损容器");
+    assert!(
+        !r.body["quality_applied"].as_bool().unwrap(),
+        "png 是无损容器"
+    );
 
     // quality 越界/类型错 → 400
     for bad in [json!(0), json!(101), json!("high"), json!(50.5)] {
@@ -347,7 +357,10 @@ fn encode_keeps_alpha_for_png_and_flattens_for_jpeg() {
     let src = make_rgba_png(tmp.path(), "grad_200x120.png", 200, 120);
     let (sw, sh, src_px) = core_media::rgba8(&src).unwrap();
     assert_eq!((sw, sh), (200, 120));
-    assert!(core_media::has_transparency(&src_px), "夹具必须真的带透明像素");
+    assert!(
+        core_media::has_transparency(&src_px),
+        "夹具必须真的带透明像素"
+    );
 
     // png：alpha 通道**逐字节**一致
     let out_png = work.join("keep.png");
@@ -361,9 +374,12 @@ fn encode_keeps_alpha_for_png_and_flattens_for_jpeg() {
     assert_eq!(r.body["alpha"], "kept", "png 必须保留 alpha");
     let (ow, oh, out_px) = core_media::rgba8(&out_png).unwrap();
     assert_eq!((ow, oh), (200, 120));
-    let alpha_src: Vec<u8> = src_px.chunks_exact(4).map(|p| p[3]).collect();
-    let alpha_out: Vec<u8> = out_px.chunks_exact(4).map(|p| p[3]).collect();
-    assert_eq!(alpha_src, alpha_out, "png 输出的 alpha 通道必须与源逐像素一致");
+    let alpha_src: Vec<u8> = src_px.as_chunks::<4>().0.iter().map(|p| p[3]).collect();
+    let alpha_out: Vec<u8> = out_px.as_chunks::<4>().0.iter().map(|p| p[3]).collect();
+    assert_eq!(
+        alpha_src, alpha_out,
+        "png 输出的 alpha 通道必须与源逐像素一致"
+    );
 
     // jpeg：无 alpha 容器 → 按 background 合成；透明像素必须变成背景色
     let out_jpg = work.join("flat.jpg");
@@ -379,7 +395,7 @@ fn encode_keeps_alpha_for_png_and_flattens_for_jpeg() {
     let (jw, jh, jpg_px) = core_media::rgba8(&out_jpg).unwrap();
     assert_eq!((jw, jh), (200, 120));
     assert!(
-        jpg_px.chunks_exact(4).all(|p| p[3] == 255),
+        jpg_px.as_chunks::<4>().0.iter().all(|p| p[3] == 255),
         "jpeg 产物解码回来不应再有透明像素"
     );
     // 源图最左一列 alpha=0（纯透明）→ 合成后应≈背景色（jpeg 有量化误差，容差 12）
@@ -450,7 +466,10 @@ fn encode_applies_exif_orientation() {
     );
     assert_eq!(r.status, 200, "{}", r.body);
     assert_eq!(r.body["orientation"], 1);
-    assert_eq!((r.body["width"].as_i64(), r.body["height"].as_i64()), (Some(320), Some(180)));
+    assert_eq!(
+        (r.body["width"].as_i64(), r.body["height"].as_i64()),
+        (Some(320), Some(180))
+    );
 
     // 没有 EXIF 的图：orientation=1（不假装摆正过）
     let plain = make_png(tmp.path(), "plain.png", 40, 30);
@@ -483,7 +502,10 @@ fn encode_rejects_unsafe_or_unreadable_requests() {
     );
     assert_eq!(r.status, 400, "{}", r.body);
     assert!(
-        r.body["detail"].as_str().unwrap_or("").contains("out 不能等于"),
+        r.body["detail"]
+            .as_str()
+            .unwrap_or("")
+            .contains("out 不能等于"),
         "必须点名禁止原地重编码：{}",
         r.body
     );
@@ -532,10 +554,8 @@ fn encode_rejects_unsafe_or_unreadable_requests() {
 
     // 未声明 op.geometric → 403 capability_missing
     use_empty_models_root();
-    let narrow = Gateway::start(
-        GatewayConfig::new(vec!["io.read".into()], &work).with_token("t2"),
-    )
-    .unwrap();
+    let narrow =
+        Gateway::start(GatewayConfig::new(vec!["io.read".into()], &work).with_token("t2")).unwrap();
     let r = send(
         &narrow,
         "POST",

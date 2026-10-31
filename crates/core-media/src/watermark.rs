@@ -9,9 +9,7 @@
 
 use std::path::Path;
 
-use ab_glyph::{
-    Font as _, FontArc, Glyph, Point, PxScale, PxScaleFont, ScaleFont as _,
-};
+use ab_glyph::{Font as _, FontArc, Glyph, Point, PxScale, PxScaleFont, ScaleFont as _};
 
 use crate::{encode_rgb_to, MediaError, Result};
 
@@ -282,7 +280,10 @@ mod tests {
             assert_eq!((w, h), (200, 100));
             let (colored, total) = count_colored(&dest);
             assert!(colored > 30, "{pos}: 水印未落墨 colored={colored}");
-            assert!(colored * 10 < total, "{pos}: 水印覆盖异常大 colored={colored}/{total}");
+            assert!(
+                colored * 10 < total,
+                "{pos}: 水印覆盖异常大 colored={colored}/{total}"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

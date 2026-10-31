@@ -32,7 +32,11 @@ pub const EXIF_BATCH: i64 = 64;
 /// 副作用与边界：清空期间该批图的 exif 结论短暂为空（重解析同一事务序列内立刻重建）；
 /// 只对 `mediaType='image' AND deleted=0 AND missing=0` 生效；**必须由显式动作触发**
 /// （`POST /api/exif/backfill {"force": true}`），不做隐式自动重跑（万级库不该被设置改动全量重扫）。
-pub fn reset_for_reparse(conn: &Connection, from_id: Option<i64>, to_id: Option<i64>) -> Result<usize> {
+pub fn reset_for_reparse(
+    conn: &Connection,
+    from_id: Option<i64>,
+    to_id: Option<i64>,
+) -> Result<usize> {
     let from = from_id.unwrap_or(0);
     let to = to_id.unwrap_or(i64::MAX);
     conn.execute(
@@ -52,7 +56,11 @@ pub fn reset_for_reparse(conn: &Connection, from_id: Option<i64>, to_id: Option<
 }
 
 /// 入队存量待解析图片（id 升序区间可选）。返回新增 job 数。
-pub fn enqueue_missing(conn: &Connection, from_id: Option<i64>, to_id: Option<i64>) -> Result<usize> {
+pub fn enqueue_missing(
+    conn: &Connection,
+    from_id: Option<i64>,
+    to_id: Option<i64>,
+) -> Result<usize> {
     let from = from_id.unwrap_or(0);
     let to = to_id.unwrap_or(i64::MAX);
     let n = conn.execute(
@@ -112,7 +120,13 @@ pub fn status(conn: &Connection) -> Result<ExifQueueStatus> {
             rusqlite::Error::QueryReturnedNoRows => Ok(None),
             other => Err(other),
         })?;
-    Ok(ExifQueueStatus { done, failed, pending, remaining, last_error })
+    Ok(ExifQueueStatus {
+        done,
+        failed,
+        pending,
+        remaining,
+        last_error,
+    })
 }
 
 /// 跑回填队列（不限量）。cancel 置位时未处理 job 回 pending，断点续跑。
@@ -235,7 +249,7 @@ fn exif_one(conn: &Connection, asset_id: i64) -> Result<ExifOne> {
                 ))
             },
         )
-        .map_err(|e| PipelineError::Sqlite(e))?;
+        .map_err(PipelineError::Sqlite)?;
     if deleted != 0 || missing != 0 || media_type != "image" {
         return Ok(ExifOne::Skipped);
     }
@@ -250,18 +264,17 @@ fn exif_one(conn: &Connection, asset_id: i64) -> Result<ExifOne> {
     if !std::path::Path::new(&abs_path).is_file() {
         return Err(PipelineError::Other(format!("文件失联: {abs_path}")));
     }
-    let settings: core_config::ExifSettings = core_storage::settings::get_or_default(
-        conn,
-        core_config::EXIF_SETTINGS_KEY,
-    )
-    .unwrap_or_default();
+    let settings: core_config::ExifSettings =
+        core_storage::settings::get_or_default(conn, core_config::EXIF_SETTINGS_KEY)
+            .unwrap_or_default();
     // 回填是显式动作：无视 parse_on_import；GPS 档位照设置生效
     let cfg = core_config::ExifSettings {
         parse_on_import: true,
         gps: settings.gps,
         gps_provider: settings.gps_provider,
     };
-    match engine_exif::apply_for_asset(conn, asset_id, std::path::Path::new(&abs_path), &ext, &cfg) {
+    match engine_exif::apply_for_asset(conn, asset_id, std::path::Path::new(&abs_path), &ext, &cfg)
+    {
         Ok(engine_exif::ExifApplyOutcome::Parsed) => {
             let (w, h) = core_storage::exif_meta::primary_dims(conn, asset_id)
                 .map_err(PipelineError::Storage)?;

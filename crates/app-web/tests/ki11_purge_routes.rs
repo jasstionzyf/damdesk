@@ -25,6 +25,7 @@ const PNG: &[u8] = &[
 ];
 
 struct Fx {
+    #[allow(dead_code)] // 保活临时目录（Drop 清理锚点）；读侧走函数参数
     data_dir: PathBuf,
     copyin_abs: PathBuf,
     reference_abs: PathBuf,
@@ -105,7 +106,9 @@ async fn post(app: &axum::Router, uri: &str, body: Value) -> (u16, Value) {
         .await
         .unwrap();
     let status = res.status().as_u16();
-    let raw = axum::body::to_bytes(res.into_body(), 1 << 22).await.unwrap();
+    let raw = axum::body::to_bytes(res.into_body(), 1 << 22)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&raw).unwrap_or(Value::Null))
 }
 
@@ -133,7 +136,9 @@ async fn purge_route_end_to_end_in_desktop_form() {
         )
         .await
         .unwrap();
-    let caps_raw = axum::body::to_bytes(caps.into_body(), 1 << 20).await.unwrap();
+    let caps_raw = axum::body::to_bytes(caps.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let caps: Value = serde_json::from_slice(&caps_raw).unwrap();
     assert_eq!(
         caps["features"]["physicalDelete"], true,
@@ -141,12 +146,7 @@ async fn purge_route_end_to_end_in_desktop_form() {
     );
 
     // 1) 3 号未软删 + 999 不存在 → 只删 1/2，其余如实 skipped
-    let (st, body) = post(
-        &app,
-        "/api/dedup/purge",
-        json!({"ids": [1, 2, 3, 999]}),
-    )
-    .await;
+    let (st, body) = post(&app, "/api/dedup/purge", json!({"ids": [1, 2, 3, 999]})).await;
     assert_eq!(st, 200, "purge 应 200: {body}");
     assert_eq!(body["ok"], true);
     assert_eq!(body["purged"], 2, "{body}");
@@ -161,7 +161,7 @@ async fn purge_route_end_to_end_in_desktop_form() {
     let freed = body["freedBytes"].as_u64().unwrap();
     assert_eq!(
         freed,
-        (PNG.len() as u64) + 4 * 1,
+        (PNG.len() as u64) + 4,
         "只统计真实删掉的字节: {body}"
     );
 
@@ -170,7 +170,10 @@ async fn purge_route_end_to_end_in_desktop_form() {
     assert!(fx.reference_abs.is_file(), "reference 用户原地文件不许动");
     for id in [1i64, 2] {
         for size in core_media::THUMB_SIZES {
-            assert!(!thumb(&data_dir, id, *size).exists(), "{id}/{size} 缩略图应删除");
+            assert!(
+                !thumb(&data_dir, id, *size).exists(),
+                "{id}/{size} 缩略图应删除"
+            );
         }
     }
 

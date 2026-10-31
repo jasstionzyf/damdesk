@@ -24,14 +24,15 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
 
-use svc_pipeline::compliance_queue::{
-    compliance_enq, run_compliance_queue_par, ConnFactory,
-};
 use svc_pipeline::compliance_plugins;
+use svc_pipeline::compliance_queue::{compliance_enq, run_compliance_queue_par, ConnFactory};
 use svc_pipeline::VlConfig;
 
 fn env_or(k: &str, d: &str) -> String {
-    std::env::var(k).ok().filter(|s| !s.is_empty()).unwrap_or_else(|| d.to_string())
+    std::env::var(k)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| d.to_string())
 }
 
 fn main() {
@@ -61,7 +62,10 @@ fn run() -> i32 {
     std::fs::create_dir_all(&out_dir).unwrap_or_else(|e| panic!("建输出目录 {out_dir:?}: {e}"));
     let _ = std::fs::remove_file(out_dir.join("c5-status.txt"));
     let t_all = Instant::now();
-    status(&out_dir, &format!("C5_START target={target} workers={workers}"));
+    status(
+        &out_dir,
+        &format!("C5_START target={target} workers={workers}"),
+    );
 
     // 模型根布局契约 <root>/models/<m>/<m>.onnx → root = work（work/models/<name> → 容器挂载）
     let model_root = work.clone();
@@ -90,7 +94,10 @@ fn run() -> i32 {
         proxy: Some(env_or("C5_VL_PROXY", "")), // 默认直连（deepseek 国内可达）
     };
     if vl.api_key.is_empty() {
-        status(&out_dir, "C5_RESULT FAIL phase=vl reason=C5_VL_API_KEY 未设置");
+        status(
+            &out_dir,
+            "C5_RESULT FAIL phase=vl reason=C5_VL_API_KEY 未设置",
+        );
         return 1;
     }
 
@@ -99,8 +106,14 @@ fn run() -> i32 {
     let manifest_path = work.join("manifest.json");
     let t0 = Instant::now();
     let force_corpus = env_or("C5_FORCE_CORPUS", "0") == "1";
-    if !force_corpus && manifest_path.is_file() && corpus.read_dir().map(|d| d.count()).unwrap_or(0) >= target {
-        status(&out_dir, "C5_PHASE0 corpus 已就绪（manifest 存在，跳过重采）");
+    if !force_corpus
+        && manifest_path.is_file()
+        && corpus.read_dir().map(|d| d.count()).unwrap_or(0) >= target
+    {
+        status(
+            &out_dir,
+            "C5_PHASE0 corpus 已就绪（manifest 存在，跳过重采）",
+        );
     } else {
         let _ = std::fs::remove_dir_all(&corpus);
         for d in ["m", "g1", "g2", "g3"] {
@@ -139,14 +152,28 @@ fn run() -> i32 {
     }
     let mut paths: Vec<PathBuf> = ["m", "g1", "g2", "g3"]
         .iter()
-        .flat_map(|g| std::fs::read_dir(corpus.join(g)).unwrap().filter_map(|e| e.ok()).map(|e| e.path()))
+        .flat_map(|g| {
+            std::fs::read_dir(corpus.join(g))
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+        })
         .filter(|p| {
-            matches!(p.extension().and_then(|e| e.to_str()), Some("jpg" | "jpeg" | "png"))
+            matches!(
+                p.extension().and_then(|e| e.to_str()),
+                Some("jpg" | "jpeg" | "png")
+            )
         })
         .collect();
     paths.sort();
     if paths.len() != target {
-        status(&out_dir, &format!("C5_RESULT FAIL phase=corpus reason=语料 {} 张 ≠ {target}", paths.len()));
+        status(
+            &out_dir,
+            &format!(
+                "C5_RESULT FAIL phase=corpus reason=语料 {} 张 ≠ {target}",
+                paths.len()
+            ),
+        );
         return 1;
     }
 
@@ -176,19 +203,39 @@ fn run() -> i32 {
             .expect("insert resource");
             n += 1;
         }
-        status(&out_dir, &format!("C5_PHASE1 OK assets={n} secs={:.1}", t0.elapsed().as_secs_f64()));
+        status(
+            &out_dir,
+            &format!(
+                "C5_PHASE1 OK assets={n} secs={:.1}",
+                t0.elapsed().as_secs_f64()
+            ),
+        );
     }
     let ids: Vec<i64> = {
-        let mut stmt = conn.prepare("SELECT assetId FROM assets ORDER BY assetId").unwrap();
-        stmt.query_map([], |r| r.get::<_, i64>(0)).unwrap().map(|r| r.unwrap()).collect()
+        let mut stmt = conn
+            .prepare("SELECT assetId FROM assets ORDER BY assetId")
+            .unwrap();
+        stmt.query_map([], |r| r.get::<_, i64>(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
     };
 
     // ---------- 阶段 2：并行合规（VL 合并调用 × workers 并发） ----------
     let pack = legacy_pack().expect("legacy pack（C5_PACK_DIR）");
     let fixes_dir = work.join("fixes");
     std::fs::create_dir_all(&fixes_dir).unwrap();
-    let enqed = compliance_enq(&conn, &ids, pack.id.as_str(), Some(&fixes_dir.to_string_lossy())).unwrap();
-    status(&out_dir, &format!("C5_PHASE2 enqueued={enqed} pack={}", pack.id));
+    let enqed = compliance_enq(
+        &conn,
+        &ids,
+        pack.id.as_str(),
+        Some(&fixes_dir.to_string_lossy()),
+    )
+    .unwrap();
+    status(
+        &out_dir,
+        &format!("C5_PHASE2 enqueued={enqed} pack={}", pack.id),
+    );
     let t_run = Instant::now();
     let cancel = AtomicBool::new(false);
     let done_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -202,9 +249,12 @@ fn run() -> i32 {
         &cancel,
         move |p| {
             let n = dc.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-            if n % 100 == 0 || p.status != "done" {
+            if n.is_multiple_of(100) || p.status != "done" {
                 let extra = p.error.clone().unwrap_or_default();
-                status(&st_at, &format!("C5_PROGRESS {}/{} {} {extra}", n, p.total, p.status));
+                status(
+                    &st_at,
+                    &format!("C5_PROGRESS {}/{} {} {extra}", n, p.total, p.status),
+                );
             }
         },
     ) {
@@ -237,7 +287,11 @@ fn run() -> i32 {
         .collect();
     let csv = svc_library::export::verdict_report_csv(
         &conn,
-        &svc_library::export::VerdictReportSpec { pack: pack.clone(), job_id: None, run_id: None },
+        &svc_library::export::VerdictReportSpec {
+            pack: pack.clone(),
+            job_id: None,
+            run_id: None,
+        },
         &named,
         // KI-15：e2e 不拒选任何资产，excluded 集为空（口径见 svc_library::export）
         &[],
@@ -258,7 +312,11 @@ fn run() -> i32 {
     // ---------- 阶段 4：classic 同批重跑一致性 ----------
     let t0 = Instant::now();
     let max_job1: i64 = conn
-        .query_row("SELECT COALESCE(MAX(jobId), 0) FROM rule_verdict WHERE packId = ?1", [&pack.id], |r| r.get(0))
+        .query_row(
+            "SELECT COALESCE(MAX(jobId), 0) FROM rule_verdict WHERE packId = ?1",
+            [&pack.id],
+            |r| r.get(0),
+        )
         .unwrap();
     let classic_ids: Vec<String> = ["R1_size", "R2_white_bg"]
         .iter()
@@ -279,7 +337,13 @@ fn run() -> i32 {
         "summary: [合格, 不合格, 未判定]\ndetail_columns: [imageSN, R1_size, R2_white_bg]\n",
     )
     .expect("classic sub-pack");
-    let enq2 = compliance_enq(&conn, &ids, pack2.id.as_str(), Some(&fixes_dir.to_string_lossy())).unwrap();
+    let _enq2 = compliance_enq(
+        &conn,
+        &ids,
+        pack2.id.as_str(),
+        Some(&fixes_dir.to_string_lossy()),
+    )
+    .unwrap();
     let (report2, _) = match run_compliance_queue_par(
         factory_for(db_path.clone()),
         &pack2,
@@ -312,7 +376,12 @@ fn run() -> i32 {
             let mut stmt = conn.prepare(&sql).unwrap();
             let rows = stmt
                 .query_map([], |r| {
-                    Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<f64>>(3)?))
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, Option<f64>>(3)?,
+                    ))
                 })
                 .unwrap();
             rows.map(|r| r.unwrap())
@@ -352,7 +421,11 @@ fn run() -> i32 {
             .unwrap();
         let rows = stmt
             .query_map(rusqlite::params![pack.id, max_job1], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
             })
             .unwrap();
         for (rule, res, n) in rows.map(|r| r.unwrap()) {
@@ -405,8 +478,12 @@ fn run() -> i32 {
     let vs = vl_snap.unwrap_or_default();
     let wall_secs = t_all.elapsed().as_secs_f64();
 
-    let hard_ok = machine_rate >= 0.95 && human_rate <= 0.01 && wall_secs <= 3600.0 && diff == 0
-        && report.failed == 0 && report.done == total as usize;
+    let hard_ok = machine_rate >= 0.95
+        && human_rate <= 0.01
+        && wall_secs <= 3600.0
+        && diff == 0
+        && report.failed == 0
+        && report.done == total as usize;
     let summary = serde_json::json!({
         "pack": pack.id,
         "target": total,
@@ -443,7 +520,11 @@ fn run() -> i32 {
             json_path.display()
         ),
     );
-    if hard_ok { 0 } else { 1 }
+    if hard_ok {
+        0
+    } else {
+        1
+    }
 }
 
 fn factory_for(db: PathBuf) -> ConnFactory {
@@ -666,7 +747,11 @@ fn prepare_corpus(
         }
     }
     // 紧凑度降序：高密度素材更容易通过闭合验证，先派生
-    pool.sort_by(|a, b| b.0.compact.partial_cmp(&a.0.compact).unwrap_or(std::cmp::Ordering::Equal));
+    pool.sort_by(|a, b| {
+        b.0.compact
+            .partial_cmp(&a.0.compact)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let scanned = candidates.len();
 
     // ---- 派生产出（同一素材的多个上架版本）：四类超采样 → 产出后逐张实测校验 ----
@@ -696,7 +781,8 @@ fn prepare_corpus(
         let (wf, hf) = (w.max(1) as f64, h.max(1) as f64);
         let k = (700.0 / wf.min(hf)).max(1.0);
         let target_long = ((wf.max(hf)) * k).ceil() as i32;
-        let (nw, nh) = core_media::scale_to(src, dest, target_long).map_err(|e| format!("缩放: {e}"))?;
+        let (nw, nh) =
+            core_media::scale_to(src, dest, target_long).map_err(|e| format!("缩放: {e}"))?;
         if nw.min(nh) < 700 {
             return Err(format!("缩放后短边 {} < 700", nw.min(nh)));
         }
@@ -744,7 +830,11 @@ fn prepare_corpus(
     let mut n_derive_fail = 0usize;
     let mut used_sources = 0usize;
     for (i, (sm, inband)) in pool.iter().enumerate() {
-        if n_inband >= cap_inband && n_outband >= cap_outband && n_small >= cap_small && n_wm >= cap_wm {
+        if n_inband >= cap_inband
+            && n_outband >= cap_outband
+            && n_small >= cap_small
+            && n_wm >= cap_wm
+        {
             break;
         }
         let mut produced = false;
@@ -778,7 +868,8 @@ fn prepare_corpus(
                         if n_small < cap_small {
                             let (w, h) = core_media::image_size(&src_main).unwrap_or((0, 0));
                             let mn = w.min(h).max(1);
-                            let long = ((w.max(h) as f64) * (small_min_side as f64) / (mn as f64)).ceil() as i32;
+                            let long = ((w.max(h) as f64) * (small_min_side as f64) / (mn as f64))
+                                .ceil() as i32;
                             let dest = stage_dir.join("small").join(format!("{i:06}.jpg"));
                             if core_media::scale_to(&src_main, &dest, long).is_ok() {
                                 n_small += 1;
@@ -798,7 +889,14 @@ fn prepare_corpus(
                                         asset_id: 0,
                                     };
                                     let dest = stage_dir.join("wm").join(format!("{i:06}.jpg"));
-                                    if compliance_plugins::plugin_run("watermark", &src_main, &v, &dest, &origin).is_ok()
+                                    if compliance_plugins::plugin_run(
+                                        "watermark",
+                                        &src_main,
+                                        &v,
+                                        &dest,
+                                        &origin,
+                                    )
+                                    .is_ok()
                                         && (0.65..=0.85).contains(&verify(&dest))
                                     {
                                         n_wm += 1;
@@ -910,8 +1008,13 @@ fn prepare_corpus(
     let mut dry_snap = svc_pipeline::compliance_vl::VlStatsSnapshot::default();
     let mut max_job = 0i64;
     for pass in 0..passes {
-        compliance_enq(&dry_conn, &dry_ids, pack.id.as_str(), Some(&dry_fixes.to_string_lossy()))
-            .map_err(|e| format!("干跑入队: {e}"))?;
+        compliance_enq(
+            &dry_conn,
+            &dry_ids,
+            pack.id.as_str(),
+            Some(&dry_fixes.to_string_lossy()),
+        )
+        .map_err(|e| format!("干跑入队: {e}"))?;
         let t_dry = Instant::now();
         let (rep, snap) = run_compliance_queue_par(
             factory_for(dry_db.clone()),
@@ -1010,7 +1113,10 @@ fn prepare_corpus(
         if let Some(reason) = bad.get(a) {
             n_reject += 1;
             if reject_samples.len() < 12 {
-                reject_samples.push(format!("{cls}/{}: {reason}", p.file_name().and_then(|s| s.to_str()).unwrap_or("?")));
+                reject_samples.push(format!(
+                    "{cls}/{}: {reason}",
+                    p.file_name().and_then(|s| s.to_str()).unwrap_or("?")
+                ));
             }
             continue;
         }
@@ -1034,11 +1140,17 @@ fn prepare_corpus(
         if g != want {
             n_reject += 1;
             if reject_samples.len() < 12 {
-                reject_samples.push(format!("{cls}/{}: 干跑落在 {g}（与类不符）", p.file_name().and_then(|s| s.to_str()).unwrap_or("?")));
+                reject_samples.push(format!(
+                    "{cls}/{}: 干跑落在 {g}（与类不符）",
+                    p.file_name().and_then(|s| s.to_str()).unwrap_or("?")
+                ));
             }
             continue;
         }
-        by_group.entry(g.to_string()).or_default().push((cls.clone(), p.clone()));
+        by_group
+            .entry(g.to_string())
+            .or_default()
+            .push((cls.clone(), p.clone()));
     }
     let mut n_group_hit: BTreeMap<String, usize> = BTreeMap::new();
     for (g, v) in &by_group {
@@ -1047,11 +1159,12 @@ fn prepare_corpus(
 
     // ---- 按配额落位：g1/g2/g3 按干跑可用量取（短少由主组补齐），主组不足才响亮失败 ----
     // （语料构成 = 实际取到的数量，如实进 manifest；干跑证不了「可机修闭合」的素材不硬凑）
-    let avail = |m: &mut BTreeMap<String, Vec<(String, PathBuf)>>, g: &str| -> Vec<(String, PathBuf)> {
-        let mut v = m.remove(g).unwrap_or_default();
-        v.sort_by(|a, b| a.1.cmp(&b.1));
-        v
-    };
+    let avail =
+        |m: &mut BTreeMap<String, Vec<(String, PathBuf)>>, g: &str| -> Vec<(String, PathBuf)> {
+            let mut v = m.remove(g).unwrap_or_default();
+            v.sort_by(|a, b| a.1.cmp(&b.1));
+            v
+        };
     let mut got: BTreeMap<String, usize> = BTreeMap::new();
     let mut pick: Vec<(String, Vec<(String, PathBuf)>)> = Vec::new();
     for (g, want) in [("g1", g1_n), ("g2", g2_n), ("g3", g3_n)] {

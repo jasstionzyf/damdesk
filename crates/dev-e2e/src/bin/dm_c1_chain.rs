@@ -46,7 +46,11 @@ fn run() -> Result<(), String> {
     let root = work.join("models-root");
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     std::os::unix::fs::symlink(&real, root.join("models")).map_err(|e| {
-        format!("模型根软链失败（{} → {}）: {e}", root.display(), real.display())
+        format!(
+            "模型根软链失败（{} → {}）: {e}",
+            root.display(),
+            real.display()
+        )
     })?;
     std::env::set_var("DAM_MODELS_ROOT", &root);
     println!("[0] models root = {} → {}", root.display(), real.display());
@@ -60,7 +64,10 @@ fn run() -> Result<(), String> {
         ),
     ));
     if !img.is_file() {
-        return Err(format!("语料不存在: {}（用 DAM_C1_IMAGE 指一张真图）", img.display()));
+        return Err(format!(
+            "语料不存在: {}（用 DAM_C1_IMAGE 指一张真图）",
+            img.display()
+        ));
     }
     println!("[1] 语料 = {}", img.display());
 
@@ -88,7 +95,8 @@ fn run() -> Result<(), String> {
 
     // ---- 真 OCR（PP-OCRv6 det+rec） ----
     let engine = engine_ocr::OcrEngine::load().map_err(|e| format!("OCR 引擎加载: {e}"))?;
-    let text = svc_pipeline::ocr_one(&conn, &engine, asset_id).map_err(|e| format!("ocr_one: {e}"))?;
+    let text =
+        svc_pipeline::ocr_one(&conn, &engine, asset_id).map_err(|e| format!("ocr_one: {e}"))?;
     let rows = core_storage::ocr_boxes::count(&conn, asset_id).map_err(|e| e.to_string())?;
     let (w, h, rgb) = core_media::rgb8(Path::new(&img)).map_err(|e| e.to_string())?;
     let lines = engine
@@ -163,7 +171,8 @@ fn run() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     let db_for_worker = db_path.clone();
     let factory: ConnFactory = Arc::new(move || {
-        core_storage::open(&db_for_worker).map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))
+        core_storage::open(&db_for_worker)
+            .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))
     });
     let (rep, vl_snap) = run_compliance_queue_par(
         factory,
@@ -196,7 +205,10 @@ fn run() -> Result<(), String> {
     println!(
         "[7] evidence.region.source = {} / boxes {} 个 / VL 给的 bbox {vl_bbox:?} 未采用",
         ev["region"]["source"],
-        ev["region"]["boxes"].as_array().map(|a| a.len()).unwrap_or(0)
+        ev["region"]["boxes"]
+            .as_array()
+            .map(|a| a.len())
+            .unwrap_or(0)
     );
     if ev["region"]["source"] != "ocr_text" {
         return Err(format!("区域来源不是 ocr_text: {}", ev["region"]["source"]));
@@ -242,7 +254,9 @@ fn run() -> Result<(), String> {
     std::fs::create_dir_all(&keep).map_err(|e| e.to_string())?;
     let kept = keep.join(format!(
         "{}-inpainted.png",
-        img.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+        img.file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default()
     ));
     std::fs::copy(&product, &kept).map_err(|e| format!("复制产物: {e}"))?;
     println!("[9] 已归档产物 = {}", kept.display());

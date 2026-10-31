@@ -40,7 +40,9 @@ async fn call_stats(app: &axum::Router) -> (StatusCode, Value) {
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let status = res.status();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let body: Value = serde_json::from_slice(&bytes).unwrap();
     (status, body)
 }
@@ -59,11 +61,11 @@ async fn stats_reports_dedup_unavailable_without_weights() {
     assert_eq!(body["assets"], 0, "空库统计照常（可用性是增量字段）");
     assert_eq!(body["dedupAvailable"], false, "缺件必须如实报缺：{body}");
     let reason = body["dedupUnavailableReason"].as_str().unwrap_or("");
-    assert!(reason.contains("判重不可用"), "理由必须点名判重不可用：{reason}");
     assert!(
-        !reason.is_empty(),
-        "false 必须带理由（不许静默降级）"
+        reason.contains("判重不可用"),
+        "理由必须点名判重不可用：{reason}"
     );
+    assert!(!reason.is_empty(), "false 必须带理由（不许静默降级）");
     let _ = std::fs::remove_dir_all(&data_dir);
 }
 
@@ -79,9 +81,15 @@ async fn stats_flips_to_available_when_self_provided() {
     std::fs::write(dir.join("model.onnx"), b"graph").unwrap();
     let (st, body) = call_stats(&app).await;
     assert_eq!(st, StatusCode::OK);
-    assert_eq!(body["dedupAvailable"], false, "缺外置权重必须仍报缺：{body}");
+    assert_eq!(
+        body["dedupAvailable"], false,
+        "缺外置权重必须仍报缺：{body}"
+    );
     let reason = body["dedupUnavailableReason"].as_str().unwrap_or("");
-    assert!(reason.contains("Meta 许可"), "缺件理由必须指引自备：{reason}");
+    assert!(
+        reason.contains("Meta 许可"),
+        "缺件理由必须指引自备：{reason}"
+    );
     assert!(
         reason.contains(&dedup_dir(&data_dir).to_string_lossy().to_string()),
         "理由必须带模型根绝对路径（自备落点）：{reason}"

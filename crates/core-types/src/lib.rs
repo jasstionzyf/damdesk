@@ -4,6 +4,10 @@
 //! LibraryStats/ImportFilter（字段名与 SQLite 列名一致 camelCase，serde 直通前端）。
 //! L2 同层互引禁止 → 跨 svc crate 共享的结构一律定义在此。
 
+// 结构体字段 = SQLite 列名 = 前端 JSON 键，三方同一 camelCase 契约（serde 无 rename 直通），
+// 不改 snake_case —— 此 lint 全 crate 关闭，新字段照 camelCase 契约命名。
+#![allow(non_snake_case)]
+
 use serde::{Deserialize, Serialize};
 
 /// assets 表读模型（exif json 不进 v1 读模型）。

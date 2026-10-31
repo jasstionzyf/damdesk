@@ -64,7 +64,10 @@ fn assert_undetermined(verdict: &Value, note: &str) {
     assert_eq!(verdict["note"], note, "{verdict}");
     assert_eq!(verdict["evidence"]["reason"], note, "{verdict}");
     assert!(
-        !verdict["evidence"]["detail"].as_str().unwrap_or("").is_empty(),
+        !verdict["evidence"]["detail"]
+            .as_str()
+            .unwrap_or("")
+            .is_empty(),
         "evidence.detail 必须带可读原因：{verdict}"
     );
 }
@@ -85,7 +88,11 @@ fn kill9_during_inflight_call_restarts_and_retries() {
     let caller = {
         let host = host.clone();
         std::thread::spawn(move || {
-            host.call_with_timeout("slow", json!({ "job_id": "job-kill" }), Duration::from_secs(3))
+            host.call_with_timeout(
+                "slow",
+                json!({ "job_id": "job-kill" }),
+                Duration::from_secs(3),
+            )
         })
     };
     std::thread::sleep(Duration::from_millis(120));
@@ -123,7 +130,9 @@ fn repeated_crash_exhausts_restarts_and_reports_plugin_crash() {
     c.cooldown = Duration::from_secs(30);
     let host = PackHost::open(fixture("crash-after-health"), c).unwrap();
 
-    let err = host.call("judge", json!({ "job_id": "j-crash" })).unwrap_err();
+    let err = host
+        .call("judge", json!({ "job_id": "j-crash" }))
+        .unwrap_err();
     match &err {
         PackHostError::Unavailable { kind, .. } => {
             assert_eq!(*kind, Unavailable::Crash, "{err}");
@@ -174,7 +183,10 @@ fn timeout_reports_plugin_timeout_and_recovers_on_next_call() {
     assert_eq!(err.note(), Some("plugin_timeout"));
     assert!(err.is_undetermined());
     // 预算 200ms + 宽限 150ms 之后才判超时；但不得拖到插件自己回话（400ms）之后
-    assert!(elapsed >= Duration::from_millis(200), "没等够预算：{elapsed:?}");
+    assert!(
+        elapsed >= Duration::from_millis(200),
+        "没等够预算：{elapsed:?}"
+    );
     assert!(
         elapsed < Duration::from_millis(900),
         "判超时拖太久（宽限失效或阻塞在插件应答上）：{elapsed:?}"
@@ -186,7 +198,10 @@ fn timeout_reports_plugin_timeout_and_recovers_on_next_call() {
     let info = err.timeout_info().expect("超时错误必须带 TimeoutInfo");
     assert_eq!(info.budget_ms, 200, "{info:?}");
     assert!(info.elapsed_ms >= 200, "实耗应 ≥ 预算：{info:?}");
-    assert_eq!(info.suggested_tier, "S(30s)", "200ms 预算的下一档就是 S(30s)：{info:?}");
+    assert_eq!(
+        info.suggested_tier, "S(30s)",
+        "200ms 预算的下一档就是 S(30s)：{info:?}"
+    );
     assert!(
         info.last_stage
             .as_deref()
@@ -203,7 +218,10 @@ fn timeout_reports_plugin_timeout_and_recovers_on_next_call() {
     assert_eq!(row["error"]["detail"]["budgetMs"], 200);
     assert_eq!(row["error"]["detail"]["code"], "timeout");
     assert_eq!(row["error"]["detail"]["suggestedTier"], "S(30s)");
-    assert!(row["error"]["detail"]["lastStage"].as_str().is_some(), "{row}");
+    assert!(
+        row["error"]["detail"]["lastStage"].as_str().is_some(),
+        "{row}"
+    );
     assert_eq!(row["error"]["retryable"], true);
 
     // 插件没在宽限内收尾 → 被清理；下一次调用可正常拉起（不是永久不可用）
@@ -227,7 +245,10 @@ fn plugin_business_error_is_not_masked_as_undetermined() {
     host.call("health", json!({})).unwrap();
 
     let err = host.call("rpc_error", json!({})).unwrap_err();
-    assert!(matches!(err, PackHostError::Rpc { code: -32002, .. }), "{err:?}");
+    assert!(
+        matches!(err, PackHostError::Rpc { code: -32002, .. }),
+        "{err:?}"
+    );
     assert!(
         !err.is_undetermined(),
         "业务错误（-32002 资产不可读）必须由调用方按真错误处理，不能算不可判定"
@@ -253,7 +274,10 @@ fn load_failure_reports_readable_reason() {
     match &err {
         PackHostError::Unavailable { kind, stderr, .. } => {
             assert_eq!(*kind, Unavailable::LoadFailed, "{err}");
-            assert!(!stderr.is_empty(), "加载失败必须带插件侧 stderr 尾部：{err}");
+            assert!(
+                !stderr.is_empty(),
+                "加载失败必须带插件侧 stderr 尾部：{err}"
+            );
         }
         other => panic!("期望 Unavailable::LoadFailed，实得 {other:?}"),
     }

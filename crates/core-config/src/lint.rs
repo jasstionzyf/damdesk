@@ -24,8 +24,8 @@ use serde::Serialize;
 
 use crate::packs::{
     Check, ConfidenceSource, ConfidenceSpec, Fixer, FixerTier, GroupBy, GroupSource,
-    JudgementScope, LocalizedText, Pack, Pipeline, PipelineStep,
-    ReportTemplate, Rule, RuleEvidence, RuleExecutor, RuleOnFail, StepKind,
+    JudgementScope, LocalizedText, Pack, Pipeline, PipelineStep, ReportTemplate, Rule,
+    RuleEvidence, RuleExecutor, RuleOnFail, StepKind,
 };
 
 /// 一条 lint 结果（面向 pack 作者的诊断：文件 + 键路径 + 已知取值）。
@@ -50,7 +50,11 @@ impl std::fmt::Display for LintIssue {
         if self.path.is_empty() {
             write!(f, "{}: [{}] {}", self.file, self.code, self.message)
         } else {
-            write!(f, "{}: {}: [{}] {}", self.file, self.path, self.code, self.message)
+            write!(
+                f,
+                "{}: {}: [{}] {}",
+                self.file, self.path, self.code, self.message
+            )
         }
     }
 }
@@ -176,7 +180,11 @@ fn check_unknown(
     }
 }
 
-fn parse_file(file: &'static str, text: &str, out: &mut Vec<LintIssue>) -> Option<serde_yaml::Value> {
+fn parse_file(
+    file: &'static str,
+    text: &str,
+    out: &mut Vec<LintIssue>,
+) -> Option<serde_yaml::Value> {
     match serde_yaml::from_str::<serde_yaml::Value>(text) {
         Ok(v) => Some(v),
         Err(e) => {
@@ -218,7 +226,8 @@ pub fn lint_texts(
                             file: "taxonomy.yaml",
                             path: format!("taxonomy.{field}"),
                             code: "bad_shape",
-                            message: "词表字段的值必须是字符串列表（如 `scene: [白底图, 平铺]`）".into(),
+                            message: "词表字段的值必须是字符串列表（如 `scene: [白底图, 平铺]`）"
+                                .into(),
                             rule: None,
                         });
                     }
@@ -229,7 +238,10 @@ pub fn lint_texts(
                 file: "taxonomy.yaml",
                 path: String::new(),
                 code: "bad_shape",
-                message: format!("词表文件必须是映射（字段名 → 候选值列表），实际是 {}", kind_name(other)),
+                message: format!(
+                    "词表文件必须是映射（字段名 → 候选值列表），实际是 {}",
+                    kind_name(other)
+                ),
                 rule: None,
             }),
         }
@@ -241,10 +253,7 @@ pub fn lint_texts(
             serde_yaml::Value::Sequence(rules) => {
                 for (i, r) in rules.iter().enumerate() {
                     let path = format!("rules[{i}]");
-                    let rid = r
-                        .get("id")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
+                    let rid = r.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
                     if !matches!(r, serde_yaml::Value::Mapping(_)) {
                         out.push(LintIssue {
                             file: "rules.yaml",
@@ -297,7 +306,14 @@ pub fn lint_texts(
     if let Some(v) = parse_file("pipeline.yaml", pipeline_yaml, &mut out) {
         match &v {
             serde_yaml::Value::Mapping(_) => {
-                check_unknown("pipeline.yaml", "pipeline", &v, &keys.pipeline, None, &mut out);
+                check_unknown(
+                    "pipeline.yaml",
+                    "pipeline",
+                    &v,
+                    &keys.pipeline,
+                    None,
+                    &mut out,
+                );
                 if let Some(serde_yaml::Value::Sequence(steps)) = v.get("steps") {
                     for (i, s) in steps.iter().enumerate() {
                         let path = format!("pipeline.steps[{i}]");
@@ -320,7 +336,10 @@ pub fn lint_texts(
                 file: "pipeline.yaml",
                 path: String::new(),
                 code: "bad_shape",
-                message: format!("管道文件必须是映射（steps/recheck_max），实际是 {}", kind_name(other)),
+                message: format!(
+                    "管道文件必须是映射（steps/recheck_max），实际是 {}",
+                    kind_name(other)
+                ),
                 rule: None,
             }),
         }
@@ -337,7 +356,10 @@ pub fn lint_texts(
                 file: "report.yaml",
                 path: String::new(),
                 code: "bad_shape",
-                message: format!("报告文件必须是映射（summary/detail_columns），实际是 {}", kind_name(other)),
+                message: format!(
+                    "报告文件必须是映射（summary/detail_columns），实际是 {}",
+                    kind_name(other)
+                ),
                 rule: None,
             }),
         }
@@ -377,7 +399,9 @@ pub fn rule_issues_by_id(dir: &Path) -> BTreeMap<String, Vec<String>> {
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for issue in lint_texts("", &rules_yaml, "", "") {
         if let Some(id) = issue.rule.as_deref() {
-            out.entry(id.to_string()).or_default().push(issue.to_string());
+            out.entry(id.to_string())
+                .or_default()
+                .push(issue.to_string());
         }
     }
     out
@@ -515,7 +539,11 @@ mod tests {
         assert_eq!(issues[0].path, "rules[0]");
         assert_eq!(issues[0].code, "unknown_key");
         assert!(issues[0].message.contains("evidance"), "{}", issues[0]);
-        assert!(issues[0].message.contains("on_fail"), "已知取值要列出来: {}", issues[0]);
+        assert!(
+            issues[0].message.contains("on_fail"),
+            "已知取值要列出来: {}",
+            issues[0]
+        );
     }
 
     #[test]

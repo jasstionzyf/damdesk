@@ -1,3 +1,4 @@
+#![allow(non_snake_case)] // 本模块 DTO 字段 = 前端 JSON camelCase 契约，勿改
 //! 去重 API 面（W5 起步，KI-2 / KI-7 收口）。
 //!
 //! 路由：
@@ -199,7 +200,9 @@ enum Scope {
         total: usize,
     },
     /// 近似回退（老库）：这批名下 `batchId` 全 NULL，只能按该批次 rootPath 前缀圈
-    BatchApprox { prefix: String },
+    BatchApprox {
+        prefix: String,
+    },
 }
 
 /// 批次名下的资产：`(存活 id 集合, 存活数)`。`deleted=1`（回收站）不算「在库里」。
@@ -239,10 +242,12 @@ fn resolve_scope(conn: &Connection, range: &Range) -> Result<Scope, String> {
                 })
                 .map_err(|e| format!("读导入批次 {id} 失败: {e}"))?;
             let Some(root) = root else {
-                return Err(format!("导入批次 {id} 不存在（batch 范围需要先导入过一次）"));
+                return Err(format!(
+                    "导入批次 {id} 不存在（batch 范围需要先导入过一次）"
+                ));
             };
-            let (live_ids, total) = batch_assets(conn, *id)
-                .map_err(|e| format!("读批次 {id} 的资产失败: {e}"))?;
+            let (live_ids, total) =
+                batch_assets(conn, *id).map_err(|e| format!("读批次 {id} 的资产失败: {e}"))?;
             if total == 0 {
                 Ok(Scope::BatchApprox { prefix: root })
             } else {
@@ -457,7 +462,8 @@ pub async fn groups(State(state): State<AppState>, Query(q): Query<GroupsQuery>)
     let (out, meta) = apply_range(all, &scope);
     let total_assets: usize = out.iter().map(|g| g.size).sum();
     let reclaim: i64 = out.iter().map(|g| g.reclaim_bytes).sum();
-    let judge = svc_pipeline::embed_queue::dup_judge_status(&conn, core_config::DEDUP_EMBEDDER).ok();
+    let judge =
+        svc_pipeline::embed_queue::dup_judge_status(&conn, core_config::DEDUP_EMBEDDER).ok();
     let mut kind_counts: BTreeMap<&str, usize> = BTreeMap::new();
     for g in &out {
         *kind_counts.entry(g.kind.as_str()).or_insert(0) += 1;
@@ -518,7 +524,8 @@ pub async fn ignore(State(state): State<AppState>, Json(req): Json<IgnoreReq>) -
         Err(e) => return svc_err(e),
     };
     let want: BTreeSet<i64> = req.groupIds.iter().copied().collect();
-    let mut picked: Vec<&DupGroupView> = all.iter().filter(|g| want.contains(&g.group_id)).collect();
+    let mut picked: Vec<&DupGroupView> =
+        all.iter().filter(|g| want.contains(&g.group_id)).collect();
     if picked.is_empty() && !req.assetIds.is_empty() {
         let sel: BTreeSet<i64> = req.assetIds.iter().copied().collect();
         picked = all
@@ -952,10 +959,7 @@ fn ymd_utc(secs: i64) -> String {
 fn attachment(format: &str, tag: &str, body: String) -> Response {
     let date = ymd_utc(svc_import::now_secs());
     let (mime, name) = if format == "csv" {
-        (
-            "text/csv; charset=utf-8",
-            format!("dedup-{tag}-{date}.csv"),
-        )
+        ("text/csv; charset=utf-8", format!("dedup-{tag}-{date}.csv"))
     } else {
         (
             "text/markdown; charset=utf-8",
@@ -1032,7 +1036,8 @@ pub async fn export(State(state): State<AppState>, Query(q): Query<ExportQuery>)
     let ignored_count = ignores.len();
     all.retain(|g| !ignores.contains(&group_signature(g)));
     let (groups, _meta) = apply_range(all, &scope);
-    let judge = svc_pipeline::embed_queue::dup_judge_status(&conn, core_config::DEDUP_EMBEDDER).ok();
+    let judge =
+        svc_pipeline::embed_queue::dup_judge_status(&conn, core_config::DEDUP_EMBEDDER).ok();
 
     let body = if format == "csv" {
         library_csv(&groups, &range, &judge, ignored_count, now)
@@ -1043,7 +1048,12 @@ pub async fn export(State(state): State<AppState>, Query(q): Query<ExportQuery>)
 }
 
 /// 库内报告的元数据头（模型名/阈值只出现在这里，不进 UI —— KI-6）。
-fn library_meta(range: &Range, judge: &Option<svc_pipeline::embed_queue::DupJudgeStatus>, ignored: usize, now: i64) -> Vec<String> {
+fn library_meta(
+    range: &Range,
+    judge: &Option<svc_pipeline::embed_queue::DupJudgeStatus>,
+    ignored: usize,
+    now: i64,
+) -> Vec<String> {
     let mut out = vec![
         format!("generatedAt={now}"),
         format!("range={}", range.label()),
@@ -1122,7 +1132,11 @@ fn library_md(
         for m in &g.members {
             s.push_str(&format!(
                 "| {} | {} | {} | {} | `{}` |\n",
-                if m.asset_id == g.suggested_keep { "✓" } else { "" },
+                if m.asset_id == g.suggested_keep {
+                    "✓"
+                } else {
+                    ""
+                },
                 m.asset_id,
                 m.file_name.replace('|', "\\|"),
                 m.file_sz,
@@ -1271,12 +1285,12 @@ pub async fn backfill(
     ) {
         Ok(report) => {
             let judge =
-                svc_pipeline::embed_queue::dup_judge_status(&conn, core_config::DEDUP_EMBEDDER).ok();
+                svc_pipeline::embed_queue::dup_judge_status(&conn, core_config::DEDUP_EMBEDDER)
+                    .ok();
             // vectors == 0 = 判重塔没跑过（web 容器关本地推理 / 桌面还没嵌入）：
             // 明说「未检测」，别让「0 组」被读成「没有重复」。
-            let hint = (report.vectors == 0).then_some(
-                "判重塔还没有向量（未嵌入或本形态不支持本地推理）：当前无法做视觉判重",
-            );
+            let hint = (report.vectors == 0)
+                .then_some("判重塔还没有向量（未嵌入或本形态不支持本地推理）：当前无法做视觉判重");
             Json(json!({
                 "ok": true,
                 "report": report,

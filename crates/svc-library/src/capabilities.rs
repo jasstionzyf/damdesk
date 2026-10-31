@@ -174,18 +174,11 @@ pub fn probe_writable(dir: &Path) -> Result<(), (String, String)> {
         ));
     };
     if !base.is_dir() {
-        return Err((
-            "other".to_string(),
-            format!("不是目录：{}", base.display()),
-        ));
+        return Err(("other".to_string(), format!("不是目录：{}", base.display())));
     }
     static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let probe = base.join(format!(
-        ".dam-write-probe-{}-{}",
-        std::process::id(),
-        seq
-    ));
+    let probe = base.join(format!(".dam-write-probe-{}-{}", std::process::id(), seq));
     let mut f = match std::fs::File::create(&probe) {
         Ok(f) => f,
         Err(e) => {
@@ -303,7 +296,12 @@ pub fn capabilities(is_desktop: bool, roots: Vec<RootInfo>) -> Capabilities {
     let features = evaluate_features(is_desktop, &roots);
     Capabilities {
         is_desktop,
-        store_mode: if is_desktop { "local-disk" } else { "server-volume" }.to_string(),
+        store_mode: if is_desktop {
+            "local-disk"
+        } else {
+            "server-volume"
+        }
+        .to_string(),
         writable_roots: writable_roots(&roots),
         roots,
         features,
@@ -330,7 +328,11 @@ pub fn precheck_move(
     data_dir: &Path,
 ) -> Result<Vec<RootInfo>, MoveReject> {
     let target = Path::new(target_dir);
-    if !target.is_absolute() || target.components().any(|c| matches!(c, Component::ParentDir)) {
+    if !target.is_absolute()
+        || target
+            .components()
+            .any(|c| matches!(c, Component::ParentDir))
+    {
         return Err(MoveReject {
             code: "bad_path".to_string(),
             message: format!("目标目录必须是绝对路径且不含 `..`：{target_dir}"),
@@ -346,11 +348,7 @@ pub fn precheck_move(
                 "没有可写库根（{}）",
                 roots
                     .iter()
-                    .map(|r| format!(
-                        "{}={}",
-                        r.path,
-                        r.code.as_deref().unwrap_or("unknown")
-                    ))
+                    .map(|r| format!("{}={}", r.path, r.code.as_deref().unwrap_or("unknown")))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -359,10 +357,7 @@ pub fn precheck_move(
 
     // 2) 目标可写性实测（先于库根归属：/corpus 这类只读挂载给具体 fs 归因）
     if let Err((code, raw)) = probe_writable(target) {
-        return Err(MoveReject {
-            code,
-            message: raw,
-        });
+        return Err(MoveReject { code, message: raw });
     }
 
     // 3) 必须落在可写库根内
@@ -429,12 +424,7 @@ mod capabilities_tests {
     fn tmpdir(tag: &str) -> PathBuf {
         static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let d = std::env::temp_dir().join(format!(
-            "dam-cap-{}-{}-{}",
-            tag,
-            std::process::id(),
-            n
-        ));
+        let d = std::env::temp_dir().join(format!("dam-cap-{}-{}-{}", tag, std::process::id(), n));
         fs::create_dir_all(&d).unwrap();
         d
     }
@@ -483,7 +473,10 @@ mod capabilities_tests {
         assert!(!web.physical_delete);
         assert!(web.copy_in_import);
         // KI-7：库外扫描 = 读用户本机磁盘 → 网页形态必须 false（UI 隐藏入口，不灰置）
-        assert!(!web.scan_external_path, "容器/网页形态不得承诺读本机库外路径");
+        assert!(
+            !web.scan_external_path,
+            "容器/网页形态不得承诺读本机库外路径"
+        );
         // 桌面形态 + 有可写根：磁盘类能力全部可用
         let desk = evaluate_features(true, &[rw.clone(), ro.clone()]);
         assert!(desk.move_asset && desk.rename_asset && desk.relink && desk.open_in_os);
@@ -532,10 +525,20 @@ mod capabilities_tests {
             "copyInImport",
             "scanExternalPath",
         ] {
-            assert!(j["features"].get(k).is_some(), "features 缺 {k}: {}", j["features"]);
+            assert!(
+                j["features"].get(k).is_some(),
+                "features 缺 {k}: {}",
+                j["features"]
+            );
         }
-        assert!(j["roots"][0].get("writable").is_some(), "RootInfo 缺 writable: {j}");
-        assert!(j["roots"][0].get("device").is_some(), "RootInfo 缺 device: {j}");
+        assert!(
+            j["roots"][0].get("writable").is_some(),
+            "RootInfo 缺 writable: {j}"
+        );
+        assert!(
+            j["roots"][0].get("device").is_some(),
+            "RootInfo 缺 device: {j}"
+        );
     }
 
     #[test]

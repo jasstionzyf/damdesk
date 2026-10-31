@@ -1,3 +1,4 @@
+#![allow(non_snake_case)] // 本模块 DTO 字段 = 前端 JSON camelCase 契约，勿改
 //! E2 导出 API：POST /api/export/start 启动导出（选择集 → svc-library::export），
 //! GET /api/export/status 轮询进度/报告，POST /api/export/cancel 取消。
 //!
@@ -70,6 +71,7 @@ pub struct ExportReq {
     pub strip_gps: Option<bool>,
 }
 
+#[allow(dead_code)] // 保留：本模块错误面统一出口（与 err_coded 并存）
 fn err(status: StatusCode, msg: impl Into<String>) -> axum::response::Response {
     (status, Json(json!({ "error": msg.into() }))).into_response()
 }
@@ -334,8 +336,15 @@ mod tests {
         );
         // 用 Debug 形态断言字段真值：不写 if-let/match 分支，避免分支块尾行永远 0 覆盖
         let src_dbg = format!("{:?}", spec.source);
-        assert!(src_dbg.contains("tag: Some(\"南瓜\")"), "导出来源丢了 tag: {src_dbg}");
-        assert!(matches!(spec.content, ExportContent::Original), "内容选项被改：{:?}", spec.content);
+        assert!(
+            src_dbg.contains("tag: Some(\"南瓜\")"),
+            "导出来源丢了 tag: {src_dbg}"
+        );
+        assert!(
+            matches!(spec.content, ExportContent::Original),
+            "内容选项被改：{:?}",
+            spec.content
+        );
         assert!(spec.manifest, "manifest 标记丢了");
     }
 
@@ -345,15 +354,35 @@ mod tests {
         let body = r#"{"filter":{},"content":"thumb256","destDir":"/data/exports/dt4-all"}"#;
         let parsed: ExportReq = serde_json::from_str(body).expect("deserialize");
         let spec = build_spec(&parsed).expect("build spec");
-        assert!(matches!(spec.source, ExportSource::Filter(_)), "空 filter 也要走 Filter 来源");
+        assert!(
+            matches!(spec.source, ExportSource::Filter(_)),
+            "空 filter 也要走 Filter 来源"
+        );
         // 空 filter：所有字段都是 None（字段名/无分页参数一并钉住）
         let src_dbg = format!("{:?}", spec.source);
-        assert!(!src_dbg.contains("Some("), "空 filter 应全为 None: {src_dbg}");
-        for k in ["mediaType", "tag", "dirPrefix", "minRating", "colorLabel", "limit", "offset", "sort"]
-        {
-            assert!(src_dbg.contains(k), "过滤字段 {k} 不在来源结构里: {src_dbg}");
+        assert!(
+            !src_dbg.contains("Some("),
+            "空 filter 应全为 None: {src_dbg}"
+        );
+        for k in [
+            "mediaType",
+            "tag",
+            "dirPrefix",
+            "minRating",
+            "colorLabel",
+            "limit",
+            "offset",
+            "sort",
+        ] {
+            assert!(
+                src_dbg.contains(k),
+                "过滤字段 {k} 不在来源结构里: {src_dbg}"
+            );
         }
-        assert!(matches!(spec.content, ExportContent::Thumb(256)), "缩略图档位应为 256");
+        assert!(
+            matches!(spec.content, ExportContent::Thumb(256)),
+            "缩略图档位应为 256"
+        );
     }
 
     /// 来源二选一不被悄悄放宽：既有 assetIds 又有 filter → 400（不猜用户意图）。
@@ -381,9 +410,15 @@ mod tests {
     #[test]
     fn dt4_relative_paths_are_rejected() {
         let e = build_spec(&req(Some("exports/a.zip"), None)).unwrap_err();
-        assert!(e.msg.contains("zipPath must be absolute"), "unexpected: {e}");
+        assert!(
+            e.msg.contains("zipPath must be absolute"),
+            "unexpected: {e}"
+        );
         let e = build_spec(&req(None, Some("exports/a"))).unwrap_err();
-        assert!(e.msg.contains("destDir must be absolute"), "unexpected: {e}");
+        assert!(
+            e.msg.contains("destDir must be absolute"),
+            "unexpected: {e}"
+        );
     }
 
     /// 选择集为空 + 无 filter → 也是 400（空选择集不能被当成「整库」）。
