@@ -18,17 +18,25 @@ use svc_import::*;
 
 /// libvips 是进程级全局状态：先显式初始化一次，再串行化本文件用 vips 的用例
 /// （同 crates/svc-import/tests/pipeline.rs 的说明）。
-fn vips_lock() -> &'static Mutex<()> {
+fn vips_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| {
         core_media::init_backend().expect("libvips 初始化失败");
         Mutex::new(())
     })
+    .lock()
+    .unwrap_or_else(|e| e.into_inner())
 }
 
 fn make_png(path: &Path, brighten: f64) {
-    let black = libvips::ops::black(64, 64).unwrap();
-    let img = libvips::ops::linear(&black, &mut [1.0], &mut [brighten]).unwrap();
+    // 用带 seed 的高斯噪声而不是纯色：纯色图（哪怕亮度不同）在 pHash 口径下近似同一张，
+    // 入库断言会因 libvips 版本/阈值差异翻车（CI 上两张真图塌成 1 张）。
+    let opts = libvips::ops::GaussnoiseOptions {
+        sigma: 40.0,
+        mean: brighten,
+        seed: brighten as i32,
+    };
+    let img = libvips::ops::gaussnoise_with_opts(64, 64, &opts).unwrap();
     libvips::ops::pngsave(&img, &path.to_string_lossy()).unwrap();
 }
 
@@ -60,7 +68,7 @@ fn count_in_batch(conn: &Connection, batch: i64) -> i64 {
 
 #[test]
 fn import_writes_batch_id_and_rewrite_takes_over() {
-    let _g = vips_lock().lock().unwrap();
+    let _g = vips_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().join("photos");
     std::fs::create_dir_all(&root).unwrap();
@@ -103,7 +111,7 @@ fn import_writes_batch_id_and_rewrite_takes_over() {
 
 #[test]
 fn batch_id_stays_with_original_import() {
-    let _g = vips_lock().lock().unwrap();
+    let _g = vips_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().join("photos");
     std::fs::create_dir_all(&root).unwrap();
@@ -147,7 +155,7 @@ fn batch_id_stays_with_original_import() {
 
 #[test]
 fn watcher_import_leaves_batch_null() {
-    let _g = vips_lock().lock().unwrap();
+    let _g = vips_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().join("watched");
     std::fs::create_dir_all(&root).unwrap();

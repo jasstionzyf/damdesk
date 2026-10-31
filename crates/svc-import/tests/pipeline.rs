@@ -9,18 +9,24 @@ use svc_import::*;
 
 /// libvips 是进程级全局状态：先用 `core_media::init_backend()` 显式初始化一次（未 init 时
 /// 多线程首次调用会并发注册 GObject class → BlackError / SIGABRT），再串行化本文件用 vips 的用例。
-fn vips_lock() -> &'static Mutex<()> {
+fn vips_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| {
         core_media::init_backend().expect("libvips 初始化失败");
         Mutex::new(())
     })
+    .lock()
+    .unwrap_or_else(|e| e.into_inner())
 }
 
 fn make_png(path: &Path, brighten: f64) {
-    // black(64,64) → linear a*x+b 拉亮度，产出确定性灰度图；两张不同 b 的图内容不同、pHash 相近
-    let black = libvips::ops::black(64, 64).unwrap();
-    let img = libvips::ops::linear(&black, &mut [1.0], &mut [brighten]).unwrap();
+    // 用带 seed 的高斯噪声：纯色图（不同亮度）pHash 近似常量，去重会把它判成同一张。
+    let opts = libvips::ops::GaussnoiseOptions {
+        sigma: 40.0,
+        mean: brighten,
+        seed: brighten as i32,
+    };
+    let img = libvips::ops::gaussnoise_with_opts(64, 64, &opts).unwrap();
     libvips::ops::pngsave(&img, &path.to_string_lossy()).unwrap();
 }
 
@@ -40,7 +46,7 @@ fn fixture(root: &Path) {
 
 #[test]
 fn full_pipeline_reference_mode() {
-    let _g = vips_lock().lock().unwrap();
+    let _g = vips_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().join("photos");
     std::fs::create_dir_all(&root).unwrap();
@@ -131,7 +137,7 @@ fn full_pipeline_reference_mode() {
 
 #[test]
 fn missing_and_relink() {
-    let _g = vips_lock().lock().unwrap();
+    let _g = vips_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().join("photos");
     std::fs::create_dir_all(&root).unwrap();
@@ -203,7 +209,7 @@ fn missing_and_relink() {
 
 #[test]
 fn copyin_mode_copies_into_library() {
-    let _g = vips_lock().lock().unwrap();
+    let _g = vips_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().join("src_photos");
     std::fs::create_dir_all(&root).unwrap();
@@ -232,7 +238,7 @@ fn copyin_mode_copies_into_library() {
 
 #[test]
 fn cancelled_batch_stops() {
-    let _g = vips_lock().lock().unwrap();
+    let _g = vips_lock();
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().join("photos");
     std::fs::create_dir_all(&root).unwrap();
