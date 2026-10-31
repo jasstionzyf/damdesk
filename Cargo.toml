@@ -6,7 +6,7 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0"
-repository = "https://github.com/damdesk-labs/damdesk"
+repository = "https://github.com/jasstionzyf/damdesk"
 
 # 分层铁律（PLAN.md §2.1）：L3(app-tauri) → L2(svc-*) → L1(engine-*) → L0(core-*)，
 # 单向向下、同层禁互引；scripts/check_layers.sh 强制检查。

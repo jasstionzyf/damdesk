@@ -16,7 +16,7 @@ classifiers = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/damdesk-labs/damdesk/blob/main/docs/industry-pack-protocol.md"
+Documentation = "https://github.com/jasstionzyf/damdesk/blob/main/docs/industry-pack-protocol.md"
 
 [tool.setuptools]
 packages = ["dampack"]
