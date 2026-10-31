@@ -24,6 +24,7 @@ import {
 import { Button } from '../components/Button'
 import { useCapabilities } from '../lib/caps'
 import { PathLink } from '../components/PathLink'
+import { isDesktopShell, pickFolder } from '../lib/native'
 import { DensityControl, DEFAULT_THUMB, DENSITY_PREF_KEY, clampThumb } from '../components/DensityControl'
 import { LOCALES, tGlobal, useI18n, type LocaleCode } from '../i18n'
 
@@ -167,6 +168,30 @@ function modelLabel(name: string): { title: string; usage: string } {
       usage: tGlobal('合规修复的 inpaint 步骤（去水印 / 去杂物）用它；桌面版本地推理，图片不出本机'),
     }
   }
+  if (name === 'u2net') {
+    return {
+      title: tGlobal('主体分割（u2net）'),
+      usage: tGlobal('智能裁剪 / 主体抠图（fg_ratio）用它；缺件时相应入口置灰并写明原因'),
+    }
+  }
+  if (name === 'ppocrv6-medium-det') {
+    return {
+      title: tGlobal('文字检测（PP-OCRv6 det）'),
+      usage: tGlobal('OCR 第一步：框出文字区域（与识别模型配对使用）'),
+    }
+  }
+  if (name === 'ppocrv6-medium-rec') {
+    return {
+      title: tGlobal('文字识别（PP-OCRv6 rec）'),
+      usage: tGlobal('OCR 第二步：识别框内文字（含字典文件）'),
+    }
+  }
+  if (name === 'realesr-general-x4v3') {
+    return {
+      title: tGlobal('超分（Real-ESRGAN x4）'),
+      usage: tGlobal('4× 放大；体积小，建议随「下载全部」一起装'),
+    }
+  }
   return { title: name, usage: '' }
 }
 
@@ -218,6 +243,71 @@ function ModelFilesSettings() {
       }
     })()
 
+  // 「下载全部可选模型」（GH-9）：逐个发起（后端单飞），每个收工再发下一个；
+  // 单个失败不阻断其余（结束后一次性报哪些没成），状态随每个模型完成即时刷新。
+  const [allBusy, setAllBusy] = useState(false)
+  const downloadAll = () =>
+    void (async () => {
+      const pending = (view?.models ?? [])
+        .filter((m) => m.downloadable && !m.ready)
+        .map((m) => m.name)
+      if (pending.length === 0) {
+        refresh()
+        return
+      }
+      setAllBusy(true)
+      const failed: string[] = []
+      try {
+        for (const name of pending) {
+          try {
+            await api.modelDownload(name)
+          } catch {
+            failed.push(name)
+            continue
+          }
+          for (;;) {
+            const s = await api.modelDownloadStatus().catch(() => null)
+            if (!s || !s.running) {
+              if (s?.status === 'failed') failed.push(name)
+              break
+            }
+            await new Promise((r) => setTimeout(r, 500))
+          }
+          refresh()
+        }
+      } finally {
+        setAllBusy(false)
+        refresh()
+      }
+      if (failed.length > 0) {
+        toast('error', t('部分模型下载失败'), failed.join(', '))
+      }
+    })()
+
+  // 「从文件夹导入」（GH-9 手动兜底）：本机目录 = file:// 源，走同一条下载通道
+  // （sha256 校验/落盘位置与在线下载完全一致）；web 形态没有系统选目录框，退化为手填路径。
+  const importFromFolder = (name: string) =>
+    void (async () => {
+      setBusy(name)
+      try {
+        let dir: string | null = null
+        if (isDesktopShell()) {
+          dir = await pickFolder(t('选择包含模型文件的目录'))
+        } else {
+          dir = window.prompt(t('输入包含模型文件的目录路径（file:// 导入）'))
+        }
+        if (!dir) return
+        const base = dir.startsWith('file://') ? dir : `file://${dir}`
+        await api.modelDownload(name, base)
+        toast('info', t('开始下载模型'), `${name} ← ${base}`)
+      } catch (e) {
+        toast('error', t('下载未启动'), e instanceof Error ? e.message : String(e))
+      } finally {
+        setBusy(null)
+        refresh()
+      }
+    })()
+
   const rows = (view?.models ?? []).filter((m) => m.downloadable)
 
   return (
@@ -242,13 +332,50 @@ function ModelFilesSettings() {
       {view && (
         <p className="mt-2 text-[11px] leading-5 text-ink-dim" data-testid="models-root">
           {t('模型目录')} <code className="font-mono break-all">{view.root}</code>
-          {view.baseUrl ? (
+          {view.sourceMode === 'override' && view.sources && view.sources.length > 0 ? (
+            <>
+              {' '}
+              · {t('下载源')} <code className="font-mono break-all">{view.sources[0]}</code>
+            </>
+          ) : view.sources && view.sources.length > 1 ? (
+            <>
+              {' '}
+              · {t('下载源')}{' '}
+              <span className="font-mono break-all" data-testid="models-source-mirrors">
+                {view.sources.join(' → ')}
+              </span>
+              <span>（{t('失败自动切下一个镜像')}）</span>
+            </>
+          ) : view.baseUrl ? (
             <>
               {' '}
               · {t('下载源')} <code className="font-mono break-all">{view.baseUrl}</code>
             </>
           ) : null}
         </p>
+      )}
+
+      {/* 一键下载全部（GH-9）：首屏就把「还差几个、多大」说清，不用逐个点 */}
+      {view && (view.missingCount ?? 0) > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            data-testid="models-download-all"
+            disabled={running || allBusy}
+            onClick={downloadAll}
+          >
+            {allBusy
+              ? t('下载中…')
+              : t('下载全部可选模型（{n} 个 · {size}）', {
+                  n: view.missingCount ?? 0,
+                  size: formatSize(view.missingBytes ?? 0),
+                })}
+          </Button>
+          <span className="text-[11px] text-ink-dim">
+            {t('逐个下载（单飞），单个失败不影响其余模型')}
+          </span>
+        </div>
       )}
 
       {rows.length === 0 && !viewErr && (
@@ -277,6 +404,12 @@ function ModelFilesSettings() {
                 <span className="text-sm font-medium">{label.title}</span>
                 <code className="font-mono text-[11px] text-ink-dim">{m.name}</code>
                 <span className="text-[11px] text-ink-dim">{formatSize(m.totalBytes)}</span>
+                {m.license && (
+                  <span className="text-[11px] text-ink-dim" data-testid={`model-license-${m.name}`}>
+                    {m.license}
+                  </span>
+                )}
+                {m.source && <span className="text-[11px] text-ink-dim">· {m.source}</span>}
                 <span
                   className={`text-[11px] ${m.ready ? 'text-emerald-400' : 'text-amber-300'}`}
                   data-testid={`model-state-${m.name}`}
@@ -307,6 +440,17 @@ function ModelFilesSettings() {
                     variant="secondary"
                   >
                     {t('重试')}
+                  </Button>
+                )}
+                {!m.ready && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    data-testid={`model-import-${m.name}`}
+                    disabled={busy === m.name || running}
+                    onClick={() => importFromFolder(m.name)}
+                  >
+                    {t('从文件夹导入')}
                   </Button>
                 )}
               </div>

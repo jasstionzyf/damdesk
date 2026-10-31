@@ -99,8 +99,9 @@ const PRIMARY_CEILING: Record<string, number> = {
   'pages/TagReview.tsx': 1,
   'pages/Tasks.tsx': 0,
   'pages/Trash.tsx': 1,
-  // 设置页：只有一个主按钮（向量化「保存」），其余分区的保存是二级
-  'pages/Settings.tsx': 1,
+  // 设置页：向量化「保存」+ 模型区「下载全部可选模型」（GH-9：缺件才出现的主 CTA，
+  // 缺模型 = 该页最重要的未完成动作；两个 primary 不同时在场——前者常驻、后者条件渲染）
+  'pages/Settings.tsx': 2,
   'components/TaskCenter.tsx': 0,
   'components/OnboardingWizard.tsx': 1,
   'components/PackManager.tsx': 0,

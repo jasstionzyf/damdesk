@@ -512,11 +512,15 @@ export interface ModelFileStatus {
 /** 单个 manifest 的落盘状态（GET /api/models） */
 export interface ModelEntry {
   name: string
-  /** true = 未随安装包内置、需要用户下载（本卡只有 lama-fp32） */
+  /** true = 未随安装包内置、需要用户下载（GH-9：4 个可选增强 + lama，约 504MB） */
   downloadable: boolean
   ready: boolean
   presentBytes: number
   totalBytes: number
+  /** 许可（展示口径，后端 model_info 表） */
+  license?: string
+  /** 来源描述（上游仓/导出方） */
+  source?: string
   /** 缺件的绝对路径（引擎实际读取的位置，可直接照着手放） */
   missingPaths: string[]
   files: ModelFileStatus[]
@@ -525,7 +529,15 @@ export interface ModelEntry {
 export interface ModelsView {
   root: string
   baseUrl: string | null
+  /** 生效分发源列表（default = HF 主源 → COS 镜像；override = 用户显式指定，单项） */
+  sources?: string[] | null
+  /** default = 内置镜像组自动 failover；override = settings.model_base_url / 请求显式指定 */
+  sourceMode?: 'default' | 'override'
   downloadable: string[]
+  /** 聚合（GH-9）：未就绪的可选模型个数 / 缺件字节 / 可选模型总体积 */
+  missingCount?: number
+  missingBytes?: number
+  optionalBytes?: number
   models: ModelEntry[]
   /** web 构建（local-infer off）时后端给的口径说明 */
   note?: string

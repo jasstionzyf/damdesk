@@ -177,6 +177,28 @@ export default {
   '局部重绘（big-lama）': 'Inpaint (big-lama)',
   '合规修复的 inpaint 步骤（去水印 / 去杂物）用它；桌面版本地推理，图片不出本机':
     'Used by the inpaint step of compliance fixes (watermark / clutter removal); local inference on desktop — images never leave this machine',
+  // GH-9：4 个可选增强模型 + 一键下载全部 / 从文件夹导入（手动兜底）
+  '主体分割（u2net）': 'Subject segmentation (u2net)',
+  '智能裁剪 / 主体抠图（fg_ratio）用它；缺件时相应入口置灰并写明原因':
+    'Used by smart crop / subject cutout (fg_ratio); related entries are greyed out with a reason while it is missing',
+  '文字检测（PP-OCRv6 det）': 'Text detection (PP-OCRv6 det)',
+  'OCR 第一步：框出文字区域（与识别模型配对使用）':
+    'Step 1 of OCR: locate text regions (paired with the recognition model)',
+  '文字识别（PP-OCRv6 rec）': 'Text recognition (PP-OCRv6 rec)',
+  'OCR 第二步：识别框内文字（含字典文件）':
+    'Step 2 of OCR: read text inside the boxes (includes the dictionary file)',
+  '超分（Real-ESRGAN x4）': 'Upscale (Real-ESRGAN x4)',
+  '4× 放大；体积小，建议随「下载全部」一起装':
+    '4× upscale; small enough to grab along with "Download all"',
+  '下载全部可选模型（{n} 个 · {size}）': 'Download all optional models ({n} · {size})',
+  '逐个下载（单飞），单个失败不影响其余模型':
+    'Downloaded one by one (single flight); one failure does not block the rest',
+  '失败自动切下一个镜像': 'falls over to the next mirror automatically',
+  '从文件夹导入': 'Import from folder',
+  '选择包含模型文件的目录': 'Choose the folder that contains the model files',
+  '输入包含模型文件的目录路径（file:// 导入）':
+    'Enter the folder path containing the model files (file:// import)',
+  '部分模型下载失败': 'Some models failed to download',
 
   // ---- 设置页：OCR ----
   '文字识别（OCR）': 'Text recognition (OCR)',

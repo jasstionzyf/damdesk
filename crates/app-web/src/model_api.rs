@@ -31,12 +31,26 @@ use crate::error_codes::{codes, err_coded};
 use crate::infer;
 use crate::AppState;
 
-/// 未随安装包内置、因而需要「下载入口」的模型（manifest 名）。
+/// 未随安装包内置、因而需要「下载入口」的模型（manifest 名，task 裁决）。
 ///
-/// 内置清单在 `app-tauri::shell::BUNDLED_MODELS`（安装包资源目录）；`lama-fp32`(208MB) 与
-/// PP-OCRv6 两件按体积裁决不内置。OCR 的缺件提示已自带手工放置路径（ocr_api），
-/// 本清单先只收 lama，接口本身对任意 manifest 通用（加模型 = 加一条 + registry 一条）。
-pub const DOWNLOADABLE: &[&str] = &["lama-fp32"];
+/// 内置清单在 `app-tauri::shell::BUNDLED_MODELS`（安装包资源目录，检索必需塔 siglip2
+/// **不进**本清单）。DINOv3（判重塔）也不进：Meta 许可不代下，缺件走「自备」
+/// （判重诊断已给落点指引）。本清单 = 4 个可选增强 + lama，合计约 504MB。
+pub const DOWNLOADABLE: &[&str] = &[
+    "u2net",
+    "ppocrv6-medium-det",
+    "ppocrv6-medium-rec",
+    "realesr-general-x4v3",
+    "lama-fp32",
+];
+
+/// 默认分发根（task 用户裁决）：HF 主源 + COS 镜像。单文件 URL =
+/// base + "/" + manifest.url_path（HF `resolve/main` 与 COS 对象存储都支持子目录路径）。
+pub const MODEL_SOURCE_HF: &str = "https://huggingface.co/damdesk/models/resolve/main";
+pub const MODEL_SOURCE_COS: &str =
+    "https://soujpg-images-1307121509.cos.ap-shanghai.myqcloud.com/damdesk/models";
+/// 下载失败自动切下一个镜像（顺序即优先级）；显式 baseUrl / settings 覆盖 = 单源不 failover。
+pub const MODEL_MIRRORS: &[&str] = &[MODEL_SOURCE_HF, MODEL_SOURCE_COS];
 
 fn err(status: StatusCode, code: &str, msg: impl Into<String>) -> Response {
     (status, Json(json!({ "error": msg.into(), "code": code }))).into_response()
@@ -48,17 +62,59 @@ pub fn model_root(state: &AppState) -> std::path::PathBuf {
     core_config::models_root(&state.models_root)
 }
 
-/// 分发源：显式入参 > settings.model_base_url > 内置默认。尾部斜杠去掉（store 自己拼 "/"）。
-fn effective_base_url(settings: &str, explicit: Option<&str>) -> String {
-    let picked = explicit
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            let s = settings.trim();
-            (!s.is_empty()).then_some(s)
-        })
-        .unwrap_or(core_config::DEFAULT_MODEL_BASE_URL);
-    picked.trim_end_matches('/').to_string()
+/// 每模型元信息（设置页展示用）：（许可，来源）。manifest 不背展示信息（sha256/落盘
+/// 语义不动，sigma 边界），集中在这里 —— 加模型 = manifest 一条 + 这里一条。
+pub fn model_info(name: &str) -> (&'static str, &'static str) {
+    match name {
+        "u2net" => (
+            "Apache-2.0",
+            "rembg 同源权重（GitHub release / HF tomjackson2023/rembg）",
+        ),
+        "ppocrv6-medium-det" | "ppocrv6-medium-rec" => {
+            ("Apache-2.0", "PaddlePaddle 官方 ONNX（PaddleOCR）")
+        }
+        "realesr-general-x4v3" => ("BSD-3-Clause", "Real-ESRGAN 官方权重（ONNX 再打包）"),
+        "lama-fp32" => ("Apache-2.0", "Carve/LaMa-ONNX 导出（FP32）"),
+        n if n == core_config::DEFAULT_EMBEDDER => (
+            "Apache-2.0",
+            "onnx-community/siglip2-base-patch16-224-ONNX（内置）",
+        ),
+        n if n == core_config::DEDUP_EMBEDDER => (
+            "DINOv3 Community License（Meta）",
+            "本地导出，无公网分发源 —— 需自备（不代下）",
+        ),
+        _ => ("—", "—"),
+    }
+}
+
+/// 分发源列表：显式入参 > settings.model_base_url 覆盖（≠内置默认才算覆盖）> 内置镜像组。
+/// 返回（按优先级排序的源，是否用户覆盖）。尾部斜杠去掉（store 自己拼 "/"）。
+fn resolve_base_sources(settings: &str, explicit: Option<&str>) -> (Vec<String>, bool) {
+    let one = |s: &str| vec![s.trim().trim_end_matches('/').to_string()];
+    if let Some(s) = explicit.map(str::trim).filter(|s| !s.is_empty()) {
+        return (one(s), true);
+    }
+    let s = settings.trim();
+    if !s.is_empty() && s != core_config::DEFAULT_MODEL_BASE_URL {
+        return (one(s), true);
+    }
+    (
+        MODEL_MIRRORS
+            .iter()
+            .map(|s| s.trim_end_matches('/').to_string())
+            .collect(),
+        false,
+    )
+}
+
+/// 下载实际用的源序列：siglip（内置塔）在默认模式下仍回官方镜像仓（上游 sha 锁定不变，
+/// 历史行为不回归）；其余模型走 HF 主源 → COS 镜像。
+fn download_sources(settings: &str, explicit: Option<&str>, name: &str) -> (Vec<String>, bool) {
+    let (sources, overridden) = resolve_base_sources(settings, explicit);
+    if !overridden && name == core_config::DEFAULT_EMBEDDER {
+        return (vec![core_config::DEFAULT_MODEL_BASE_URL.to_string()], false);
+    }
+    (sources, overridden)
 }
 
 // ---------- 单飞状态 + 进度快照 ----------
@@ -77,6 +133,8 @@ struct Progress {
     outcome: Option<serde_json::Value>,
     started_at: Option<i64>,
     finished_at: Option<i64>,
+    /// 当前正在尝试的分发源（镜像链下载时逐源更新；空闲 = None）。
+    source: Option<String>,
 }
 
 /// 模型下载单飞状态（同一时刻只允许一个下载；进度供 `GET /api/models/download/status` 轮询）。
@@ -97,7 +155,11 @@ impl ModelDownloadState {
 
     /// 当前正在下载的模型名（空闲 = None）。
     pub fn current(&self) -> Option<String> {
-        self.progress.lock().expect("model progress lock").model.clone()
+        self.progress
+            .lock()
+            .expect("model progress lock")
+            .model
+            .clone()
     }
 
     /// 抢到即拿 guard（drop 释放；panic 也不会把状态钉死）；已有下载在跑 → None。
@@ -122,9 +184,18 @@ impl ModelDownloadState {
 
     fn record_json(&self, ev: serde_json::Value) {
         let mut p = self.progress.lock().expect("model progress lock");
-        p.status = ev.get("status").and_then(|v| v.as_str()).map(str::to_string);
-        p.done_bytes = ev.get("doneBytes").and_then(|v| v.as_u64()).unwrap_or(p.done_bytes);
-        p.total_bytes = ev.get("totalBytes").and_then(|v| v.as_u64()).unwrap_or(p.total_bytes);
+        p.status = ev
+            .get("status")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        p.done_bytes = ev
+            .get("doneBytes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(p.done_bytes);
+        p.total_bytes = ev
+            .get("totalBytes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(p.total_bytes);
         p.completed_files = ev
             .get("completedFiles")
             .and_then(|v| v.as_u64())
@@ -144,6 +215,12 @@ impl ModelDownloadState {
         let mut p = self.progress.lock().expect("model progress lock");
         p.error = Some(msg.to_string());
         p.status = Some("failed".into());
+    }
+
+    /// 记录当前尝试的分发源（进度快照可见，前端「当前生效源」展示用）。
+    fn set_source(&self, base: &str) {
+        let mut p = self.progress.lock().expect("model progress lock");
+        p.source = Some(base.to_string());
     }
 
     fn set_outcome(&self, outcome: serde_json::Value) {
@@ -166,6 +243,7 @@ impl ModelDownloadState {
             "outcome": p.outcome,
             "startedAt": p.started_at,
             "finishedAt": p.finished_at,
+            "source": p.source,
         })
     }
 }
@@ -193,6 +271,10 @@ fn now_ms() -> i64 {
 // ---------- 路由 ----------
 
 /// GET /api/models：全部 manifest 的落盘状态（`downloadable` = 未内置、需下载）。
+///
+/// 聚合（task）：`missingCount`（未就绪的可选模型个数）/ `missingBytes`（缺件字节）/
+/// `optionalBytes`（可选模型总体积，前端首屏「下载全部（…MB）」用它）；`sources` +
+/// `sourceMode` 回告生效分发源（default = 内置镜像组自动 failover，override = 用户显式指定）。
 #[cfg(feature = "local-infer")]
 pub async fn list(State(state): State<AppState>) -> Response {
     use engine_embed::model_store::{manifests, ModelStore};
@@ -202,11 +284,16 @@ pub async fn list(State(state): State<AppState>) -> Response {
         let conn = state.db.lock().await;
         infer::load_settings(&conn)
     };
-    let base = effective_base_url(&settings.model_base_url, None);
+    let (sources, overridden) = resolve_base_sources(&settings.model_base_url, None);
+    let base = sources.first().cloned().unwrap_or_default();
     let store = ModelStore::new(root.clone(), base.clone());
+    let mut missing_count = 0u64;
+    let mut missing_bytes = 0u64;
+    let mut optional_bytes = 0u64;
     let models: Vec<serde_json::Value> = manifests()
         .into_iter()
         .map(|m| {
+            let (license, source) = model_info(&m.name);
             let checks = store.status(&m);
             let ready = checks.iter().all(|c| c.present);
             let present_bytes: u64 = checks.iter().filter(|c| c.present).map(|c| c.bytes).sum();
@@ -218,12 +305,26 @@ pub async fn list(State(state): State<AppState>) -> Response {
                         .map(|f| store.file_path(&m, f).display().to_string())
                 })
                 .collect();
+            if DOWNLOADABLE.contains(&m.name.as_str()) {
+                optional_bytes += m.total_bytes();
+                if !ready {
+                    missing_count += 1;
+                    // 缺件字节按「应有体积」算（checks[].bytes 是在盘实际字节，缺件 = 0）
+                    missing_bytes += checks
+                        .iter()
+                        .filter(|c| !c.present)
+                        .map(|c| c.expectedBytes)
+                        .sum::<u64>();
+                }
+            }
             json!({
                 "name": m.name,
                 "downloadable": DOWNLOADABLE.contains(&m.name.as_str()),
                 "ready": ready,
                 "presentBytes": present_bytes,
                 "totalBytes": m.total_bytes(),
+                "license": license,
+                "source": source,
                 "missingPaths": missing,
                 "files": checks,
             })
@@ -234,7 +335,12 @@ pub async fn list(State(state): State<AppState>) -> Response {
         Json(json!({
             "root": root.display().to_string(),
             "baseUrl": base,
+            "sources": sources,
+            "sourceMode": if overridden { "override" } else { "default" },
             "downloadable": DOWNLOADABLE,
+            "missingCount": missing_count,
+            "missingBytes": missing_bytes,
+            "optionalBytes": optional_bytes,
             "models": models,
         })),
     )
@@ -244,12 +350,20 @@ pub async fn list(State(state): State<AppState>) -> Response {
 #[cfg(not(feature = "local-infer"))]
 pub async fn list(State(state): State<AppState>) -> Response {
     let root = model_root(&state);
+    // web 构建（local-infer off）没有 model_store（manifest/落盘状态是桌面专属），
+    // 但分发源是纯字符串逻辑，照实回告（镜像组 / 用户覆盖），聚合只能给 0 值。
+    let (sources, overridden) = resolve_base_sources("", None);
     (
         StatusCode::OK,
         Json(json!({
             "root": root.display().to_string(),
-            "baseUrl": serde_json::Value::Null,
+            "baseUrl": sources.first(),
+            "sources": sources,
+            "sourceMode": if overridden { "override" } else { "default" },
             "downloadable": DOWNLOADABLE,
+            "missingCount": 0,
+            "missingBytes": 0,
+            "optionalBytes": 0,
             "models": [],
             "note": "本构建不含本地 ONNX 运行时（local-infer off）：模型下载为桌面专属能力",
         })),
@@ -289,10 +403,14 @@ pub async fn download(
         let conn = state.db.lock().await;
         infer::load_settings(&conn)
     };
-    let base = effective_base_url(&settings.model_base_url, req.base_url.as_deref());
-    // 源门控：内置默认源是 siglip 的 HF 仓，别的模型在那儿**不存在** —— 与其让 ureq
-    // 返回 404 让人猜，不如直接说清「要配镜像根」。
-    if base == core_config::DEFAULT_MODEL_BASE_URL && name != core_config::DEFAULT_EMBEDDER {
+    let (sources, _overridden) =
+        download_sources(&settings.model_base_url, req.base_url.as_deref(), &name);
+    // 源门控：唯一源是 siglip 官方仓而模型不是 siglip → 409（两条可执行出路写清，
+    // task 要求不只报「未配置」）。默认模式下可选模型走镜像组，不再落这个分支。
+    if sources.len() == 1
+        && sources[0] == core_config::DEFAULT_MODEL_BASE_URL
+        && name != core_config::DEFAULT_EMBEDDER
+    {
         let url_paths = manifest
             .files
             .iter()
@@ -302,11 +420,12 @@ pub async fn download(
         return err_coded(
             StatusCode::CONFLICT,
             codes::MODEL_SOURCE_UNCONFIGURED,
-            json!({ "base": base, "name": name }),
+            json!({ "base": sources[0], "sources": sources, "name": name }),
             format!(
-                "未配置模型分发源：默认源是 siglip 官方仓（{base}），其中没有 {name}。\
-                 请把设置里的「模型下载源」改成镜像根（该根下需有 {url_paths}），\
-                 或在请求体里传 baseUrl（支持 file:// 本地目录）。"
+                "当前生效的下载源是 siglip 官方仓（{}），其中没有 {name}。两条出路任选其一：\
+                 ① 把推理设置的模型下载源（model_base_url）改成镜像根 —— 该根下需有：{url_paths}；\
+                 ② 在设置页用「从文件夹导入」指到本机目录（等价于下载请求传 file:// 的 baseUrl）。",
+                sources[0]
             ),
         );
     }
@@ -326,11 +445,14 @@ pub async fn download(
     let files = manifest.files.len();
     let total_bytes = manifest.total_bytes();
     let root = model_root(&state);
-    let store = ModelStore::new(root.clone(), base.clone());
+    let stores: Vec<ModelStore> = sources
+        .iter()
+        .map(|b| ModelStore::new(root.clone(), b.clone()))
+        .collect();
     let force = req.force;
     let st = state.models.clone();
     tokio::task::spawn_blocking(move || {
-        let _ = perform(&store, &manifest, force, &st);
+        let _ = perform_chain(&stores, &manifest, force, &st);
         drop(guard);
     });
     (
@@ -338,7 +460,8 @@ pub async fn download(
         Json(json!({
             "ok": true,
             "model": name,
-            "baseUrl": base,
+            "baseUrl": sources[0],
+            "sources": sources,
             "root": root.display().to_string(),
             "totalBytes": total_bytes,
             "files": files,
@@ -406,6 +529,37 @@ pub(crate) fn perform(
     }
 }
 
+/// 镜像链下载（task）：按顺序试每个源，单个源失败（连不上/404/sha 不符）自动切
+/// 下一个；全失败时聚合各源错误（快照 error 能看到每个源分别挂在哪）。成功源的 baseUrl
+/// 写进 outcome —— 设置页「当前生效源」据此显示。单源（显式覆盖）时行为与旧 perform 一致。
+#[cfg(feature = "local-infer")]
+pub(crate) fn perform_chain(
+    stores: &[engine_embed::model_store::ModelStore],
+    manifest: &engine_embed::model_store::ModelManifest,
+    force: bool,
+    state: &ModelDownloadState,
+) -> Result<serde_json::Value, String> {
+    let mut attempts: Vec<String> = Vec::new();
+    for store in stores {
+        state.set_source(store.base_url());
+        match perform(store, manifest, force, state) {
+            Ok(mut v) => {
+                v["baseUrl"] = json!(store.base_url());
+                v["sources"] = json!(stores
+                    .iter()
+                    .map(|s| s.base_url().to_string())
+                    .collect::<Vec<_>>());
+                state.set_outcome(v.clone());
+                return Ok(v);
+            }
+            Err(e) => attempts.push(format!("{} → {}", store.base_url(), e)),
+        }
+    }
+    let msg = format!("所有分发源都失败：{}", attempts.join("；"));
+    state.set_error(&msg);
+    Err(msg)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -428,20 +582,174 @@ mod tests {
     }
 
     #[test]
-    fn base_url_resolution_order() {
+    fn source_resolution_order_and_default_mirrors() {
+        // 显式入参最优先（单源，不 failover）
+        let (s, ov) = resolve_base_sources("https://mirror/a/", Some(" file:///tmp/src/ "));
+        assert_eq!(s, vec!["file:///tmp/src".to_string()]);
+        assert!(ov);
+        // settings 覆盖（≠内置默认）= 单源
+        let (s, ov) = resolve_base_sources("https://mirror/a", None);
+        assert_eq!(s, vec!["https://mirror/a".to_string()]);
+        assert!(ov);
+        // settings 是内置默认 siglip 仓 → 不算覆盖，走内置镜像组（HF → COS）
+        let (s, ov) = resolve_base_sources(core_config::DEFAULT_MODEL_BASE_URL, None);
         assert_eq!(
-            effective_base_url("https://mirror/a/", None),
-            "https://mirror/a"
+            s,
+            MODEL_MIRRORS
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(s.first().map(String::as_str), Some(MODEL_SOURCE_HF));
+        assert_eq!(s.last().map(String::as_str), Some(MODEL_SOURCE_COS));
+        assert!(!ov);
+        // 空串 → 镜像组（不让空源把下载打到裸路径上）
+        let (s, ov) = resolve_base_sources("   ", None);
+        assert_eq!(s.len(), 2);
+        assert!(!ov);
+    }
+
+    /// siglip（内置塔）默认模式仍指官方仓；其余模型（含覆盖模式）一律走解析结果。
+    #[test]
+    fn siglip_keeps_official_repo_under_default_mode() {
+        let (s, ov) = download_sources(
+            core_config::DEFAULT_MODEL_BASE_URL,
+            None,
+            core_config::DEFAULT_EMBEDDER,
         );
         assert_eq!(
-            effective_base_url("https://mirror/a", Some(" file:///tmp/src/ ")),
-            "file:///tmp/src"
+            s,
+            vec![core_config::DEFAULT_MODEL_BASE_URL.to_string()]
         );
-        // settings 里的空串 → 内置默认（不让空源把下载打到 "文件不存在" 的裸路径上）
+        assert!(!ov);
+        // 可选模型默认 = 镜像组
+        let (s, _) = download_sources("", None, "lama-fp32");
         assert_eq!(
-            effective_base_url("   ", None),
-            core_config::DEFAULT_MODEL_BASE_URL
+            s,
+            MODEL_MIRRORS
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
         );
+        // 显式覆盖后 siglip 也不再特判
+        let (s, ov) =
+            download_sources("", Some("file:///tmp/src"), core_config::DEFAULT_EMBEDDER);
+        assert_eq!(s, vec!["file:///tmp/src".to_string()]);
+        assert!(ov);
+    }
+
+    /// 可下载清单钉死：5 项、不含内置塔与 DINOv3（自备）；聚合体积 = 527_571_637（约 503MB）。
+    #[test]
+    fn downloadable_set_is_pinned() {
+        assert_eq!(
+            DOWNLOADABLE,
+            &[
+                "u2net",
+                "ppocrv6-medium-det",
+                "ppocrv6-medium-rec",
+                "realesr-general-x4v3",
+                "lama-fp32",
+            ]
+        );
+        assert!(!DOWNLOADABLE.contains(&core_config::DEFAULT_EMBEDDER));
+        assert!(!DOWNLOADABLE.contains(&core_config::DEDUP_EMBEDDER));
+        let total: u64 = engine_embed::model_store::manifests()
+            .into_iter()
+            .filter(|m| DOWNLOADABLE.contains(&m.name.as_str()))
+            .map(|m| m.total_bytes())
+            .sum();
+        assert_eq!(total, 527_571_637);
+        // 每模型元信息（许可/来源）不给空串 —— 设置页行直接展示
+        for name in DOWNLOADABLE {
+            let (license, source) = model_info(name);
+            assert!(!license.is_empty() && license != "—", "{name}: {license}");
+            assert!(!source.is_empty() && source != "—", "{name}: {source}");
+        }
+    }
+
+    /// 镜像 failover：第一个源缺文件 → 自动切第二个；成功源与源序列进快照 outcome。
+    #[cfg(feature = "local-infer")]
+    #[test]
+    fn perform_chain_fails_over_to_next_mirror() {
+        use engine_embed::model_store::{sha256_file, ModelFile, ModelManifest, ModelStore};
+
+        let base = std::env::temp_dir().join(format!("dam-model-chain-{}-ok", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let empty = base.join("mirror-empty");
+        let good = base.join("mirror-good");
+        std::fs::create_dir_all(&empty).unwrap();
+        std::fs::create_dir_all(&good).unwrap();
+        let p = good.join("fake.onnx");
+        std::fs::write(&p, b"chain-bytes").unwrap();
+        let (bytes, sha256) = sha256_file(&p).unwrap();
+        let manifest = ModelManifest {
+            name: "fake-chain".into(),
+            text_max_length: 0,
+            files: vec![ModelFile {
+                name: "fake.onnx".into(),
+                url_path: "fake.onnx".into(),
+                bytes,
+                sha256,
+            }],
+        };
+        let stores = [
+            ModelStore::new(base.join("models"), format!("file://{}", empty.display())),
+            ModelStore::new(base.join("models"), format!("file://{}", good.display())),
+        ];
+        let st = ModelDownloadState::new();
+        let out = perform_chain(&stores, &manifest, false, &st).expect("第二源应成功");
+        assert_eq!(out["downloaded"], 1);
+        assert_eq!(
+            out["baseUrl"].as_str().unwrap(),
+            stores[1].base_url(),
+            "成功源要进 outcome"
+        );
+        let snap = st.snapshot();
+        assert_eq!(snap["status"], "done");
+        assert_eq!(snap["source"].as_str(), Some(stores[1].base_url()));
+        assert_eq!(snap["outcome"]["baseUrl"].as_str(), Some(stores[1].base_url()));
+        assert!(stores[0].is_complete(&manifest));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// 镜像全失败：错误聚合每个源的失败原因（可诊断），不留 .part。
+    #[cfg(feature = "local-infer")]
+    #[test]
+    fn perform_chain_all_fail_aggregates_errors() {
+        use engine_embed::model_store::{sha256_file, ModelFile, ModelManifest, ModelStore};
+
+        let base =
+            std::env::temp_dir().join(format!("dam-model-chain-{}-fail", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let a = base.join("a");
+        let b = base.join("b");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        let p = a.join("nope.onnx");
+        let sha256 = sha256_file(&p).map(|v| v.1).unwrap_or_else(|_| "0".into());
+        let manifest = ModelManifest {
+            name: "fake-chain2".into(),
+            text_max_length: 0,
+            files: vec![ModelFile {
+                name: "nope.onnx".into(),
+                url_path: "nope.onnx".into(),
+                bytes: 3,
+                sha256,
+            }],
+        };
+        let stores = [
+            ModelStore::new(base.join("models"), format!("file://{}", a.display())),
+            ModelStore::new(base.join("models"), format!("file://{}", b.display())),
+        ];
+        let st = ModelDownloadState::new();
+        let err = perform_chain(&stores, &manifest, false, &st).expect_err("全失败必须报错");
+        assert!(err.contains("所有分发源都失败"), "{err}");
+        assert!(err.contains(&a.display().to_string()), "{err}");
+        assert!(err.contains(&b.display().to_string()), "{err}");
+        let snap = st.snapshot();
+        assert_eq!(snap["status"], "failed");
+        assert!(snap["error"].as_str().is_some_and(|e| e.contains("所有分发源")));
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// 单飞：并发的第二次必须拿不到守卫；guard drop 后能再拿（可重试）。
@@ -474,7 +782,9 @@ mod tests {
                 name: "fake-lama.onnx".into(),
                 url_path: "fake-lama.onnx".into(),
                 bytes: 3,
-                sha256: sha256_file(&base.join("nope")).map(|v| v.1).unwrap_or_else(|_| "0".into()),
+                sha256: sha256_file(&base.join("nope"))
+                    .map(|v| v.1)
+                    .unwrap_or_else(|_| "0".into()),
             }],
         };
         let store = ModelStore::new(base.join("models"), format!("file://{}", src.display()));
@@ -483,7 +793,9 @@ mod tests {
         assert!(err.contains("fake-lama.onnx"), "错误要指到具体文件: {err}");
         let snap = st.snapshot();
         assert_eq!(snap["status"], "failed");
-        assert!(snap["error"].as_str().is_some_and(|e| e.contains("fake-lama.onnx")));
+        assert!(snap["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("fake-lama.onnx")));
         assert!(!store.file_path(&manifest, &manifest.files[0]).exists());
         assert!(!store
             .file_path(&manifest, &manifest.files[0])

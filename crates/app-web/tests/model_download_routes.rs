@@ -34,10 +34,18 @@ fn tmp_dir(tag: &str) -> PathBuf {
 fn seed_state(tag: &str) -> (AppState, PathBuf) {
     let data_dir = tmp_dir(tag);
     let conn = core_storage::open(&data_dir.join("dam.db")).unwrap();
-    (app_web::test_support::state(data_dir.clone(), conn), data_dir)
+    (
+        app_web::test_support::state(data_dir.clone(), conn),
+        data_dir,
+    )
 }
 
-async fn call(app: &axum::Router, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
+async fn call(
+    app: &axum::Router,
+    method: &str,
+    uri: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
     // 无 body 时**不带** content-type：axum 的 `Option<Json<_>>` 只在「没有 JSON 载荷」时给 None
     // （声明了 application/json 却给空串是 400 —— 那不是我们要测的语义）。
     let mut builder = Request::builder().method(method).uri(uri);
@@ -49,7 +57,9 @@ async fn call(app: &axum::Router, method: &str, uri: &str, body: Option<Value>) 
         .unwrap();
     let res = app.clone().oneshot(req).await.unwrap();
     let status = res.status();
-    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
     let body: Value = if bytes.is_empty() {
         Value::Null
     } else {
@@ -129,8 +139,30 @@ async fn list_reports_lama_missing_with_absolute_paths() {
         .find(|m| m["name"] == "siglip2-base-p224-onnx")
         .expect("siglip 条目");
     assert_eq!(siglip["downloadable"], false);
-    // 下载清单不该悄悄扩张：本卡只放 lama（OCR 有自己的人工放置提示）
-    assert_eq!(body["downloadable"], serde_json::json!(["lama-fp32"]));
+    // 下载清单（task）：4 个可选增强 + lama，共 5 项；内置塔与 DINOv3（自备）不进
+    assert_eq!(
+        body["downloadable"],
+        serde_json::json!([
+            "u2net",
+            "ppocrv6-medium-det",
+            "ppocrv6-medium-rec",
+            "realesr-general-x4v3",
+            "lama-fp32"
+        ])
+    );
+    // 聚合（task）：全新库全部可选模型缺件 —— 个数 5、缺件字节 == 可选总体积
+    assert_eq!(body["missingCount"], 5);
+    assert_eq!(body["optionalBytes"], 527_571_637u64);
+    assert_eq!(body["missingBytes"], 527_571_637u64);
+    // 默认分发源 = 内置镜像组（HF 主源 → COS 镜像），sourceMode 如实标 default
+    assert_eq!(body["sourceMode"], "default");
+    assert_eq!(
+        body["sources"],
+        serde_json::json!([
+            "https://huggingface.co/damdesk/models/resolve/main",
+            "https://soujpg-images-1307121509.cos.ap-shanghai.myqcloud.com/damdesk/models"
+        ])
+    );
 
     // 状态接口空闲时也要有完整形状（UI 首屏读它就够）
     let (st, status) = call(&app, "GET", "/api/models/download/status", None).await;
@@ -150,16 +182,27 @@ async fn unknown_model_is_404_not_silent_noop() {
 }
 
 #[tokio::test]
-async fn default_base_url_is_refused_for_lama_with_actionable_hint() {
+async fn siglip_official_repo_override_is_refused_with_two_actionable_paths() {
     let (state, _d) = seed_state("source");
     let app = app_web::router_without_dist(state);
-    // 新库 settings 是默认值 = siglip 官方仓；lama 在那儿不存在 → 必须先配镜像根
-    let (st, body) = call(&app, "POST", "/api/models/lama-fp32/download", None).await;
+    // task 后默认源 = 内置镜像组（HF → COS），全新库不再 409；
+    // 409 分支留给「唯一生效源 = siglip 官方仓」的显式覆盖（那儿没有可选模型）。
+    let (st, body) = call(
+        &app,
+        "POST",
+        "/api/models/lama-fp32/download",
+        Some(serde_json::json!({
+            "baseUrl": "https://hf-mirror.com/onnx-community/siglip2-base-patch16-224-ONNX/resolve/main"
+        })),
+    )
+    .await;
     assert_eq!(st, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["code"], "model_source_unconfigured");
     let msg = body["error"].as_str().unwrap();
     assert!(msg.contains("lama-fp32"), "{msg}");
-    assert!(msg.contains("baseUrl") || msg.contains("镜像"), "{msg}");
+    // 两条可执行出路都要点名（不只报「未配置」）
+    assert!(msg.contains("model_base_url"), "{msg}");
+    assert!(msg.contains("从文件夹导入"), "{msg}");
     // 没有偷偷起任务
     let (_, status) = call(&app, "GET", "/api/models/download/status", None).await;
     assert_eq!(status["running"], false);
@@ -205,7 +248,10 @@ async fn failed_download_is_reported_and_leaves_nothing_behind() {
     assert_eq!(status["status"], "failed", "{status}");
     assert_eq!(status["model"], "lama-fp32");
     let err = status["error"].as_str().unwrap_or_default();
-    assert!(err.contains("lama-fp32.onnx"), "错误要指到具体文件: {status}");
+    assert!(
+        err.contains("lama-fp32.onnx"),
+        "错误要指到具体文件: {status}"
+    );
     assert!(status["finishedAt"].as_i64().unwrap_or(0) > 0);
 
     // 磁盘：不留正式文件也不留 .part；模型仍报未就绪（点过下载 ≠ 可用）
