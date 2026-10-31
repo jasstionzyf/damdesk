@@ -11,7 +11,7 @@ reports/logs/
 tests/fixtures/reals/
 
 # D13 打包：安装包内置模型/运行库体积大，不入库（/data 分发源，构建时 cp 进来）
-crates/app-tauri/resources/models/
+crates/app-tauri/resources/models/*
 !crates/app-tauri/resources/models/siglip2-base-p224-onnx/
 !crates/app-tauri/resources/models/siglip2-base-p224-onnx/README.txt
 crates/app-tauri/resources/bin/
