@@ -1,0 +1,182 @@
+# GH-7：v0.1.0-preview Release 出包流水线（workflow_dispatch，自托管 runner）。
+#
+# 产物（lite 形态：安装包只内置检索必需塔 siglip2，其余模型走 model_store 分发 / GH-10 zip）：
+#   damdesk_0.1.0_x64-setup.exe   Windows NSIS（自托管 Windows runner）
+#   damdesk_0.1.0_aarch64.dmg     macOS Apple Silicon（自托管 macOS runner）
+#   SHA256SUMS                    两个安装包的 sha256 清单（models 物料的哈希由
+#                                 scripts/publish_models.sh 侧生成，发布时合并上传）
+#
+# 打包红线（不过即构建失败）：
+#   - resources/models 只准有 siglip2-base-p224-onnx/（scripts/models_bundle_gate.sh --prune + 断言）
+#   - 权重 bytes+sha256 与 model_store::manifests() 逐项一致（tests/bundle_models_gate.rs，
+#     DAM_RELEASE_GATE=1 强制；CI/开发环境不设开关 → 测试 SKIP，不假红）
+#   - 任何 dinov3* 路径一律失败（Meta 许可禁止随包再分发，GH-5 摘除对象）
+#
+# 自托管 runner 前置（一次性）：
+#   Windows：git-bash（PATH 含 bash/find/sha256sum）、python3、Rust stable（rustup）、
+#            NSIS 由 tauri bundler 首次构建自动下载；WebView2 离线安装器由 NSIS 配置内置。
+#   macOS：Xcode CLT、Rust stable、Homebrew（libvips 等，见 scripts/mac_bundle_dylibs.sh 的
+#          /opt/homebrew 依赖闭包）、python3、hdiutil（系统自带）。
+#   两端都需要一份 siglip2 权重目录（models_source 入参指向它）：
+#     vision.onnx / text.onnx / tokenizer.json / config.json / preprocessor_config.json
+#   （分发源见 docs/releases/v0.1.0-preview.md「模型说明」；门禁按 sha256 锁定，错版本必红。）
+#
+# 发布（publish=true 时）：创建 **draft** Release 并上传 exe/dmg/SHA256SUMS；
+# extras zip 与 models-manifest.txt 由 scripts/publish_models.sh 的产物（GH-10）另行上传 ——
+# 那两个文件来自模型分发物料流水线，不属于本工作流职责。
+
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Release tag（如 v0.1.0-preview；包文件名里的版本号取自 tauri.conf.json）'
+        required: true
+        default: 'v0.1.0-preview'
+      models_source:
+        description: 'runner 本机 siglip2 权重目录（含 vision.onnx/text.onnx/tokenizer.json/config.json/preprocessor_config.json）'
+        required: true
+      publish:
+        description: '构建成功后创建 draft GitHub Release 并上传安装包（默认 false：只出 artifacts）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-windows:
+    name: NSIS x64（自托管 Windows）
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: stage siglip2 weights
+        run: |
+          mkdir -p crates/app-tauri/resources/models/siglip2-base-p224-onnx
+          cp -f "${{ inputs.models_source }}/"* crates/app-tauri/resources/models/siglip2-base-p224-onnx/
+
+      - name: models bundle gate（prune + 断言：只准 siglip2，dinov3 红线）
+        run: bash scripts/models_bundle_gate.sh --prune
+
+      - name: bundle gate 字节级断言（bytes+sha256 ↔ model_store.rs）
+        run: DAM_RELEASE_GATE=1 cargo test -p app-tauri --test bundle_models_gate
+
+      - name: stage 内置 python 运行时（行业包依赖，KI-28）
+        run: python3 scripts/stage_pack_runtime.py
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: tauri build（NSIS）
+        run: pnpm tauri build --bundles nsis
+
+      - name: collect + sha256
+        run: |
+          mkdir -p dist
+          src="$(ls target/release/bundle/nsis/DAMDesk_*_x64-setup.exe | head -1)"
+          mv "$src" dist/damdesk_0.1.0_x64-setup.exe
+          ( cd dist && sha256sum -b damdesk_0.1.0_x64-setup.exe > SHA256SUMS.windows )
+          cat dist/SHA256SUMS.windows
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: dist/*
+
+  build-macos:
+    name: dmg aarch64（自托管 macOS）
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: stage siglip2 weights
+        run: |
+          mkdir -p crates/app-tauri/resources/models/siglip2-base-p224-onnx
+          cp -f "${{ inputs.models_source }}/"* crates/app-tauri/resources/models/siglip2-base-p224-onnx/
+
+      - name: models bundle gate（prune + 断言：只准 siglip2，dinov3 红线）
+        run: bash scripts/models_bundle_gate.sh --prune
+
+      - name: bundle gate 字节级断言（bytes+sha256 ↔ model_store.rs）
+        run: DAM_RELEASE_GATE=1 cargo test -p app-tauri --test bundle_models_gate
+
+      - name: stage 内置 python 运行时（包结构两端一致；macOS 上插件回落系统 python3，包内 runtime 仅随包占位）
+        run: python3 scripts/stage_pack_runtime.py
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: tauri build（.app）
+        run: pnpm tauri build --bundles app
+
+      # 免 brew 自包含 .app：/opt/homebrew 依赖闭包收进 Contents/Frameworks + ad-hoc 重签
+      # （D13 坑#4；顺序固定：build app 之后、打 dmg 之前）
+      - name: bundle dylibs（自包含修复）
+        run: bash scripts/mac_bundle_dylibs.sh "target/release/bundle/macos/DAMDesk.app"
+
+      - name: make dmg
+        run: |
+          mkdir -p dist
+          hdiutil create -volname DAMDesk -srcfolder "target/release/bundle/macos/DAMDesk.app" \
+            -ov -format UDZO dist/damdesk_0.1.0_aarch64.dmg
+
+      - name: sha256
+        run: |
+          ( cd dist && shasum -a 256 damdesk_0.1.0_aarch64.dmg > SHA256SUMS.macos )
+          cat dist/SHA256SUMS.macos
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-macos
+          path: dist/*
+
+  sha256sums:
+    name: 汇总 SHA256SUMS
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          merge-multiple: true
+          path: dist
+
+      - name: 合成 SHA256SUMS
+        run: |
+          ( cd dist && rm -f SHA256SUMS.windows SHA256SUMS.macos && sha256sum -b damdesk_0.1.0_x64-setup.exe damdesk_0.1.0_aarch64.dmg > SHA256SUMS )
+          cat dist/SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-sums
+          path: dist/SHA256SUMS
+
+      - name: publish（draft Release；默认跳过）
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.version_tag }}
+        run: |
+          gh release create "$TAG" --draft --title "DAMDesk $TAG" \
+            --notes-file "docs/releases/$TAG.md" dist/damdesk_0.1.0_x64-setup.exe \
+            dist/damdesk_0.1.0_aarch64.dmg dist/SHA256SUMS
+          echo "::notice::模型物料（extras zip + models-manifest.txt）用 scripts/publish_models.sh 产物另行上传：gh release upload \"$TAG\" damdesk-models-extras-v1.zip models-manifest.txt"
