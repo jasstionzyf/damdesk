@@ -1,0 +1,15 @@
+[package]
+name = "core-storage"
+description = "L0 SQLite 封装（打开/迁移/DAO）+ 向量库抽象 + 文件工具"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+rusqlite.workspace = true
+# D5：sqlite-vec 静态编入（vec0 虚表 + cosine KNN）
+sqlite-vec.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

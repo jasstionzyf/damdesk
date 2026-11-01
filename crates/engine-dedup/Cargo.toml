@@ -1,0 +1,11 @@
+[package]
+name = "engine-dedup"
+description = "L1 去重聚类：fileHash/pHash/向量聚类分组"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+core-hash.workspace = true
+thiserror.workspace = true

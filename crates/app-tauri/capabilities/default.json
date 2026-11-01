@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "W7：主窗口（运行时创建，label=main）。鉴权/媒体全走内嵌 app-web HTTP。W7+：唯一原生能力 = 系统文件夹选择框（dialog:allow-open，前端 native.ts 运行时探测后调用），其余权限（fs/shell/http 等）一律不开。",
+  "windows": [
+    "main"
+  ],
+  "local": true,
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:*",
+      "http://localhost:*"
+    ]
+  },
+  "permissions": [
+    "dialog:allow-open"
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "pack": "com.soujpg.pack.realestate",
+  "version": "1.0.0",
+  "api_version": "1.0",
+  "fix_policy": "geometric",
+  "max_rounds": 1,
+  "note": "本文件是 packs/plugins/realestate/plugin/ruleset.py 的**人读副本**（单测 test_rules_resource_sync 钉住一致性；改阈值改 ruleset.py 再同步这里）。来源 packs/realestate/{rules,pipeline}.yaml，差异见包内 README「与旧引擎的差异」。",
+  "rules": [
+    {
+      "id": "F0_domain",
+      "name": {
+        "zh-Hans": "房源图领域 gate（是不是房源/室内实景照片）",
+        "en-US": "Listing photo domain gate (is it a real-estate / interior photo)"
+      },
+      "executor": "vl",
+      "deterministic": false,
+      "scope": "per_asset",
+      "fixer": null,
+      "on_fail": "fail"
+    },
+    {
+      "id": "F1_sharpness",
+      "name": {
+        "zh-Hans": "房源图清晰（拉普拉斯方差 ≥100）",
+        "en-US": "Sharp enough (Laplacian variance >= 100)"
+      },
+      "executor": "classic",
+      "deterministic": true,
+      "scope": "per_asset",
+      "fixer": null,
+      "on_fail": "fail"
+    },
+    {
+      "id": "F2_exposure",
+      "name": {
+        "zh-Hans": "曝光正常（死区占比 ≤0.30 且均值亮度 30~245）",
+        "en-US": "Normal exposure (clipped area <= 0.30 and mean luma 30-245)"
+      },
+      "executor": "classic",
+      "deterministic": true,
+      "scope": "per_asset",
+      "fixer": null,
+      "on_fail": "fail"
+    },
+    {
+      "id": "F3_duplicate",
+      "name": {
+        "zh-Hans": "重复房照（同组 pHash 近似重复，仅标记）",
+        "en-US": "Duplicate listing photos (near-duplicate pHash within the group; flag only)"
+      },
+      "executor": "classic",
+      "deterministic": true,
+      "scope": "per_group",
+      "fixer": null,
+      "on_fail": "pass"
+    },
+    {
+      "id": "F4_scene_complete",
+      "name": {
+        "zh-Hans": "必要场景齐套（客厅/卧室/厨房/卫生间）",
+        "en-US": "Required scenes complete (living room / bedroom / kitchen / bathroom)"
+      },
+      "executor": "vl",
+      "deterministic": false,
+      "scope": "per_group",
+      "fixer": null,
+      "on_fail": "fail"
+    },
+    {
+      "id": "F5_min_size",
+      "name": {
+        "zh-Hans": "尺寸达标（长边 ≥800 且短边 ≥600，可几何放大修复）",
+        "en-US": "Size requirement (long side >= 800 and short side >= 600; fixable by geometric upscale)"
+      },
+      "executor": "classic",
+      "deterministic": true,
+      "scope": "per_asset",
+      "fixer": "upscale",
+      "on_fail": "auto_fix"
+    }
+  ],
+  "thresholds": {
+    "F1_sharpness": {
+      "min": 100.0
+    },
+    "F2_exposure": {
+      "max_dead_ratio": 0.3,
+      "black_cut": 10,
+      "white_cut": 10,
+      "min_mean": 30.0,
+      "max_mean": 245.0
+    },
+    "F3_duplicate": {
+      "threshold": 8
+    },
+    "F4_scene_complete": {
+      "require_all": [
+        "客厅",
+        "卧室",
+        "厨房",
+        "卫生间"
+      ]
+    },
+    "F5_min_size": {
+      "long_side_min": 800,
+      "short_side_min": 600
+    }
+  },
+  "pipeline_order": [
+    "F0_domain",
+    "F5_min_size",
+    "F1_sharpness",
+    "F2_exposure",
+    "F3_duplicate",
+    "F4_scene_complete"
+  ],
+  "group_member_max": 24,
+  "report": {
+    "summary": [
+      "合格",
+      "不合格",
+      "未判定"
+    ],
+    "detail_columns": [
+      "imageSN",
+      "F0_domain",
+      "F0_domain_confidence",
+      "F1_sharpness",
+      "F1_sharpness_score",
+      "F2_exposure",
+      "F2_exposure_score",
+      "F3_duplicate",
+      "F4_scene_complete",
+      "F4_scene_complete_score"
+    ],
+    "low_confidence": 0.7
+  }
+}

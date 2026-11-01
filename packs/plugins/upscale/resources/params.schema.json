@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "groups": [
+    {
+      "key": "basic",
+      "title": "放大"
+    },
+    {
+      "key": "engine",
+      "title": "引擎与耗时"
+    },
+    {
+      "key": "adv",
+      "title": "高级",
+      "collapsed": true
+    }
+  ],
+  "properties": {
+    "scale": {
+      "type": "enum",
+      "title": "放大倍数",
+      "options": [
+        "2",
+        "4"
+      ],
+      "default": "2",
+      "group": "basic",
+      "affectsBody": true
+    },
+    "engine": {
+      "type": "enum",
+      "title": "引擎（full=Real-ESRGAN 模型，约 2~5 秒/张；light=重采样，毫秒级）",
+      "options": [
+        "full",
+        "light"
+      ],
+      "default": "full",
+      "group": "engine"
+    },
+    "denoise": {
+      "type": "number",
+      "title": "降噪强度（>0 强制走模型档：x4v3 自带降噪，强度不可调）",
+      "min": 0,
+      "max": 1,
+      "step": 0.1,
+      "default": 0,
+      "group": "adv",
+      "advanced": true
+    },
+    "tile": {
+      "type": "enum",
+      "title": "分块边长（auto=超过模型护栏 4MP 才分块）",
+      "options": [
+        "auto",
+        "384",
+        "768",
+        "1536"
+      ],
+      "default": "auto",
+      "group": "adv",
+      "advanced": true
+    }
+  },
+  "required": [
+    "scale"
+  ]
+}

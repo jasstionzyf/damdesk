@@ -1,0 +1,50 @@
+# W6 并行 bug 卡专用验收实例（t_4834c167 autoTag 接线首次使用）。
+#
+# 用途：多张 bug 卡并行开发时，不在主实例 damdesk (127.0.0.1:8787) 上
+# 做 E2E —— 每张卡用 worktree + 本文件起独立实例（独立容器名/端口/数据卷），
+# 互不污染库数据，也避免 compose 项目名冲突。
+#
+# 启动（在 worktree 根目录）：
+#   docker compose -f deploy/docker-compose.autotag-acceptance.yml -p dam-autotag up -d --build
+# 验收：
+#   curl 127.0.0.1:8788/healthz
+#   W6_API=http://127.0.0.1:8788 \
+#   W6_AUTOTAG_A=/data/w6-autotag-a W6_AUTOTAG_B=/data/w6-autotag-b \
+#     python3 scripts/w6_acceptance.py
+# 用完即弃：
+#   docker compose -f deploy/docker-compose.autotag-acceptance.yml -p dam-autotag down -v
+#
+# 铁律：容器部署，不裸跑（用户原则）。
+
+services:
+  damdesk:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        HTTP_PROXY: http://172.17.0.1:11700
+        HTTPS_PROXY: http://172.17.0.1:11700
+        NO_PROXY: 127.0.0.1,localhost,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
+    image: damdesk:autotag-acceptance
+    container_name: damdesk-autotag
+    ports:
+      - "127.0.0.1:8788:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DAM_WEB_EMBEDDER: openai-compat-embedding
+      DAM_WEB_EMBED_BASE_URL: http://host.docker.internal:8090/v1
+      DAM_WEB_EMBED_MODEL: qwen3-vl-embedding-2b
+      DAM_WEB_EMBED_PROXY: ""
+    volumes:
+      - dam_web_data_autotag:/data
+      - /data/w6-fresh:/data/w6-fresh:ro
+      - /data/w6-autotag-a:/data/w6-autotag-a:ro
+      - /data/w6-autotag-b:/data/w6-autotag-b:ro
+      # C/D：API 级验收（scripts/w6_acceptance.py H 段）用的未导入 fixture
+      - /data/w6-autotag-c:/data/w6-autotag-c:ro
+      - /data/w6-autotag-d:/data/w6-autotag-d:ro
+    restart: unless-stopped
+
+volumes:
+  dam_web_data_autotag:

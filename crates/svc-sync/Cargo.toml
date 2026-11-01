@@ -1,0 +1,11 @@
+[package]
+name = "svc-sync"
+description = "L2 云同步预留（cloudAssetId 状态机；v1 空实现）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+core-storage.workspace = true
+thiserror.workspace = true

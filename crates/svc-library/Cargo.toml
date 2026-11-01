@@ -1,0 +1,42 @@
+[package]
+name = "svc-library"
+description = "L2 读模型：列表/过滤/统计/标签面板（纯读，面向 UI）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+core-storage.workspace = true
+# MIGRATE-COPYIN：迁移前用 fileHash 与磁盘实况核对（内容变了就不搬，走 updated 语义）；
+# sha256 复用 L0 的唯一实现，不在本层另写一份。
+core-hash.workspace = true
+# C2：判定报告列模板来自 pack report.yaml（内置 pack 装载）
+core-config.workspace = true
+# W5：去重分组（fileHash ∪ pHash union-find 纯算法在 L1，本层只做 SQL 组装）
+engine-dedup.workspace = true
+# D5：检索编排（provider 查询向量化 + engine-search 召回合并；L2→L1 合法）。
+# R6 feature 门控（两层）：
+#   embed       = 检索编排本身（仅需 EmbedProvider trait + openai_compat 远程 provider）
+#   local-infer = 透传给 engine-embed 的本地 ONNX 推理（ort/模型文件，桌面用）
+# 桌面/app-tauri：default → embed + local-infer 全开。
+# web 容器（app-web）：default-features=false + features=["embed"] → 真检索可用、
+# 镜像不拉 ort/ONNX；active_embedder 指向 onnx_* 时 provider 构造明确报错（不静默降级）。
+engine-embed = { path = "../engine-embed", optional = true, default-features = false }
+engine-search.workspace = true
+# D11：导出走 job_queue(kind='export') 记录批次；缩略图档缺补生成（L2→L1/L0 合法）
+engine-jobq.workspace = true
+core-media.workspace = true
+# D11：zip 打包（deflate；仅写通道）
+zip = { version = "9.0.2", default-features = false, features = ["deflate"] }
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[features]
+default = ["embed", "local-infer"]
+# 向量检索编排（EmbedProvider 查询向量化）；关掉 = 纯读模型
+embed = ["dep:engine-embed"]
+# 本地 ONNX 推理（转发 engine-embed；关掉 = 只剩 openai_compat 远程 provider）
+local-infer = ["engine-embed/local-infer"]

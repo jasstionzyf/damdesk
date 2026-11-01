@@ -1,0 +1,8 @@
+# setuptools 在源码树里构建时留下的产物（pip install <本地目录> 会生成 build/ 与 *.egg-info/）
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+# 每包 venv 由宿主装机时创建，绝不入库
+examples/*/venv/

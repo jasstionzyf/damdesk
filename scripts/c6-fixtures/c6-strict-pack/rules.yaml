@@ -1,0 +1,18 @@
+# C6 验收夹具：**严格包**（classic-only）——目的不是业务合理，而是在真图上稳定产出
+# pending_human（真待人工素材），让 C6 的队列/误判/过滤在真数据上被验收。
+#
+# 为什么 min: 100000：真图长边不可能到 10 万像素 → 必然 fail；规则不带 fixer 且
+# on_fail=retry_then_human → 编排器按决策表转人工（reason=no_fixer）→ 队列必有素材。
+# 这是**确定性**设计，不依赖某一批图的分辨率分布。
+- id: RS1_size
+  name: 长边达标（验收阈值 100000：必然转人工）
+  executor: classic
+  evidence: image_only
+  check: {detector: size_min, params: {min: 100000}}
+  on_fail: retry_then_human
+- id: RS2_white_bg
+  name: 白底纯白（严格 max_dev=1）
+  executor: classic
+  evidence: image_only
+  check: {detector: white_edge, params: {max_dev: 1}}
+  on_fail: retry_then_human

@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "groups": [
+    {"key": "basic", "title": "判定门槛"},
+    {"key": "adv", "title": "高级", "collapsed": true}
+  ],
+  "properties": {
+    "shortSideMin": {
+      "type": "integer",
+      "title": "短边下限",
+      "min": 200,
+      "max": 8000,
+      "step": 100,
+      "default": 1600,
+      "unit": "px",
+      "group": "basic"
+    },
+    "longSideMin": {
+      "type": "integer",
+      "title": "长边下限",
+      "min": 0,
+      "max": 12000,
+      "step": 100,
+      "default": 0,
+      "unit": "px",
+      "group": "basic"
+    },
+    "whiteMaxDev": {
+      "type": "integer",
+      "title": "白底允许偏差",
+      "min": 0,
+      "max": 64,
+      "step": 1,
+      "default": 8,
+      "group": "basic"
+    },
+    "subjectRatioMin": {
+      "type": "number",
+      "title": "主体占比下限",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "default": 0.55,
+      "group": "adv"
+    },
+    "subjectRatioMax": {
+      "type": "number",
+      "title": "主体占比上限",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "default": 0.85,
+      "group": "adv"
+    },
+    "attribute": {
+      "type": "boolean",
+      "title": "输出商品属性标签",
+      "default": false,
+      "group": "adv"
+    },
+    "allowInpaint": {
+      "type": "boolean",
+      "title": "允许擦除式修复（水印/促销条）",
+      "default": true,
+      "group": "adv",
+      "affectsBody": true
+    }
+  },
+  "required": []
+}

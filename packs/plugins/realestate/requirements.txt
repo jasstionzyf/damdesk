@@ -1,0 +1,14 @@
+# 官方房产包**不依赖任何第三方库**（只有标准库：zlib/struct/math/json/urllib/threading）。
+#
+# 为什么刻意保持空：
+#   1. `docs/industry-pack-protocol.md` §4.0 要求每个包自带 venv 隔离运行；包零依赖时
+#      `<runtime>/python -m venv venv && pip install -r requirements.txt` 在断网环境
+#      瞬间完成，也不会把 numpy/Pillow 的体积与 CVE 带进桌面安装包。
+#   2. 本包**确实需要像素**（F1 清晰度 / F2 曝光要 luma 平面），但为此引入 Pillow 就要
+#      按平台各带一份 wheel；改成包内自带解码器（plugin/imagedec.py，纯标准库 PNG +
+#      baseline JPEG）更符合「宿主零改动 + 包可分发」两条硬约束。
+#      解码器与宿主 engine-classic 的 luma 口径逐项对齐，真实语料实测偏差见
+#      tests/fixtures/pillow_reference.json 的 observed 字段。
+#   3. 需要模型/重算力的活（u2net/OCR/几何 op/VL）一律走宿主网关，插件只做编排与测量。
+#
+# 若将来真的需要第三方库，请在这里加，并在 README「包内 venv」记录 wheel 缓存路径。

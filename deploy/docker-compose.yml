@@ -1,0 +1,47 @@
+# damdesk（W0 骨架起名 dam-web）：app-web axum 单服务，一个进程同时供应 web/ 前端 bundle 与 JSON API。
+#
+# 命名约定（2026-10-15 统一）：桌面产品线一律 damdesk-*（容器 damdesk、安装包 souJpg-DAM_*_setup.exe）；
+# 跑在 gpu7 的线上站点是独立一组 soujpg-dam-web（前端 :3100）+ image-front-api（后端 :8206），勿混。
+#
+# 启动：docker compose -f deploy/docker-compose.yml up -d --build
+# 验收：curl 127.0.0.1:8787/healthz → {"status":"ok","db":"ok"}
+#
+# dam-ai 三引擎（embedder/tagger/classic，W3/W4 才接入）不在本卡启动，
+# 用现成 compose 引用：/data/projects/dam-ai 的 docker-compose（gpu7 已跑
+# damai-tagger / damai-classic 等）。届时在本文件加 dam-ai 服务或用
+# external_links 直连，勿复制镜像定义。
+#
+# 铁律：容器部署，不裸跑（用户原则）。
+
+services:
+  damdesk:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        HTTP_PROXY: http://172.17.0.1:11700
+        HTTPS_PROXY: http://172.17.0.1:11700
+        NO_PROXY: 127.0.0.1,localhost,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
+    image: damdesk:latest
+    container_name: damdesk
+    ports:
+      # 绑 0.0.0.0（内网可访问，仍无登录）；如需收回环改回 127.0.0.1:8787:8787
+      - "0.0.0.0:8787:8787"
+    # W3：容器内用 host.docker.internal 访问宿主上跑的推理端点（dam-ai embedder :8090）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # W3 首启 seeding（settings 表已有 inference 行则不生效）：默认走 dam-ai embedder
+      DAM_WEB_EMBEDDER: openai-compat-embedding
+      DAM_WEB_EMBED_BASE_URL: http://host.docker.internal:8090/v1
+      DAM_WEB_EMBED_MODEL: qwen3-vl-embedding-2b
+      # 空串 = 直连（内网端点不走代理）
+      DAM_WEB_EMBED_PROXY: ""
+    volumes:
+      - dam_web_data:/data
+      # W2 验收测试图库（202 张真实 DP 照片 × 5 变体裁剪/质量，只读挂载）
+      - /data/dam-w2-corpus:/corpus:ro
+    restart: unless-stopped
+
+volumes:
+  dam_web_data:

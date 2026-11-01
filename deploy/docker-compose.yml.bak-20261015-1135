@@ -1,0 +1,44 @@
+# dam-web（W0 骨架）：app-web axum 单服务。
+# 启动：docker compose -f deploy/docker-compose.yml up -d --build
+# 验收：curl 127.0.0.1:8787/healthz → {"status":"ok","db":"ok"}
+#
+# dam-ai 三引擎（embedder/tagger/classic，W3/W4 才接入）不在本卡启动，
+# 用现成 compose 引用：/data/projects/dam-ai 的 docker-compose（gpu7 已跑
+# damai-tagger / damai-classic 等）。届时在本文件加 dam-ai 服务或用
+# external_links 直连，勿复制镜像定义。
+#
+# 铁律：容器部署，不裸跑（用户原则）。
+
+services:
+  dam-web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        HTTP_PROXY: http://172.25.45.230:11700
+        HTTPS_PROXY: http://172.25.45.230:11700
+        NO_PROXY: 127.0.0.1,localhost,172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
+    image: dam-web:latest
+    # 容器名避开既有线上 dam-web（gpu7:3100，soujpg DAM 前端）
+    container_name: dam-web-api
+    ports:
+      # 只绑宿主回环（R4 v1 单用户）；需内网访问再改绑 0.0.0.0
+      - "127.0.0.1:8787:8787"
+    # W3：容器内用 host.docker.internal 访问宿主上跑的推理端点（dam-ai embedder :8090）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # W3 首启 seeding（settings 表已有 inference 行则不生效）：默认走 dam-ai embedder
+      DAM_WEB_EMBEDDER: openai-compat-embedding
+      DAM_WEB_EMBED_BASE_URL: http://host.docker.internal:8090/v1
+      DAM_WEB_EMBED_MODEL: qwen3-vl-embedding-2b
+      # 空串 = 直连（内网端点不走代理）
+      DAM_WEB_EMBED_PROXY: ""
+    volumes:
+      - dam_web_data:/data
+      # W2 验收测试图库（202 张真实 DP 照片 × 5 变体裁剪/质量，只读挂载）
+      - /data/dam-w2-corpus:/corpus:ro
+    restart: unless-stopped
+
+volumes:
+  dam_web_data:

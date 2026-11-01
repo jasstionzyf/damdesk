@@ -1,0 +1,52 @@
+[package]
+name = "pack-host"
+description = "L2 行业包宿主内核：manifest 解析校验 + 子进程生命周期（stdio JSON-RPC，协议 v1.1）+ 能力网关 12 端点"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-config.workspace = true
+core-hash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# 能力网关（K03）直接复用 L0/L1 的现有实现，不重写算法：
+# - core-media(L0)：解码/尺寸/裁剪/缩放/编码（io.read / crop / letterbox / upscale 底座）
+# - engine-segment(L1)：u2net 主体掩码（detect.u2net / op.replace_bg）
+# - engine-ocr(L1)：PP-OCRv6 det+rec（detect.ocr）
+# - engine-restore(L1)：x4v3 超分 + lama 重绘（op.upscale / op.inpaint）
+# VL 通道是唯一跨不过去的（svc-pipeline 是 L2，同层禁互引）→ gateway::VlJudge 端口由 L3 注入。
+core-media.workspace = true
+# K07-FIX-D：`/io/read` 的 `measure:["white"]` 直接复用 classic `white_edge`（与旧引擎同一份实现，
+# R2 白底判定不再依赖 VL）；engine-classic 零解码依赖，不受 local-infer 门控。
+engine-classic.workspace = true
+engine-segment = { path = "../engine-segment", default-features = false }
+engine-ocr = { path = "../engine-ocr", default-features = false }
+engine-restore = { path = "../engine-restore", default-features = false }
+# 仅用于给子进程发信号（TERM/KILL）与进程组终止；不涉及任何算法
+libc = "0.2"
+# IP-K08：`.dampack` 归档读写（与 svc-library 的出包同一份 zip；离线可编译）
+zip = { version = "9.0.2", default-features = false, features = ["deflate"] }
+# IP-K08：ed25519 验签（ring 已在依赖图里，rustls 带进来；不引入新密码学家族）
+ring = "0.17"
+# IP-K08：`manifest.sig` 是 base64 文本
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
+# 语料验收探针（`examples/codec_probe.rs`）：解码原图/产物算 SSIM、读 alpha 平面。
+# N7 抠图包 e2e：验透明产物的 alpha 通道与白边。
+# 只开编码组需要的编解码器；**不开 avif**（纯 Rust 没有 avif 解码器，avif 产物走宿主 vips 验）。
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+
+[features]
+default = ["local-infer"]
+# 本地 ONNX 推理（u2net / PP-OCRv6 / x4v3 / lama）。与 svc-pipeline 同一门控：
+# web 容器形态 `default-features = false` → detect/generative 端点回 403
+# capability_missing（绝不静默降级成假结果），纯几何端点仍可用。
+local-infer = [
+    "engine-segment/local-infer",
+    "engine-ocr/local-infer",
+    "engine-restore/local-infer",
+]

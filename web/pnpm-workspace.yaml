@@ -1,0 +1,5 @@
+# pnpm 12+ 设置新家（package.json 的 pnpm 字段已废弃）
+onlyBuiltDependencies:
+  - esbuild
+# CI/容器构建环境无交互，未被批准的构建脚本降级为警告而不是失败
+strictDepBuilds: false

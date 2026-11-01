@@ -1,0 +1,60 @@
+# 房产行业包（房源照片入库前审）—— 规则集
+#
+# 六字段 schema：id / name / executor(classic|local_model|vl) / evidence(image_only|external_data)
+#               / check{detector,params} / fixer{type,tier} / on_fail(pass|auto_fix|retry_then_human)
+# detector / fixer 的 type 都是**注册表键**：写错不会在装载时报错，会在跑的时候响亮报错
+# （classic 通道）或被静默忽略（vl 通道，见 C7 报告 §4）。
+#
+# 阈值来源 = C7 真图标定（scripts/c7_acceptance.sh 的 calibrate 段，300 张真图）：
+#   sharpness 拉普拉斯方差 p1=29 / p5=102 / p10=162 / p50=587 / p90=2237
+#   exposure  死区占比 p50=0.038 / p75=0.32 / p90=0.75
+#   exposure  均值亮度 p1=21 / p10=80 / p50=160 / p90=228
+# 规则语义：房源照片是「给买家看的」——糊、过曝/欠曝、重复、缺场景都要在入库前拦住。
+# 本包不配修复器（fixer: null）：房源图不能靠算法补，修图=失真，一律人工。
+
+- id: F1_sharpness
+  name: 房源图清晰（拉普拉斯方差）
+  executor: classic
+  evidence: image_only
+  # min=100 ≈ 真图 p5 分位：只拦明显糊的（<5% 的图会被判不合格），与「审片挑废片」一致
+  check: {detector: sharpness, params: {min: 100}}
+  fixer: null
+  on_fail: retry_then_human
+
+- id: F2_exposure
+  name: 曝光正常（死区占比 + 均值亮度区间）
+  executor: classic
+  evidence: image_only
+  # max_dead_ratio=0.30 ≈ 真图 p73 分位；均值亮度 [30,245] 拦死黑/死白图（p1=21 / p99=249）
+  check: {detector: exposure, params: {max_dead_ratio: 0.30, min_mean: 30, max_mean: 245}}
+  fixer: null
+  on_fail: retry_then_human
+
+- id: F3_duplicate
+  name: 重复房照（同批近似重复）
+  # ⚠ C7 实测：`phash_dup` 不是已注册的 classic 检测器（注册表只有 size_min/white_edge/
+  #   sharpness/exposure）——本规则**故意保留**以记录缺口：装载通过、跑起来 job 响亮失败，
+  #   且失败会让**整张图的全部规则判定一起丢**（见 C7 报告 §3）。
+  #   pHash 分组能力本身在 L1 已有（engine-dedup::build_dup_groups），缺的只是「注册表接线」。
+  executor: classic
+  evidence: image_only
+  check: {detector: phash_dup, params: {group: within_batch}}
+  fixer: null
+  on_fail: pass          # 语义上重复不判「不合格」，只标记交人工取舍
+
+- id: F4_scene_complete
+  name: 必要场景齐套（客厅/卧室/厨房/卫生间）
+  # ⚠ C7 实测：这是**按套（按组）判定**，而引擎是「一个 job = 一张图」，rule_verdict 的
+  #   assetId 非空且无组键 → 组级判定没有落点。executor: vl 只按 check.params.prompt/expect
+  #   逐图提问，params.group_by 被静默忽略（见 C7 报告 §4）。evidence 写成 image_only 也是
+  #   将就：本规则的证据本质是「一组图」，schema 里没有对应的证据档。
+  executor: vl
+  evidence: image_only
+  check:
+    detector: vl_set_judge
+    params:
+      group_by: 房源号
+      prompt: "本组房源照片是否缺少「客厅、卧室、厨房、卫生间」中的任一必要场景"
+      expect: 否
+  fixer: null
+  on_fail: retry_then_human

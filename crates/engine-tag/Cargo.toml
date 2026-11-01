@@ -1,0 +1,22 @@
+[package]
+name = "engine-tag"
+description = "L1 TagProvider trait + OpenAiCompatTagProvider"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+core-config.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# OpenAI 兼容 chat/completions 客户端（云 VL 打标）
+ureq = { version = "3", features = ["json"] }
+base64 = "0.22"
+# 送 VL 前按长边缩图（core-media 的 vips/rustimg 双后端，语义一致）
+core-media.workspace = true
+
+[dev-dependencies]
+# 造大图夹具用（仅测试）
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }

@@ -1,0 +1,19 @@
+[package]
+name = "engine-exif"
+description = "L1 EXIF 元数据落库底座：解析（core-media）→ 派生列投影（core-storage）+ GPS 逆编码 provider"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-config.workspace = true
+core-media.workspace = true
+core-storage.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# 逆地理编码（仅 Place 档且 provider 配置后才发网络请求；与 engine-tag 同款 HTTP 栈）
+ureq = { version = "3", features = ["json"] }
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg"] }

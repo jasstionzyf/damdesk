@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "groups": [
+    {"key": "basic", "title": "输出"},
+    {"key": "edge", "title": "边缘", "collapsed": true},
+    {"key": "perf", "title": "大图（性能）", "collapsed": true}
+  ],
+  "properties": {
+    "bgMode": {
+      "type": "enum",
+      "title": "背景",
+      "options": ["white", "transparent", "color"],
+      "default": "white",
+      "group": "basic"
+    },
+    "color": {
+      "type": "color",
+      "title": "背景色",
+      "default": "#ffffff",
+      "group": "basic",
+      "when": {"bgMode": ["color"]}
+    },
+    "feather": {
+      "type": "integer",
+      "title": "羽化",
+      "min": 0,
+      "max": 8,
+      "step": 1,
+      "default": 2,
+      "unit": "px",
+      "group": "basic"
+    },
+    "edgeThreshold": {
+      "type": "integer",
+      "title": "主体判定阈值",
+      "min": 0,
+      "max": 255,
+      "step": 1,
+      "default": 128,
+      "group": "edge",
+      "advanced": true
+    },
+    "maxSide": {
+      "type": "integer",
+      "title": "长边上限（0=不缩放）",
+      "min": 0,
+      "max": 8192,
+      "step": 100,
+      "default": 0,
+      "unit": "px",
+      "group": "perf",
+      "advanced": true
+    }
+  },
+  "required": ["bgMode"]
+}

@@ -1,0 +1,71 @@
+{
+  "pack": "com.soujpg.pack.ecommerce",
+  "version": "1.0.0",
+  "api_version": "1.1",
+  "fix_policy": "geometric",
+  "max_rounds": 3,
+  "note": "本文件是 packs/plugins/ecommerce/plugin/ruleset.py 的**人读副本**（单测 test_ruleset_resource_sync 钉住一致性；改阈值改 ruleset.py 再同步这里）。阈值口径见 damdesk-repo/references/fix-policy-and-a4.md。",
+  "rules": [
+    {
+      "id": "R0_product_main",
+      "name": "领域 gate（是不是商品主图/白底商品图）",
+      "executor": "vl",
+      "deterministic": false,
+      "fixer": null,
+      "on_fail": "fail"
+    },
+    {
+      "id": "R1_size",
+      "name": "尺寸达标（短边 ≥1600）",
+      "executor": "classic",
+      "deterministic": true,
+      "fixer": "upscale",
+      "on_fail": "retry_then_human"
+    },
+    {
+      "id": "R2_white_bg",
+      "name": "白底图纯白",
+      "executor": "vl",
+      "deterministic": false,
+      "fixer": "replace_bg",
+      "on_fail": "auto_fix"
+    },
+    {
+      "id": "R4_subject_ratio",
+      "name": "主体占比 55%~85%",
+      "executor": "model_u2net",
+      "deterministic": true,
+      "fixer": "geometric",
+      "on_fail": "auto_fix"
+    },
+    {
+      "id": "R3_no_watermark",
+      "name": "无促销文字/水印/牛皮癣",
+      "executor": "ocr+vl",
+      "deterministic": false,
+      "fixer": "inpaint_ocr_box",
+      "on_fail": "retry_then_human"
+    },
+    {
+      "id": "R5_attribute",
+      "name": "属性打标（非判定，填词表）",
+      "executor": "vl",
+      "deterministic": false,
+      "fixer": null,
+      "on_fail": "pass"
+    }
+  ],
+  "thresholds": {
+    "R1_size": {"short_side_min": 1600},
+    "R2_white_bg": {"max_dev": 8},
+    "R4_subject_ratio": {"min": 0.55, "max": 0.85, "target": 0.75}
+  },
+  "pipeline_order": [
+    "R0_product_main",
+    "R1_size",
+    "R2_white_bg",
+    "R4_subject_ratio",
+    "R3_no_watermark",
+    "R5_attribute"
+  ]
+}

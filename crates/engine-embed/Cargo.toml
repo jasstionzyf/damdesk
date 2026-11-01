@@ -1,0 +1,54 @@
+[package]
+name = "engine-embed"
+description = "L1 EmbedProvider trait + OnnxSiglipProvider + OpenAiCompatProvider"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+core-config.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# ---- local-infer 特性门控（R6）----
+# 桌面（app-tauri，默认开）：编入 ort/ONNX 内嵌推理（零配置离线）。
+# web 容器（dam-web，default-features=false）：镜像不背 ort/ONNX 与模型，只剩
+# openai_compat 远程 provider（dam-ai / dashscope / 自建端点）。
+# ONNX Runtime（内嵌推理；download-binaries 拉预编译 onnxruntime；half = fp16 张量支持）
+# 版本精确固定 =rc.10（ORT 1.22）：rc.11+ 的预编译包用 GCC13 构建，Debian bookworm
+# （libstdc++ 12，缺 _M_replace_cold）链接会失败；升级容器基础镜像后再考虑跟进。
+ort = { version = "=2.0.0-rc.10", features = ["half"], optional = true }
+ndarray = { version = "0.17", optional = true }
+half = { version = "2.7", optional = true }
+# SigLIP2 文本塔 tokenizer（Gemma tokenizer.json，原生中文）
+tokenizers = { version = "0.23", optional = true }
+# 图像解码/预处理（resize + normalize）
+image = { version = "0.25", default-features = false, optional = true, features = [
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+    "bmp",
+    "tiff",
+] }
+# 模型下载（hf-mirror）sha256 校验（model_store）
+sha2 = { version = "0.10", optional = true }
+# OpenAI 兼容 HTTP（openai_compat provider + 模型下载共用，两构建都要）
+ureq = { version = "3", features = ["json"] }
+base64 = "0.22"
+
+[features]
+default = ["local-infer"]
+# 本地 ONNX 推理（onnx_siglip/onnx_dinov3 + model_store 模型分发）
+local-infer = [
+    "dep:ort",
+    "dep:ndarray",
+    "dep:half",
+    "dep:tokenizers",
+    "dep:image",
+    "dep:sha2",
+]
+
+[dev-dependencies]
+serde_yaml = "0.9"

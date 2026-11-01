@@ -1,0 +1,26 @@
+[package]
+name = "svc-import"
+description = "L2 导入编排：扫描/watcher/去重入库/缩略图/批次断点（L0 media+hash+storage + L1 dedup 变体 pHash）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-types.workspace = true
+core-storage.workspace = true
+core-config.workspace = true
+core-hash.workspace = true
+core-media.workspace = true
+engine-jobq.workspace = true
+engine-exif.workspace = true
+# KI-2c：入库时算 D4 八变体 pHash（旋转/镜像不漏判）—— 去重语义归 L1 engine-dedup，
+# svc-import 只负责"解码网格 → 写两列"（L2→L1 单向，符合 check_layers.sh）。
+engine-dedup.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+notify = "8"
+
+[dev-dependencies]
+tempfile = "3"
+libvips = "1.7"

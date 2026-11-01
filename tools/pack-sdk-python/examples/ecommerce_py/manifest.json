@@ -1,0 +1,29 @@
+{
+  "id": "com.soujpg.pack.ecommerce_py",
+  "name": "电商主图合规（Python SDK 样例包）",
+  "version": "1.0.0",
+  "api_version": "1.1",
+  "entrypoint": {
+    "cmd": "python3",
+    "args": ["plugin/__init__.py"]
+  },
+  "capabilities": [
+    "io.read",
+    "detect.u2net",
+    "detect.ocr",
+    "op.geometric",
+    "op.generative",
+    "vl.judge",
+    "report.emit"
+  ],
+  "deterministic": false,
+  "timeout_secs": 90,
+  "resources": [
+    "resources/rules.json"
+  ],
+  "permissions": {
+    "read": true,
+    "net": false
+  },
+  "signature": null
+}

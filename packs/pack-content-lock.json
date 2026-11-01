@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "dampack 发布台账：记录**已发布**过的 `id@version` → 包内容摘要（scripts/pack_release_guard.py 的口径）。",
+    "铁律：同 id@version 的内容必须字节稳定。内容变了必须升 PACK_VERSION —— 宿主编译期拒绝同版本换内容",
+    "（409 pack_version_conflict），内置包又不可卸载，等于已在装的机器永远升不上去（真机卡 t_d84301f5 实锤）。",
+    "出包前 `python3 scripts/pack_release_guard.py check --pack <新包>`，发布后 `record --pack <新包> --note ...` 入账。",
+    "改这个文件 = 改发布史，只许追加新版本行；已有行的 contentHash 一旦写死不许改（除非人工裁决并留 note）。"
+  ],
+  "schema": 1,
+  "algorithm": "dampack-content-v1",
+  "packs": {
+    "com.soujpg.pack.ecommerce": {
+      "1.0.0": {
+        "contentHash": "d197d67450da1cc70cf0a4d41eb9439d97b8d22817d53b9f5a309cdecd17f173",
+        "archiveSha256": "a61f1c41a74d9f3408a599c8e18df0251734ac0b6d8db12cf3b5182380b71ffb",
+        "source": "deliver/dampacks-d944511",
+        "note": "DECouple 之前的交付（≤d944511）；内容与同批 1.1.0 相同"
+      },
+      "1.1.0": {
+        "contentHash": "d197d67450da1cc70cf0a4d41eb9439d97b8d22817d53b9f5a309cdecd17f173",
+        "archiveSha256": "661b51c4d2d9dea63c812d9c8f5f59c93dbe7f1cf50ec57f12945f8c551d7ed3",
+        "source": "deliver/dampacks-d944511",
+        "note": "真机已装版本的来源（真机 manifestHash 873f8029…）；d56d81e 重导把它换成别的内容而未升版本 → 409（本卡要防的就是这一条）"
+      },
+      "1.1.1": {
+        "contentHash": "e8e129faa3d235f057a08536e5a216293774d0de6aac94af2f0851a69deb59b8",
+        "source": "packs/plugins/ecommerce @ d56d81e（K15 同源重出 1.1.1）",
+        "note": "真机实装 manifestHash d686aa857f787bd861fa91257fc0c845fddca07579297994d4f6da156ec3c619"
+      }
+    },
+    "com.soujpg.pack.ecommerce_py": {
+      "1.0.0": {
+        "contentHash": "f81854285b1545cf5e565d5c0a04cf694dc3b67aad7784c87d645d417b82744f",
+        "archiveSha256": "007e003b0c98434cb929d3017ced77151f841dccc10587f36ae0c97ef38f83ee",
+        "source": "deliver/dampacks-d944511",
+        "note": "SDK 样例线（第三方演示用，不进判定链）；两版内容自始相同"
+      },
+      "1.1.0": {
+        "contentHash": "f81854285b1545cf5e565d5c0a04cf694dc3b67aad7784c87d645d417b82744f",
+        "archiveSha256": "e83846d453738bfefd284101f24e5a8f0bf2305e39e8cbd4e72b24aca6b2bfcd",
+        "source": "deliver/dampacks-d944511",
+        "note": "SDK 样例线"
+      }
+    }
+  }
+}

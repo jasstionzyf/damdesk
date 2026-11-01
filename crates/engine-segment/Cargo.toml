@@ -1,0 +1,25 @@
+[package]
+name = "engine-segment"
+description = "L1 主体分割：u2net ONNX 前景掩码（fg_ratio 检测器 + crop_window 裁剪窗搜索，C3；local-infer 门控）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-config.workspace = true
+serde.workspace = true
+serde_yaml = "0.9"
+thiserror.workspace = true
+# 与 engine-embed 同版本纪律：=rc.10（ORT 1.22，容器 libstdc++ 兼容；见 engine-embed/Cargo.toml 注释）
+ort = { version = "=2.0.0-rc.10", features = ["half"], optional = true }
+ndarray = { version = "0.17", optional = true }
+
+[features]
+default = ["local-infer"]
+# 本地 ONNX 分割推理（u2net）；web 容器 default-features=false → 仅剩类型与模型根解析，
+# 注册表/推理全部缺席（svc-pipeline 侧 local_model 规则回退 executor_not_available 降级）。
+local-infer = ["dep:ort", "dep:ndarray"]
+
+[dev-dependencies]
+# seg_bench 示例（CPU 吞吐实测，C3 验收）：解码走 core-media（与生产同一像素入口）
+core-media.workspace = true

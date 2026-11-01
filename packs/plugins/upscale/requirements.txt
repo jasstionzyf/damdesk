@@ -1,0 +1,15 @@
+# 超分包**不依赖任何第三方库**（只有标准库：zlib/struct/json/urllib/threading/fcntl）。
+#
+# 为什么必须保持空（不是懒，是生产事实）：
+#   宿主装包时只建 `<pack>/venv`，**不执行 pip install -r requirements.txt**
+#   （`crates/app-web/src/compliance_api.rs::ensure_pack_venv` 只调 `python -m venv`）。
+#   所以 `import PIL` / `import numpy` / `import onnxruntime` 的包在纯净机器上就是
+#   「装好了但永远起不来」，而且是把现场问题推迟到用户第一次点「处理」时才炸。
+#
+# 本包要碰像素（分块拼接、PNG 写盘），所以：
+#   - 超分推理、裁剪、缩放、编码全部走宿主网关（协议 §6 端点：/io/read、/op/crop、/op/upscale）；
+#   - 包内自带最小 PNG 编解码（plugin/pngio.py，8bit RGB/RGBA、非隔行、filter 0..4）
+#     与分块拼接（plugin/tiling.py，只做 bytes 行拷贝，不含算法）。
+#
+# 若将来真要引入第三方库，必须同时把「装包时 pip install」补进宿主（另卡），
+# 并在 README「包内 venv」写清 wheel 来源与离线缓存路径 —— 否则不许加。

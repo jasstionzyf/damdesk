@@ -1,0 +1,28 @@
+{
+  "id": "conformance.bad-missing-method",
+  "name": "Bad: missing methods",
+  "version": "1.0.0",
+  "api_version": "2.0",
+  "outputs": [
+    "verdict"
+  ],
+  "entrypoint": {
+    "cmd": "python3",
+    "args": [
+      "plugin/__init__.py"
+    ]
+  },
+  "capabilities": [
+    "io.read",
+    "detect.u2net",
+    "detect.ocr",
+    "op.geometric",
+    "op.generative",
+    "vl.judge",
+    "report.emit"
+  ],
+  "deterministic": false,
+  "timeout_secs": 60,
+  "resources": [],
+  "signature": null
+}

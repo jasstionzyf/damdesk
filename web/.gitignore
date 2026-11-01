@@ -1,0 +1,3 @@
+
+# vitest 缓存（容器内 node_modules 属 root，缓存改写到仓内）
+.vitest-cache/

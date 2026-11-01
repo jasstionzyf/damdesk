@@ -1,0 +1,112 @@
+# provider 声明式注册（core-config 解析，PLAN.md §9）
+# preprocess 变更必须重嵌入；向量表按 name 分表（禁混算铁律）
+models:
+  # 默认内嵌 embedding：SigLIP 2（图+文双塔 ONNX，CPU 零配置）——语义检索塔
+  - name: siglip2-base-p224-onnx
+    kind: embedding
+    dims: 768
+    modalities: [image, text]
+    provider: onnx_siglip
+    preprocess:
+      image_size: 224
+      # SigLIP2 归一化参数，锁定不改（改 = 全量重嵌入）
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]
+
+  # 去重塔（2026-10-13 双嵌入器裁决）：DINOv3 ViT-S/16，仅 image，384 维，res 256。
+  # 单塔 pooler_output（未归一化，出口 L2 归一）；embed_texts 不支持（文本走 siglip）。
+  # 分发源：本地导出 /models/dinov3-vits16（hf-mirror 暂无公开 onnx 仓，见 D5 报告）
+  - name: dinov3-vits16-onnx
+    kind: embedding
+    dims: 384
+    modalities: [image]
+    provider: onnx_dinov3
+    preprocess:
+      image_size: 256
+      # ImageNet 归一化（preprocessor_config.json 锁定）
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+  # OpenAI 兼容远程 embedding（可接 dam-ai server / dashscope / JinaCLIP API 等）
+  - name: openai-compat-embedding
+    kind: embedding
+    dims: 0                # 由 settings 里配置的 endpoint 决定，D5 校验
+    modalities: [image, text]
+    provider: openai_compat
+    preprocess: {}
+
+  # 云 VL 打标（可选增强；无本地 tagger，v1 留接口位）
+  - name: openai-compat-tagger
+    kind: tagging
+    dims: 0
+    modalities: [image]
+    provider: openai_compat
+    preprocess: {}
+
+  # 主体分割（C3）：u2net ONNX FP32（~168MB，rembg 同源 sha256 8d10d2f3…）。
+  # 2026-10-16 用户裁决：随安装包内置分发（bundle.resources + models_root_effective
+  # 包内优先）；分发源 rembg GitHub release / HF 镜像 tomjackson2023/rembg，
+  # 公网下载仅 web 表单兜底（url_path 相对 base_url，与 dinov3 自建镜像同模式）。
+  # 输入固定 320²（权重原生档）；预处理 = im/max(im) + ImageNet mean/std（rembg 口径锁定）。
+  # 消费方：engine-segment（fg_ratio 检测器 + smart_crop 裁剪窗），provider 声明为
+  # onnx_u2net（engine-segment 注册表键，不进 engine-embed factory——C3 卡内裁决）。
+  - name: u2net
+    kind: segmentation
+    dims: 0
+    modalities: [image]
+    provider: onnx_u2net
+    preprocess:
+      image_size: 320
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+  # 超分（C4）：realesr-general-x4v3 ONNX（BSD-3-Clause，Real-ESRGAN 官方权重再打包，
+  # SRVGGNetCompact ~4.7MB）。2026-10-16 卡内裁决：随安装包内置分发（bundle.resources，
+  # 轻量档）；消费方 engine-restore::upscale（4× 放大，动态输入，输出消费端 clamp）。
+  - name: realesr-general-x4v3
+    kind: super_resolution
+    dims: 0
+    modalities: [image]
+    provider: onnx_realesrgan
+    preprocess: {}
+
+  # 局部重绘（C4）：big-lama ONNX FP32（Apache-2.0，Carve/LaMa-ONNX 导出，~208MB，
+  # 输入固定 512²：image 0..255 + mask{0,1}）。体积原因不随安装包内置——分发统一在
+  # model_store（自建镜像 / file://），公网下载仅 web 表单兜底。
+  # 消费方 engine-restore::inpaint（512² 推理 → 缩回原尺寸 → paste-back）。
+  - name: lama-fp32
+    kind: inpainting
+    dims: 0
+    modalities: [image]
+    provider: onnx_lama
+    preprocess: {}
+
+  # 文字识别（OCR-E，2026-10-16）：PP-OCRv6_medium 官方 ONNX 两件（Apache-2.0，
+  # HuggingFace PaddlePaddle 官方仓；det 59.2MB + rec 73.0MB + 字典 74,947B）。
+  # 随库分发走 model_store（manifest sha256 锁定，自建镜像 / file://），体积原因
+  # 不随安装包内置（与 lama 同档；138MB 安装包增量留用户裁决）。消费方
+  # engine-ocr（det DB 后处理 + rec CTC 解码，官方 PaddleX 口径）；检索侧
+  # assets.ocr_text 加权融合在 svc-library（纯 SQL，web 容器同样生效）。
+  - name: ppocrv6-medium-det
+    kind: ocr
+    dims: 0
+    modalities: [image]
+    provider: onnx_ppocr_det
+    preprocess:
+      # DetResizeForTest 默认：limit_side_len 736 + limit_type min（边长 round 32）
+      limit_side_len: 736
+      limit_type: min
+      # NormalizeImage：scale 1/255 + ImageNet mean/std（BGR 序，官方历史口径锁定）
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+
+  - name: ppocrv6-medium-rec
+    kind: ocr
+    dims: 0
+    modalities: [image]
+    provider: onnx_ppocr_rec
+    preprocess:
+      # OCRReisizeNormImg：高 48 等比缩，批量宽 = int(48*max(320/48, w/h))，钳 3200
+      image_height: 48
+      base_width: 320
+      max_width: 3200

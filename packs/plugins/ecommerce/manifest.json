@@ -1,0 +1,50 @@
+{
+  "id": "com.soujpg.pack.ecommerce",
+  "name": {
+    "zh-Hans": "电商主图合规（白底商品图 / 淘宝·Amazon 通用）",
+    "en-US": "E-commerce Main Image Compliance (white-background product photos; Taobao / Amazon)"
+  },
+  "short_name": {
+    "zh-Hans": "合规检查",
+    "en-US": "Compliance Check"
+  },
+  "summary": {
+    "zh-Hans": "检查图片能不能直接用在电商平台（淘宝 / Amazon）上",
+    "en-US": "Checks whether product images can be used directly on e-commerce platforms (Taobao / Amazon)"
+  },
+  "version": "2.0.0",
+  "api_version": "2.0",
+  "outputs": [
+    "verdict",
+    "artifact"
+  ],
+  "entrypoint": {
+    "cmd": "python3",
+    "args": [
+      "plugin/__init__.py"
+    ]
+  },
+  "capabilities": [
+    "io.read",
+    "detect.u2net",
+    "detect.ocr",
+    "detect.white",
+    "op.geometric",
+    "op.generative",
+    "vl.judge",
+    "report.emit"
+  ],
+  "deterministic": false,
+  "timeout_secs": 180,
+  "resources": [
+    "resources/rules.json",
+    "resources/taxonomy.json",
+    "resources/params.schema.json"
+  ],
+  "permissions": {
+    "read": true,
+    "net": false
+  },
+  "signature": null,
+  "params": "resources/params.schema.json"
+}

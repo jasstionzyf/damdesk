@@ -1,0 +1,3 @@
+steps:
+  - {kind: judge, rule: F3_duplicate}
+recheck_max: 1

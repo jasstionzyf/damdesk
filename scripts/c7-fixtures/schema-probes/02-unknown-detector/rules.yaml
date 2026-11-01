@@ -1,0 +1,8 @@
+# 探针 02：未注册检测器（phash_dup 在 engine-classic 注册表里不存在）
+- id: F3_duplicate
+  name: 重复房照（探针：未注册检测器）
+  executor: classic
+  evidence: image_only
+  check: {detector: phash_dup, params: {group: within_batch}}
+  fixer: null
+  on_fail: pass

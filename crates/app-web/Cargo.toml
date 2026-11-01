@@ -1,0 +1,82 @@
+[package]
+name = "app-web"
+description = "L3 web 进程壳：axum HTTP 服务（W0 骨架，业务逻辑在下方各 crate，薄壳零容忍）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+core-storage.workspace = true
+core-config.workspace = true
+core-types.workspace = true
+core-media.workspace = true
+core-hash.workspace = true
+# KI-2：库外扫描要算 pHash(D4 八变体) 并按 fileHash ∪ pHash 分组（同一套判据，不另写一份）
+engine-dedup.workspace = true
+svc-import.workspace = true
+# R6：web 构建不含本地 ONNX 推理（local-infer off）——engine-embed 只编 openai_compat
+# 远程 provider；svc-library 保留 embed（检索编排）但关掉 local-infer。
+# （workspace 依赖不能覆盖 default-features，故此处直写 path dep）
+engine-embed = { path = "../engine-embed", default-features = false }
+# OCR-E：类型 + 队列编排类型（run_* 由 svc-pipeline 的 local-infer 门控决定编不编）
+engine-ocr = { path = "../engine-ocr", default-features = false }
+svc-library = { path = "../svc-library", default-features = false, features = ["embed"] }
+# W3：嵌入队列（enq_unembedded/mark_all_pending/run_embed_queue）复用，同上关 local-infer
+svc-pipeline = { path = "../svc-pipeline", default-features = false }
+# W4：TagProvider 统一接口（damai/openai_compat 装配 + Ollama 扫描）；无本地模型，无 feature 门控
+engine-tag = { path = "../engine-tag" }
+# IP-K05：行业包宿主内核（L2）——L3 装配「插件执行通道」：能力网关 + 子进程生命周期。
+# 默认特征（local-infer）= 网关的 detect/generative 端点真推理；web 容器形态关掉（镜像不背 ort），
+# 此时那些端点按协议回 403 capability_missing（插件据此落 undetermined，不静默降级）。
+pack-host = { path = "../pack-host", default-features = false }
+# W3：搜索标量过滤类型（SearchFilter）+ provider trait（engine-embed）
+engine-search = { path = "../engine-search" }
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs"] }
+tower-http = { version = "0.6", features = ["fs", "trace"] }
+# W7：一次性引导 token / 会话 id 随机串（OS 熵源）
+getrandom = "0.3"
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[features]
+# 默认（web 容器）：不带本地 ONNX 推理（R6），镜像不背 ort/ONNX 与模型。
+default = []
+# W7：桌面 Tauri 构建（app-tauri 依赖本 crate 时开启）→ engine-embed 的 ONNX 内嵌推理
+# 编进同一二进制进程，离线默认 provider=local；转发 svc-library / svc-pipeline 的
+# local-infer（否则向量检索编排/嵌入队列在无 ONNX 的路径上装配）。
+local-infer = [
+    "engine-embed/local-infer",
+    "engine-ocr/local-infer",
+    "svc-library/local-infer",
+    "svc-pipeline/local-infer",
+    # IP-K05：桌面形态下插件能力网关真推理（u2net/OCR/upscale/replace_bg/inpaint）
+    "pack-host/local-infer",
+]
+
+# K13（模型获取入口）的路由验收只对**桌面构建**有意义：web 构建的 `/api/models/download`
+# 按设计一律 409 `local_infer_disabled`。因此钉 required-features，否则
+# `cargo test --workspace`（默认无 feature）会把它当成回归红点。
+[[test]]
+name = "t_6e8888ca_model_download_routes"
+required-features = ["local-infer"]
+
+# N6d（`t_979f61d2`）imaging 插件装配：manifest 声明 `detect.u2net`（crop 要主体框），
+# 而 web 容器构建按设计不带本地推理（`default_host_capabilities()` 不含 `detect.u2net`）
+# → 装包会被**正确拒装**（`pack_capability_missing`）。所以这条只对桌面构建有意义，
+# 同样钉 required-features，避免 `cargo test --workspace`（默认无 feature）假红。
+[[test]]
+name = "t_979f61d2_imaging_pack_routes"
+required-features = ["local-infer"]
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+# W6 autoTag 回归钉（tests/w6_import_autotag.rs）：真实图片用 libvips 合成 + 临时目录
+libvips = "1.7"
+# KI-2 库外扫描测试：按像素造确定性 PNG（条纹/噪点），libvips 的安全封装没有
+# new_from_memory 的包装，用 image crate 直接编码更省事（已在依赖树里，不新增下载）
+image = { version = "0.25", default-features = false, features = ["png"] }
+tempfile = "3"
+# IP-K08 安装端点测试：上传通道是 base64（浏览器 FileReader 同编码）
+base64 = "0.22"

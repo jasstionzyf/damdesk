@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 CSS-first 配置（W0 裁决）：暗色为唯一主题，不留亮色切换开关（W6 再议）。
+ * 色板/字号/间距对齐 soujpg-ui-patterns 规范。
+ */
+@theme {
+  /* 色板：暗色基底 */
+  --color-bg: #0e1116;
+  --color-panel: #161b23;
+  --color-panel-2: #1d242f;
+  --color-line: #2a3341;
+  --color-ink: #e6eaf0;
+  --color-ink-dim: #9aa5b4;
+  --color-accent: #4f8cff;
+  --color-accent-soft: #2a4a80;
+
+  /* 字号（soujpg-ui-patterns 基线） */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.125rem;
+
+  /* 间距节奏：4px 基 */
+  --spacing: 0.25rem;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: var(--text-base);
+}

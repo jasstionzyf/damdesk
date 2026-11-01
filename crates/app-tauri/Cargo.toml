@@ -1,0 +1,44 @@
+[package]
+name = "app-tauri"
+description = "L3 桌面壳：Tauri 窗口内嵌 app-web（W7 R3 终态；业务逻辑在下方各 crate，薄壳零容忍）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+# W7：内嵌同一个 web 服务（feature local-infer → engine-embed ONNX 编进同一进程，
+# 离线默认 provider=local，R6）；web 容器构建不开此 feature，镜像不背 ort/ONNX。
+app-web = { path = "../app-web", features = ["local-infer"] }
+core-config.workspace = true
+tauri.workspace = true
+# W7+：web 拿不到的能力（系统文件夹选择框）→ 原生对话框；权限只开 dialog:allow-open
+# （capabilities/default.json），壳仍是零业务逻辑。
+tauri-plugin-dialog = "2.8.2"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+# R37：WebView2 进程失败自愈。wry/Tauri 不透出 ProcessFailed，需要直接拿 WebView2 的
+# ICoreWebView2_2 事件回调（controller 由 `PlatformWebview::controller()` 给出同版本类型，
+# 故 webview2-com / windows-core 版本必须与 Cargo.lock 内解析结果一致，勿随手升）。
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows-core = "0.62"
+
+[dev-dependencies]
+# E2E 检索测试（tests/e2e_*.rs，D5/D7：真模型真图片真 SQLite，直接调 L0-L2）
+core-storage.workspace = true
+core-types.workspace = true
+engine-embed.workspace = true
+engine-search.workspace = true
+svc-import.workspace = true
+svc-library.workspace = true
+svc-pipeline.workspace = true
+rusqlite.workspace = true
+# 确定性绘制几何图（与 engine-embed 同版本）
+image = { version = "0.25", default-features = false, features = ["png"] }
+tempfile = "3"

@@ -1,0 +1,9 @@
+# 房产行业包（房源照片入库前审）—— 词表
+#
+# C7 spike 产物：换行业 = 换 pack 文件（四文件整包，C0 定稿 schema）。
+# 草稿来源：skill references/pack-examples/realestate.md §2；schema 以 C0 定稿为准。
+#
+# 词表用途：vl 打标型规则（rule.outputs）的受控选项来源。本包 v1 的 F4 是判定型
+# （无 outputs），room_type 先落表给后续「按房间自动打标」用（同一文件即 P1 行业模板库形态）。
+
+room_type: [客厅, 主卧, 次卧, 厨房, 卫生间, 阳台, 园区, 户型图]

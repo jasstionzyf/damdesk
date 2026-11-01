@@ -1,0 +1,4 @@
+steps:
+  - {kind: judge, rule: RS1_size}
+  - {kind: judge, rule: RS2_white_bg}
+recheck_max: 1

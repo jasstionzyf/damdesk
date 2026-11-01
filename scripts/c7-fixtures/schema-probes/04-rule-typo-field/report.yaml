@@ -1,0 +1,9 @@
+# 房产行业包（房源照片入库前审）—— 报告模板
+#
+# summary：全库汇总档位（固定四档顺序 = 合格/修复后合格/转人工/失败）；
+# detail_columns：manifest.csv 每张图一行，列名语义（C2 冻结 DSL）：
+#   imageSN | <规则或 do 步骤 id>（verdict result）| <id>_score | <id>_fix | <id>_recheck | <id>_tags
+# 列名必须是完整 id（不做缩写别名匹配，未知列导出时响亮报错）。
+# 本包无修复器 → 不出 *_fix 列（F1/F2 只有 result+score）。
+summary: [合格, 修复后合格, 转人工, 失败]
+detail_columns: [imageSN, F1_sharpness, F1_sharpness_score, F2_exposure, F2_exposure_score, F3_duplicate, F4_scene_complete, F4_scene_complete_score]

@@ -1,0 +1,7 @@
+{
+  "pack": "com.soujpg.pack.realestate",
+  "note": "F4 场景齐套的受控词表（来源 packs/realestate/taxonomy.yaml）。词表外答案一律丢弃并计入证据 unclassified —— 不静默当命中。",
+  "scene_options": ["客厅", "卧室", "厨房", "卫生间", "阳台", "园区", "户型图", "其它"],
+  "require_all": ["客厅", "卧室", "厨房", "卫生间"],
+  "room_type": ["客厅", "主卧", "次卧", "厨房", "卫生间", "阳台", "园区", "户型图"]
+}

@@ -1,0 +1,19 @@
+# 房产行业包（房源照片入库前审）—— 管道编排
+#
+# step 双语义：judge（规则：检测→fail 触发 fixer→复检）| do（无条件变换，插件注册表键）。
+# 执行序 = steps 声明序；depends_on = 短路声明（任一依赖规则 fail → 本步 skipped）。
+#
+# 本包四条规则互相独立（无硬依赖），不声明 depends_on：
+#   - 尺寸/白底那类「先修尺寸再算占比」的依赖在本包不存在（房产包没有修复器）；
+#   - F3 声明 on_fail: pass，即「重复」不影响合格结论，也不触发短路。
+# 注意：草稿（realestate.md §4）里的 `short_circuit:` 自由文本键**不是 schema 键**，
+#   写在 pipeline.yaml 里会被 serde 静默丢掉（Pipeline 未 deny_unknown_fields）——
+#   本包改为只写在注释里（C7 报告 §5 记录）。
+
+steps:
+  - {kind: judge, rule: F1_sharpness}
+  - {kind: judge, rule: F2_exposure}
+  - {kind: judge, rule: F3_duplicate}
+  - {kind: judge, rule: F4_scene_complete}
+# best_effort 修复后复检次数上限（本包无修复器，保留 schema 默认值 1）
+recheck_max: 1
