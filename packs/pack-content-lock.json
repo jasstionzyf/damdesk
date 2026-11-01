@@ -26,6 +26,11 @@
         "contentHash": "e8e129faa3d235f057a08536e5a216293774d0de6aac94af2f0851a69deb59b8",
         "source": "packs/plugins/ecommerce @ d56d81e（K15 同源重出 1.1.1）",
         "note": "真机实装 manifestHash d686aa857f787bd861fa91257fc0c845fddca07579297994d4f6da156ec3c619"
+      },
+      "2.0.0": {
+        "contentHash": "fba3a62c0846d338d4f32149355246577ef50c3434c2769bf16ad74e585e3593",
+        "archiveSha256": "8503d9010b17ad14e2ee1e23bb00566d6c8268f99bea583dc58c7f2a015168c6",
+        "note": "v2.0 contract release (96cd3ac)"
       }
     },
     "com.soujpg.pack.ecommerce_py": {
@@ -40,6 +45,34 @@
         "archiveSha256": "e83846d453738bfefd284101f24e5a8f0bf2305e39e8cbd4e72b24aca6b2bfcd",
         "source": "deliver/dampacks-d944511",
         "note": "SDK 样例线"
+      }
+    },
+    "com.soujpg.pack.imaging": {
+      "2.0.0": {
+        "contentHash": "3439d24ecceb788ceabb10a2521bd2ce49aa593b9ac75568486c2db2b090ffef",
+        "archiveSha256": "4ec18c0ccdb5d26ee5f80d6a3b5ced101a5557148eed2c452927c4d4edc66fb6",
+        "note": "v2.0 contract release (96cd3ac)"
+      }
+    },
+    "com.soujpg.pack.realestate": {
+      "2.0.0": {
+        "contentHash": "d6305754fec59fcc23038f9c1a36516f1bed8c7181e00501c7364babdc04133a",
+        "archiveSha256": "344a6bea6f7121284cbebbc30a6c055e84ba8ca5c2a18785a6a3f141de7c2780",
+        "note": "v2.0 contract release (96cd3ac)"
+      }
+    },
+    "com.soujpg.pack.segment": {
+      "2.0.0": {
+        "contentHash": "845da62642e2477abd323cc24b55c37fa8b975e3a4690f6cfd314230b8547039",
+        "archiveSha256": "e947bbfc51b660aa0f813c8eda1bdfa146fbc1bf76857007dd200fd5a9a50e67",
+        "note": "v2.0 contract release (96cd3ac)"
+      }
+    },
+    "com.soujpg.pack.upscale": {
+      "2.0.0": {
+        "contentHash": "546000b4fec5e99fc19cdda1e0d3e3bed5f214233440faefff17bde51d343a1b",
+        "archiveSha256": "1bc01ed5d11bc239c3f738d4820309cceb3a2b0781cfb0a0ea4e4668438d0655",
+        "note": "v2.0 contract release (96cd3ac)"
       }
     }
   }
