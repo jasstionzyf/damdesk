@@ -11,6 +11,10 @@ artifacts/
 .env
 !.env.example
 
+# 内部文档：实施计划与 plan 稿不进公开仓（在内部主线维护）
+PLAN.md
+.hermes/
+
 # D6 真图测试集：本地采样，版权/体积原因不入库（scripts/sample_real_photos.sh 可重建）
 tests/fixtures/reals/
 

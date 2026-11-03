@@ -8,3 +8,6 @@
 
 `reports/`、`artifacts/` 已加入 `.gitignore`；本仓只保留代码与工程脚本
 （`scripts/` 白名单见 `scripts/publish_public.sh` 的 SYNC_SCRIPTS 及仓内长期维护项）。
+
+实施计划（`PLAN.md`）与 plan 稿（`.hermes/plans/`）属内部文档，只在内部主线维护，不入公开仓；
+代码注释里出现的 `PLAN.md §x` 引用指向内部文档。
